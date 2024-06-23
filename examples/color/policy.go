@@ -2,16 +2,24 @@ package color
 
 import (
 	"github.com/samber/lo"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gwapi "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	machinery "github.com/guicassolato/policy-machinery"
+	machinery "github.com/guicassolato/policy-machinery/machinery"
 )
 
 type ColorPolicy struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
 	Spec ColorSpec `json:"spec"`
 }
 
 var _ machinery.Policy = &ColorPolicy{}
+
+func (p *ColorPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
+	return []machinery.PolicyTargetReference{machinery.LocalPolicyTargetReference{LocalPolicyTargetReference: p.Spec.TargetRef, PolicyNamespace: p.Namespace}}
+}
 
 func (p *ColorPolicy) GetSpec() machinery.PolicySpec {
 	return &p.Spec
@@ -26,7 +34,7 @@ func (p *ColorPolicy) Merge(policy machinery.Policy, strategy machinery.MergeStr
 }
 
 type ColorSpec struct {
-	TargetRef gwapi.LocalPolicyTargetReference `json:"targetRef"` // unused
+	TargetRef gwapi.LocalPolicyTargetReference `json:"targetRef"`
 	Rules     []ColorRule                      `json:"rules"`
 }
 

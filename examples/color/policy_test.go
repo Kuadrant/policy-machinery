@@ -5,7 +5,7 @@ package color
 import (
 	"testing"
 
-	machinery "github.com/guicassolato/policy-machinery"
+	machinery "github.com/guicassolato/policy-machinery/machinery"
 )
 
 func TestMerge(t *testing.T) {
