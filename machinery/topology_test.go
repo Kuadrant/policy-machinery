@@ -31,11 +31,11 @@ func (p *TestPolicy) GetTargetRefs() []PolicyTargetReference {
 	return []PolicyTargetReference{LocalPolicyTargetReference{LocalPolicyTargetReference: p.Spec.TargetRef, PolicyNamespace: p.Namespace}}
 }
 
-func (p *TestPolicy) GetSpec() PolicySpec {
-	return &p.Spec
+func (p *TestPolicy) GetMergeStrategy() MergeStrategy {
+	return DefaultMergeStrategy
 }
 
-func (p *TestPolicy) Merge(policy Policy, _ MergeStrategy) Policy {
+func (p *TestPolicy) Merge(policy Policy) Policy {
 	return &TestPolicy{
 		Spec: p.Spec,
 	}
@@ -43,25 +43,6 @@ func (p *TestPolicy) Merge(policy Policy, _ MergeStrategy) Policy {
 
 type TestPolicySpec struct {
 	TargetRef gwapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
-}
-
-var _ PolicySpec = &TestPolicySpec{}
-
-func (s *TestPolicySpec) SetRules(_ []Rule) {
-}
-
-func (s *TestPolicySpec) GetRules() []Rule {
-	return nil
-}
-
-func (s *TestPolicySpec) DeepCopy() PolicySpec {
-	return &TestPolicySpec{
-		TargetRef: s.TargetRef,
-	}
-}
-
-func (s *TestPolicySpec) Merge(spec PolicySpec, _ MergeStrategy) PolicySpec {
-	return s.DeepCopy()
 }
 
 func TestTopology(t *testing.T) {

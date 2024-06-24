@@ -6,36 +6,15 @@ import (
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-// Policy targets objects and contains a PolicySpec that can be merged with another PolicySpec based on a
-// given MergeStrategy.
+// Policy targets objects and can be merged with another Policy based on a given MergeStrategy.
 type Policy interface {
 	Object
 
 	GetTargetRefs() []PolicyTargetReference
-	GetSpec() PolicySpec
+	GetMergeStrategy() MergeStrategy
 
-	Merge(Policy, MergeStrategy) Policy
+	Merge(Policy) Policy
 }
-
-// PolicySpec contains a list of policy rules.
-// It can be merged with another PolicySpec based on a given MergeStrategy.
-type PolicySpec interface {
-	DeepCopy() PolicySpec
-	SetRules([]Rule)
-	GetRules() []Rule
-
-	Merge(PolicySpec, MergeStrategy) PolicySpec
-}
-
-// Rule represents a policy rule, containing an ID that uniquely identifies the rule within the policy and a spec.
-type Rule interface {
-	GetId() RuleId
-}
-
-type RuleId string
-
-// MergeStrategy is a function that merges two PolicySpecs into a new PolicySpec.
-type MergeStrategy func(PolicySpec, PolicySpec) PolicySpec
 
 // PolicyTargetReference is a generic interface for all kinds of Gateway API policy target references.
 // It implements the Object interface for the referent.
@@ -136,3 +115,14 @@ func (t LocalPolicyTargetReferenceWithSectionName) GetName() string {
 	sectionName := ptr.Deref(t.SectionName, gwapiv1alpha2.SectionName(""))
 	return namespacedName(string(t.LocalPolicyTargetReference.Name), string(sectionName))
 }
+
+// MergeStrategy is a function that merges two Policy objects into a new Policy object.
+type MergeStrategy func(Policy, Policy) Policy
+
+var DefaultMergeStrategy = NoMergeStrategy
+
+func NoMergeStrategy(_, target Policy) Policy {
+	return target
+}
+
+var _ MergeStrategy = NoMergeStrategy
