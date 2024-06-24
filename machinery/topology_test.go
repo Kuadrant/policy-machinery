@@ -6,11 +6,63 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/samber/lo"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
+
+type TestPolicy struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec TestPolicySpec `json:"spec"`
+}
+
+var _ Policy = &TestPolicy{}
+
+func (p *TestPolicy) GetURL() string {
+	return UrlFromObject(p)
+}
+
+func (p *TestPolicy) GetTargetRefs() []PolicyTargetReference {
+	return []PolicyTargetReference{LocalPolicyTargetReference{LocalPolicyTargetReference: p.Spec.TargetRef, PolicyNamespace: p.Namespace}}
+}
+
+func (p *TestPolicy) GetSpec() PolicySpec {
+	return &p.Spec
+}
+
+func (p *TestPolicy) Merge(policy Policy, _ MergeStrategy) Policy {
+	return &TestPolicy{
+		Spec: p.Spec,
+	}
+}
+
+type TestPolicySpec struct {
+	TargetRef gwapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
+}
+
+var _ PolicySpec = &TestPolicySpec{}
+
+func (s *TestPolicySpec) SetRules(_ []Rule) {
+}
+
+func (s *TestPolicySpec) GetRules() []Rule {
+	return nil
+}
+
+func (s *TestPolicySpec) DeepCopy() PolicySpec {
+	return &TestPolicySpec{
+		TargetRef: s.TargetRef,
+	}
+}
+
+func (s *TestPolicySpec) Merge(spec PolicySpec, _ MergeStrategy) PolicySpec {
+	return s.DeepCopy()
+}
 
 func TestTopology(t *testing.T) {
 	testCases := []struct {
@@ -34,6 +86,7 @@ func TestTopology(t *testing.T) {
 			gateways:       []*gwapiv1.Gateway{buildGateway()},
 			httpRoutes:     []*gwapiv1.HTTPRoute{buildHTTPRoute()},
 			backends:       []*core.Service{buildBackend()},
+			policies:       []Policy{buildPolicy()},
 		},
 		{
 			name: "complex network",
@@ -269,13 +322,14 @@ func TestTopology(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			topology := NewTopology(
-				WithGatewayClasses(tc.gatewayClasses...),
-				WithGateways(tc.gateways...),
-				WithHTTPRoutes(tc.httpRoutes...),
-				WithBackends(tc.backends...),
-				WithPolicies(tc.policies...),
-			)
+			targetables := make([]Targetable, 0, len(tc.gatewayClasses)+len(tc.gateways)+len(tc.httpRoutes)+len(tc.backends))
+			targetables = append(targetables, lo.Map(tc.gatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) Targetable {
+				return GatewayClass{GatewayClass: gatewayClass}
+			})...)
+			targetables = append(targetables, lo.Map(tc.gateways, func(gateway *gwapiv1.Gateway, _ int) Targetable { return Gateway{Gateway: gateway} })...)
+			targetables = append(targetables, lo.Map(tc.httpRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) Targetable { return HTTPRoute{HTTPRoute: httpRoute} })...)
+			targetables = append(targetables, lo.Map(tc.backends, func(service *core.Service, _ int) Targetable { return Backend{Service: service} })...)
+			topology := NewTopology(targetables, tc.policies)
 			fmt.Println(topology.ToDot())
 		})
 	}
@@ -398,4 +452,27 @@ func buildBackend(f ...func(*core.Service)) *core.Service {
 		fn(s)
 	}
 	return s
+}
+
+func buildPolicy(f ...func(*TestPolicy)) *TestPolicy {
+	p := &TestPolicy{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "test/v1",
+			Kind:       "TestPolicy",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-policy",
+			Namespace: "my-namespace",
+		},
+		Spec: TestPolicySpec{
+			TargetRef: gwapiv1alpha2.LocalPolicyTargetReference{
+				Kind: "Service",
+				Name: "my-service",
+			},
+		},
+	}
+	for _, fn := range f {
+		fn(p)
+	}
+	return p
 }

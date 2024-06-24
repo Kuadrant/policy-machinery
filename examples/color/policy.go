@@ -17,6 +17,10 @@ type ColorPolicy struct {
 
 var _ machinery.Policy = &ColorPolicy{}
 
+func (p *ColorPolicy) GetURL() string {
+	return machinery.UrlFromObject(p)
+}
+
 func (p *ColorPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 	return []machinery.PolicyTargetReference{machinery.LocalPolicyTargetReference{LocalPolicyTargetReference: p.Spec.TargetRef, PolicyNamespace: p.Namespace}}
 }

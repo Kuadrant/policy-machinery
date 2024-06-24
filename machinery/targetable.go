@@ -1,9 +1,6 @@
 package machinery
 
 import (
-	"fmt"
-
-	"github.com/kuadrant/kuadrant-operator/pkg/library/dag"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -11,8 +8,7 @@ import (
 
 // Targetable is an interface that represents an object that can be targeted by policies.
 type Targetable interface {
-	schema.ObjectKind
-	dag.Node
+	Object
 
 	SetPolicies([]Policy)
 	Policies() []Policy
@@ -26,8 +22,8 @@ type GatewayClass struct {
 
 var _ Targetable = GatewayClass{}
 
-func (g GatewayClass) ID() string {
-	return nodeID(g, g.Name)
+func (g GatewayClass) GetURL() string {
+	return UrlFromObject(g)
 }
 
 func (g GatewayClass) SetPolicies(policies []Policy) {
@@ -46,8 +42,8 @@ type Gateway struct {
 
 var _ Targetable = Gateway{}
 
-func (g Gateway) ID() string {
-	return nodeID(g, namespacedName(g.Namespace, g.Name))
+func (g Gateway) GetURL() string {
+	return UrlFromObject(g)
 }
 
 func (g Gateway) SetPolicies(policies []Policy) {
@@ -77,8 +73,16 @@ func (l Listener) GroupVersionKind() schema.GroupVersionKind {
 
 func (l Listener) SetGroupVersionKind(schema.GroupVersionKind) {}
 
-func (l Listener) ID() string {
-	return nodeID(l, namespacedNameWithSectionName(l.gateway.Namespace, l.gateway.Name, string(l.Name)))
+func (l Listener) GetURL() string {
+	return UrlFromObject(l)
+}
+
+func (l Listener) GetNamespace() string {
+	return l.gateway.GetNamespace()
+}
+
+func (l Listener) GetName() string {
+	return namespacedName(l.gateway.Name, string(l.Name))
 }
 
 func (l Listener) SetPolicies(policies []Policy) {
@@ -97,8 +101,8 @@ type HTTPRoute struct {
 
 var _ Targetable = HTTPRoute{}
 
-func (r HTTPRoute) ID() string {
-	return nodeID(r, namespacedName(r.Namespace, r.Name))
+func (r HTTPRoute) GetURL() string {
+	return UrlFromObject(r)
 }
 
 func (r HTTPRoute) SetPolicies(policies []Policy) {
@@ -113,7 +117,7 @@ type HTTPRouteRule struct {
 	*gwapiv1.HTTPRouteRule
 
 	httpRoute        *HTTPRoute
-	name             string // TODO(guicassolato): Use the `name` field of the HTTPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	name             gwapiv1.SectionName // TODO(guicassolato): Use the `name` field of the HTTPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
 	attachedPolicies []Policy
 }
 
@@ -129,8 +133,16 @@ func (r HTTPRouteRule) GroupVersionKind() schema.GroupVersionKind {
 
 func (r HTTPRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
 
-func (r HTTPRouteRule) ID() string {
-	return nodeID(r, namespacedNameWithSectionName(r.httpRoute.Namespace, r.httpRoute.Name, string(r.name)))
+func (r HTTPRouteRule) GetURL() string {
+	return UrlFromObject(r)
+}
+
+func (r HTTPRouteRule) GetNamespace() string {
+	return r.httpRoute.GetNamespace()
+}
+
+func (r HTTPRouteRule) GetName() string {
+	return namespacedName(r.httpRoute.Name, string(r.name))
 }
 
 func (r HTTPRouteRule) SetPolicies(policies []Policy) {
@@ -149,8 +161,8 @@ type Backend struct {
 
 var _ Targetable = Backend{}
 
-func (b Backend) ID() string {
-	return nodeID(b, namespacedName(b.Namespace, b.Name))
+func (b Backend) GetURL() string {
+	return UrlFromObject(b)
 }
 
 func (b Backend) SetPolicies(policies []Policy) {
@@ -178,8 +190,16 @@ func (p BackendPort) GroupVersionKind() schema.GroupVersionKind {
 
 func (p BackendPort) SetGroupVersionKind(schema.GroupVersionKind) {}
 
-func (p BackendPort) ID() string {
-	return nodeID(p, namespacedNameWithSectionName(p.backend.Namespace, p.backend.Name, string(p.Name)))
+func (p BackendPort) GetURL() string {
+	return UrlFromObject(p)
+}
+
+func (p BackendPort) GetNamespace() string {
+	return p.backend.GetNamespace()
+}
+
+func (p BackendPort) GetName() string {
+	return namespacedName(p.backend.Name, string(p.Name))
 }
 
 func (p BackendPort) SetPolicies(policies []Policy) {
@@ -188,8 +208,4 @@ func (p BackendPort) SetPolicies(policies []Policy) {
 
 func (p BackendPort) Policies() []Policy {
 	return p.attachedPolicies
-}
-
-func nodeID(obj schema.ObjectKind, objectUniqueName string) string {
-	return fmt.Sprintf("%s#%s", objectKind(obj), objectUniqueName)
 }

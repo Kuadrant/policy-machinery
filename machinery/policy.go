@@ -1,7 +1,6 @@
 package machinery
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -10,8 +9,7 @@ import (
 // Policy targets objects and contains a PolicySpec that can be merged with another PolicySpec based on a
 // given MergeStrategy.
 type Policy interface {
-	metav1.Object
-	schema.ObjectKind
+	Object
 
 	GetTargetRefs() []PolicyTargetReference
 	GetSpec() PolicySpec
@@ -40,9 +38,9 @@ type RuleId string
 type MergeStrategy func(PolicySpec, PolicySpec) PolicySpec
 
 // PolicyTargetReference is a generic interface for all kinds of Gateway API policy target references.
+// It implements the Object interface for the referent.
 type PolicyTargetReference interface {
-	schema.ObjectKind
-	Name() string
+	Object
 }
 
 type NamespacedPolicyTargetReference struct {
@@ -64,9 +62,16 @@ func (t NamespacedPolicyTargetReference) SetGroupVersionKind(gvk schema.GroupVer
 	t.Kind = gwapiv1alpha2.Kind(gvk.Kind)
 }
 
-func (t NamespacedPolicyTargetReference) Name() string {
-	namespace := string(ptr.Deref(t.Namespace, gwapiv1alpha2.Namespace(t.PolicyNamespace)))
-	return namespacedName(namespace, string(t.NamespacedPolicyTargetReference.Name))
+func (t NamespacedPolicyTargetReference) GetURL() string {
+	return UrlFromObject(t)
+}
+
+func (t NamespacedPolicyTargetReference) GetNamespace() string {
+	return string(ptr.Deref(t.Namespace, gwapiv1alpha2.Namespace(t.PolicyNamespace)))
+}
+
+func (t NamespacedPolicyTargetReference) GetName() string {
+	return string(t.NamespacedPolicyTargetReference.Name)
 }
 
 type LocalPolicyTargetReference struct {
@@ -88,8 +93,16 @@ func (t LocalPolicyTargetReference) SetGroupVersionKind(gvk schema.GroupVersionK
 	t.Kind = gwapiv1alpha2.Kind(gvk.Kind)
 }
 
-func (t LocalPolicyTargetReference) Name() string {
-	return namespacedName(t.PolicyNamespace, string(t.LocalPolicyTargetReference.Name))
+func (t LocalPolicyTargetReference) GetURL() string {
+	return UrlFromObject(t)
+}
+
+func (t LocalPolicyTargetReference) GetNamespace() string {
+	return t.PolicyNamespace
+}
+
+func (t LocalPolicyTargetReference) GetName() string {
+	return string(t.LocalPolicyTargetReference.Name)
 }
 
 type LocalPolicyTargetReferenceWithSectionName struct {
@@ -111,7 +124,15 @@ func (t LocalPolicyTargetReferenceWithSectionName) SetGroupVersionKind(gvk schem
 	t.Kind = gwapiv1alpha2.Kind(gvk.Kind)
 }
 
-func (t LocalPolicyTargetReferenceWithSectionName) Name() string {
+func (t LocalPolicyTargetReferenceWithSectionName) GetURL() string {
+	return UrlFromObject(t)
+}
+
+func (t LocalPolicyTargetReferenceWithSectionName) GetNamespace() string {
+	return t.PolicyNamespace
+}
+
+func (t LocalPolicyTargetReferenceWithSectionName) GetName() string {
 	sectionName := ptr.Deref(t.SectionName, gwapiv1alpha2.SectionName(""))
-	return namespacedNameWithSectionName(t.PolicyNamespace, string(t.LocalPolicyTargetReference.Name), string(sectionName))
+	return namespacedName(string(t.LocalPolicyTargetReference.Name), string(sectionName))
 }
