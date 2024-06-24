@@ -457,7 +457,7 @@ func TestMerge(t *testing.T) {
 			}
 			for _, colorRule := range mergedRules {
 				if tc.expected[colorRule.Id] != colorRule.Color {
-					t.Errorf("Expected rule %s to have color %d, but got %d", colorRule.Id, tc.expected[colorRule.Id], colorRule.Color)
+					t.Errorf("Expected rule %s to have color %s, but got %s", colorRule.Id, tc.expected[colorRule.Id], colorRule.Color)
 				}
 			}
 		})

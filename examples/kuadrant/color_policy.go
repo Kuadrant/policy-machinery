@@ -101,3 +101,17 @@ const (
 	Green
 	Yellow
 )
+
+func (v ColorValue) String() string {
+	switch v {
+	case Red:
+		return "red"
+	case Blue:
+		return "blue"
+	case Green:
+		return "green"
+	case Yellow:
+		return "yellow"
+	}
+	return "unknown"
+}
