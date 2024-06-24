@@ -1,9 +1,12 @@
 package machinery
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 
+	graphviz "github.com/goccy/go-graphviz"
+	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/kuadrant/kuadrant-operator/pkg/library/dag"
 	"github.com/samber/lo"
 	core "k8s.io/api/core/v1"
@@ -87,29 +90,37 @@ func (t *Topology) Policies(kind schema.ObjectKind) []Policy {
 	})
 }
 
-func (t *Topology) String() string {
+func (t *Topology) ToDot() string {
 	roots := lo.FlatMap(lo.Keys(t.kinds), func(kind string, _ int) []dag.Node {
 		return lo.FilterMap(t.graph.GetNodes(nodeKindField, kind), func(node dag.Node, _ int) (dag.Node, bool) {
-			_, ok := node.(Targetable)
-			if !ok {
-				return nil, false
-			}
 			return node, len(t.graph.Parents(node.ID())) == 0
 		})
 	})
-	var s string
+	gz := graphviz.New()
+	graph, _ := gz.Graph(graphviz.StrictDirected)
 	for _, root := range roots {
-		s += t.printNode(root, 0)
+		t.addNodeToGraphiz(root, graph, nil)
 	}
-	return s
+	var buf bytes.Buffer
+	gz.Render(graph, "dot", &buf)
+	return buf.String()
 }
 
-func (t *Topology) printNode(node dag.Node, level int) string {
-	s := fmt.Sprintf("%s∟ %s\n", strings.Repeat(" ", level*2), node.ID())
-	for _, child := range t.graph.Children(node.ID()) {
-		s += t.printNode(child, level+1)
+func (t *Topology) addNodeToGraphiz(node dag.Node, graph *cgraph.Graph, parent *cgraph.Node) {
+	n, _ := graph.CreateNode(node.ID())
+	n.SetLabel(nodeIDToGraphizLabel(node.ID()))
+	switch node.(type) {
+	case Targetable:
+		n.SetShape(cgraph.BoxShape)
+	case Policy:
+		n.SetShape(cgraph.EllipseShape)
 	}
-	return s
+	if parent != nil {
+		graph.CreateEdge("", parent, n)
+	}
+	for _, child := range t.graph.Children(node.ID()) {
+		t.addNodeToGraphiz(child, graph, n)
+	}
 }
 
 // NewTopology returns a network of targetable Gateway API nodes, from a list of related Gateway API resources
@@ -283,4 +294,11 @@ func objectKindFromBackendRef(backendRef gwapiv1.BackendObjectReference) schema.
 		Kind:       string(ptr.Deref(backendRef.Kind, gwapiv1.Kind("Service"))),
 		APIVersion: string(ptr.Deref(backendRef.Group, gwapiv1.Group(""))) + "/",
 	}
+}
+
+func nodeIDToGraphizLabel(nodeID string) string {
+	parts := strings.Split(nodeID, "#")
+	kind := strings.TrimSuffix(strings.SplitAfter(parts[0], ".")[0], ".")
+	name := parts[1]
+	return fmt.Sprintf("%s\\n%s", kind, name)
 }

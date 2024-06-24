@@ -12,7 +12,7 @@ func namespacedName(namespace, name string) string {
 }
 
 func namespacedNameWithSectionName(namespace, name, section string) string {
-	return fmt.Sprintf("%s#%s", namespacedName(namespace, name), section)
+	return fmt.Sprintf("%s/%s", namespacedName(namespace, name), section)
 }
 
 func objectKind(obj schema.ObjectKind) string {

@@ -276,7 +276,7 @@ func TestTopology(t *testing.T) {
 				WithBackends(tc.backends...),
 				WithPolicies(tc.policies...),
 			)
-			fmt.Println(topology)
+			fmt.Println(topology.ToDot())
 		})
 	}
 }
