@@ -29,7 +29,7 @@ func (p *TestPolicy) GetURL() string {
 }
 
 func (p *TestPolicy) GetTargetRefs() []PolicyTargetReference {
-	return []PolicyTargetReference{LocalPolicyTargetReference{LocalPolicyTargetReference: p.Spec.TargetRef, PolicyNamespace: p.Namespace}}
+	return []PolicyTargetReference{LocalPolicyTargetReferenceWithSectionName{LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef, PolicyNamespace: p.Namespace}}
 }
 
 func (p *TestPolicy) GetMergeStrategy() MergeStrategy {
@@ -43,7 +43,7 @@ func (p *TestPolicy) Merge(policy Policy) Policy {
 }
 
 type TestPolicySpec struct {
-	TargetRef gwapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
+	TargetRef gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 }
 
 // TestTopology tests for a topology of Gateway API resources with the following architecture:
@@ -563,9 +563,11 @@ func buildPolicy(f ...func(*TestPolicy)) *TestPolicy {
 			Namespace: "my-namespace",
 		},
 		Spec: TestPolicySpec{
-			TargetRef: gwapiv1alpha2.LocalPolicyTargetReference{
-				Kind: "Service",
-				Name: "my-service",
+			TargetRef: gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+					Kind: "Service",
+					Name: "my-service",
+				},
 			},
 		},
 	}

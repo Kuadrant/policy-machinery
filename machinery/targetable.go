@@ -74,15 +74,15 @@ func (l Listener) GroupVersionKind() schema.GroupVersionKind {
 func (l Listener) SetGroupVersionKind(schema.GroupVersionKind) {}
 
 func (l Listener) GetURL() string {
-	return UrlFromObject(l)
+	return namespacedName(UrlFromObject(l.gateway), l.GetName())
 }
 
 func (l Listener) GetNamespace() string {
-	return l.gateway.GetNamespace()
+	return namespacedName(l.gateway.GetNamespace(), l.gateway.GetName())
 }
 
 func (l Listener) GetName() string {
-	return namespacedName(l.gateway.Name, string(l.Name))
+	return string(l.Name)
 }
 
 func (l Listener) SetPolicies(policies []Policy) {
@@ -134,15 +134,15 @@ func (r HTTPRouteRule) GroupVersionKind() schema.GroupVersionKind {
 func (r HTTPRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
 
 func (r HTTPRouteRule) GetURL() string {
-	return UrlFromObject(r)
+	return namespacedName(UrlFromObject(r.httpRoute), r.GetName())
 }
 
 func (r HTTPRouteRule) GetNamespace() string {
-	return r.httpRoute.GetNamespace()
+	return namespacedName(r.httpRoute.GetNamespace(), r.httpRoute.Name)
 }
 
 func (r HTTPRouteRule) GetName() string {
-	return namespacedName(r.httpRoute.Name, string(r.name))
+	return string(r.name)
 }
 
 func (r HTTPRouteRule) SetPolicies(policies []Policy) {
@@ -191,15 +191,15 @@ func (p ServicePort) GroupVersionKind() schema.GroupVersionKind {
 func (p ServicePort) SetGroupVersionKind(schema.GroupVersionKind) {}
 
 func (p ServicePort) GetURL() string {
-	return UrlFromObject(p)
+	return namespacedName(UrlFromObject(p.service), p.GetName())
 }
 
 func (p ServicePort) GetNamespace() string {
-	return p.service.GetNamespace()
+	return namespacedName(p.service.GetNamespace(), p.service.Name)
 }
 
 func (p ServicePort) GetName() string {
-	return namespacedName(p.service.Name, string(p.Name))
+	return string(p.Name)
 }
 
 func (p ServicePort) SetPolicies(policies []Policy) {
