@@ -168,7 +168,8 @@ func addPoliciesToGraph[T Policy](graph *cgraph.Graph, policies []T) {
 		for _, targetRef := range policies[i].GetTargetRefs() {
 			targetNode, _ := graph.Node(string(targetRef.GetURL()))
 			if targetNode != nil {
-				graph.CreateEdge("Policy -> Target", policyNode, targetNode)
+				edge, _ := graph.CreateEdge("Policy -> Target", policyNode, targetNode)
+				edge.SetStyle(cgraph.DashedEdgeStyle)
 			}
 		}
 	}
