@@ -129,7 +129,7 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 		for _, child := range children {
 			for _, parent := range link.Func(child) {
 				if parent != nil {
-					addEdgeToGraph(graph, fmt.Sprintf("%s -> %s", link.From.Kind, link.To.Kind), parent, child)
+					addTargetablesEdgeToGraph(graph, fmt.Sprintf("%s -> %s", link.From.Kind, link.To.Kind), parent, child)
 				}
 			}
 		}
@@ -175,9 +175,9 @@ func addPoliciesToGraph[T Policy](graph *cgraph.Graph, policies []T) {
 	}
 }
 
-func addEdgeToGraph(graph *cgraph.Graph, name string, parent, child Targetable) {
-	p, _ := graph.CreateNode(string(parent.GetURL()))
-	c, _ := graph.CreateNode(string(child.GetURL()))
+func addTargetablesEdgeToGraph(graph *cgraph.Graph, name string, parent, child Targetable) {
+	p, _ := graph.Node(string(parent.GetURL()))
+	c, _ := graph.Node(string(child.GetURL()))
 	if p != nil && c != nil {
 		graph.CreateEdge(name, p, c)
 	}
