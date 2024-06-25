@@ -153,59 +153,59 @@ func (r HTTPRouteRule) Policies() []Policy {
 	return r.attachedPolicies
 }
 
-type Backend struct {
-	*core.Service // TODO(guicassolato): Other types of backends
+type Service struct {
+	*core.Service
 
 	attachedPolicies []Policy
 }
 
-var _ Targetable = Backend{}
+var _ Targetable = Service{}
 
-func (b Backend) GetURL() string {
-	return UrlFromObject(b)
+func (s Service) GetURL() string {
+	return UrlFromObject(s)
 }
 
-func (b Backend) SetPolicies(policies []Policy) {
-	b.attachedPolicies = policies
+func (s Service) SetPolicies(policies []Policy) {
+	s.attachedPolicies = policies
 }
 
-func (b Backend) Policies() []Policy {
-	return b.attachedPolicies
+func (s Service) Policies() []Policy {
+	return s.attachedPolicies
 }
 
-type BackendPort struct {
+type ServicePort struct {
 	*core.ServicePort
 
-	backend          *Backend
+	service          *Service
 	attachedPolicies []Policy
 }
 
-var _ Targetable = BackendPort{}
+var _ Targetable = ServicePort{}
 
-func (p BackendPort) GroupVersionKind() schema.GroupVersionKind {
+func (p ServicePort) GroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
-		Kind: "BackendPort",
+		Kind: "ServicePort",
 	}
 }
 
-func (p BackendPort) SetGroupVersionKind(schema.GroupVersionKind) {}
+func (p ServicePort) SetGroupVersionKind(schema.GroupVersionKind) {}
 
-func (p BackendPort) GetURL() string {
+func (p ServicePort) GetURL() string {
 	return UrlFromObject(p)
 }
 
-func (p BackendPort) GetNamespace() string {
-	return p.backend.GetNamespace()
+func (p ServicePort) GetNamespace() string {
+	return p.service.GetNamespace()
 }
 
-func (p BackendPort) GetName() string {
-	return namespacedName(p.backend.Name, string(p.Name))
+func (p ServicePort) GetName() string {
+	return namespacedName(p.service.Name, string(p.Name))
 }
 
-func (p BackendPort) SetPolicies(policies []Policy) {
+func (p ServicePort) SetPolicies(policies []Policy) {
 	p.attachedPolicies = policies
 }
 
-func (p BackendPort) Policies() []Policy {
+func (p ServicePort) Policies() []Policy {
 	return p.attachedPolicies
 }

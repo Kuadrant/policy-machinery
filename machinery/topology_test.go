@@ -9,6 +9,7 @@ import (
 	"github.com/samber/lo"
 	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -45,13 +46,17 @@ type TestPolicySpec struct {
 	TargetRef gwapiv1alpha2.LocalPolicyTargetReference `json:"targetRef"`
 }
 
-func TestTopology(t *testing.T) {
+// TestTopology tests for a topology of Gateway API resources with the following architecture:
+//
+//	GatewayClass -> Gateway -> Listener -> HTTPRoute -> HTTPRouteRule -> Service -> ServicePort
+//	                                                                  ∟> ServicePort <- Service
+func TestGatewayAPITopology(t *testing.T) {
 	testCases := []struct {
 		name           string
 		gatewayClasses []*gwapiv1.GatewayClass
 		gateways       []*gwapiv1.Gateway
 		httpRoutes     []*gwapiv1.HTTPRoute
-		backends       []*core.Service
+		services       []*core.Service
 		policies       []Policy
 	}{
 		{
@@ -66,7 +71,7 @@ func TestTopology(t *testing.T) {
 			gatewayClasses: []*gwapiv1.GatewayClass{buildGatewayClass()},
 			gateways:       []*gwapiv1.Gateway{buildGateway()},
 			httpRoutes:     []*gwapiv1.HTTPRoute{buildHTTPRoute()},
-			backends:       []*core.Service{buildBackend()},
+			services:       []*core.Service{buildService()},
 			policies:       []Policy{buildPolicy()},
 		},
 		{
@@ -107,7 +112,7 @@ func TestTopology(t *testing.T) {
 			// │ │ port-1 │ │ port-2 │ │ │ │ port-1 │ │          │ │ port-1 │ │ port-2 │ │  │ │ port-1 │ │             │ │ port-1 │ │        │ │ port-1 │ │           │ │ port-1 │ │
 			// │ └────────┘ └────────┘ │ │ └────────┘ │          │ └────────┘ └────────┘ │  │ └────────┘ │             │ └────────┘ │        │ └────────┘ │           │ └────────┘ │
 			// │                       │ │            │          │                       │  │            │             │            │        │            │           │            │
-			// │       backend-1       │ │  backend-2 │          │       backend-3       │  │  backend-4 │             │  backend-5 │        │  backend-6 │           │  backend-7 │
+			// │       service-1       │ │  service-2 │          │       service-3       │  │  service-4 │             │  service-5 │        │  service-6 │           │  service-7 │
 			// └───────────────────────┘ └────────────┘          └───────────────────────┘  └────────────┘             └────────────┘        └────────────┘           └────────────┘
 			gatewayClasses: []*gwapiv1.GatewayClass{
 				buildGatewayClass(func(gc *gwapiv1.GatewayClass) { gc.Name = "gatewayclass-1" }),
@@ -162,12 +167,12 @@ func TestTopology(t *testing.T) {
 					r.Spec.Rules = []gwapiv1.HTTPRouteRule{
 						{ // rule-1
 							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "backend-1"
+								backendRef.Name = "service-1"
 							})},
 						},
 						{ // rule-2
 							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "backend-2"
+								backendRef.Name = "service-2"
 							})},
 						},
 					}
@@ -185,7 +190,7 @@ func TestTopology(t *testing.T) {
 						},
 					}
 					r.Spec.Rules[0].BackendRefs[0] = buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-						backendRef.Name = "backend-3"
+						backendRef.Name = "service-3"
 						backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
 					})
 				}),
@@ -193,7 +198,7 @@ func TestTopology(t *testing.T) {
 					r.Name = "route-3"
 					r.Spec.ParentRefs[0].Name = "gateway-2"
 					r.Spec.Rules[0].BackendRefs[0] = buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-						backendRef.Name = "backend-3"
+						backendRef.Name = "service-3"
 						backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
 					})
 				}),
@@ -203,13 +208,13 @@ func TestTopology(t *testing.T) {
 					r.Spec.Rules = []gwapiv1.HTTPRouteRule{
 						{ // rule-1
 							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "backend-3"
+								backendRef.Name = "service-3"
 								backendRef.Port = ptr.To(gwapiv1.PortNumber(443)) // port-2
 							})},
 						},
 						{ // rule-2
 							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "backend-4"
+								backendRef.Name = "service-4"
 							})},
 						},
 					}
@@ -221,12 +226,12 @@ func TestTopology(t *testing.T) {
 					r.Spec.Rules = []gwapiv1.HTTPRouteRule{
 						{ // rule-1
 							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "backend-5"
+								backendRef.Name = "service-5"
 							})},
 						},
 						{ // rule-2
 							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "backend-5"
+								backendRef.Name = "service-5"
 							})},
 						},
 					}
@@ -238,16 +243,16 @@ func TestTopology(t *testing.T) {
 						{ // rule-1
 							BackendRefs: []gwapiv1.HTTPBackendRef{
 								buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-									backendRef.Name = "backend-5"
+									backendRef.Name = "service-5"
 								}),
 								buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-									backendRef.Name = "backend-6"
+									backendRef.Name = "service-6"
 								}),
 							},
 						},
 						{ // rule-2
 							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "backend-6"
+								backendRef.Name = "service-6"
 								backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
 							})},
 						},
@@ -257,45 +262,45 @@ func TestTopology(t *testing.T) {
 					r.Name = "route-7"
 					r.Spec.ParentRefs[0].Name = "gateway-5"
 					r.Spec.Rules[0].BackendRefs[0] = buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-						backendRef.Name = "backend-7"
+						backendRef.Name = "service-7"
 					})
 				}),
 			},
-			backends: []*core.Service{
-				buildBackend(func(s *core.Service) {
-					s.Name = "backend-1"
+			services: []*core.Service{
+				buildService(func(s *core.Service) {
+					s.Name = "service-1"
 					s.Spec.Ports[0].Name = "port-1"
 					s.Spec.Ports = append(s.Spec.Ports, core.ServicePort{
 						Name: "port-2",
 						Port: 443,
 					})
 				}),
-				buildBackend(func(s *core.Service) {
-					s.Name = "backend-2"
+				buildService(func(s *core.Service) {
+					s.Name = "service-2"
 					s.Spec.Ports[0].Name = "port-1"
 				}),
-				buildBackend(func(s *core.Service) {
-					s.Name = "backend-3"
+				buildService(func(s *core.Service) {
+					s.Name = "service-3"
 					s.Spec.Ports[0].Name = "port-1"
 					s.Spec.Ports = append(s.Spec.Ports, core.ServicePort{
 						Name: "port-2",
 						Port: 443,
 					})
 				}),
-				buildBackend(func(s *core.Service) {
-					s.Name = "backend-4"
+				buildService(func(s *core.Service) {
+					s.Name = "service-4"
 					s.Spec.Ports[0].Name = "port-1"
 				}),
-				buildBackend(func(s *core.Service) {
-					s.Name = "backend-5"
+				buildService(func(s *core.Service) {
+					s.Name = "service-5"
 					s.Spec.Ports[0].Name = "port-1"
 				}),
-				buildBackend(func(s *core.Service) {
-					s.Name = "backend-6"
+				buildService(func(s *core.Service) {
+					s.Name = "service-6"
 					s.Spec.Ports[0].Name = "port-1"
 				}),
-				buildBackend(func(s *core.Service) {
-					s.Name = "backend-7"
+				buildService(func(s *core.Service) {
+					s.Name = "service-7"
 					s.Spec.Ports[0].Name = "port-1"
 				}),
 			},
@@ -303,14 +308,126 @@ func TestTopology(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			targetables := make([]Targetable, 0, len(tc.gatewayClasses)+len(tc.gateways)+len(tc.httpRoutes)+len(tc.backends))
-			targetables = append(targetables, lo.Map(tc.gatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) Targetable {
+			gatewayClasses := lo.Map(tc.gatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) GatewayClass {
 				return GatewayClass{GatewayClass: gatewayClass}
-			})...)
-			targetables = append(targetables, lo.Map(tc.gateways, func(gateway *gwapiv1.Gateway, _ int) Targetable { return Gateway{Gateway: gateway} })...)
-			targetables = append(targetables, lo.Map(tc.httpRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) Targetable { return HTTPRoute{HTTPRoute: httpRoute} })...)
-			targetables = append(targetables, lo.Map(tc.backends, func(service *core.Service, _ int) Targetable { return Backend{Service: service} })...)
-			topology := NewTopology(targetables, tc.policies)
+			})
+			gateways := lo.Map(tc.gateways, func(gateway *gwapiv1.Gateway, _ int) Gateway { return Gateway{Gateway: gateway} })
+			listeners := lo.FlatMap(gateways, listenersFromGatewayFunc)
+			httpRoutes := lo.Map(tc.httpRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) HTTPRoute { return HTTPRoute{HTTPRoute: httpRoute} })
+			httpRouteRules := lo.FlatMap(httpRoutes, httpRouteRulesFromHTTPRouteFunc)
+			services := lo.Map(tc.services, func(service *core.Service, _ int) Service { return Service{Service: service} })
+			servicePorts := lo.FlatMap(services, ServicePortsFromBackendFunc)
+
+			topology := NewTopology(
+				WithTargetables(gatewayClasses...),
+				WithTargetables(gateways...),
+				WithTargetables(listeners...),
+				WithTargetables(httpRoutes...),
+				WithTargetables(httpRouteRules...),
+				WithTargetables(services...),
+				WithTargetables(servicePorts...),
+				WithLinks(
+					LinkFunc{
+						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"},
+						To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
+						Func: func(child Targetable) []Targetable {
+							gateway := child.(Gateway)
+							gatewayClass, ok := lo.Find(gatewayClasses, func(gc GatewayClass) bool {
+								return gc.Name == string(gateway.Spec.GatewayClassName)
+							})
+							if ok {
+								return []Targetable{gatewayClass}
+							}
+							return nil
+						},
+					},
+					LinkFunc{
+						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
+						To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
+						Func: func(child Targetable) []Targetable {
+							listener := child.(Listener)
+							return []Targetable{listener.gateway}
+						},
+					},
+					LinkFunc{
+						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
+						To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
+						Func: func(child Targetable) []Targetable {
+							httpRoute := child.(HTTPRoute)
+							return lo.FlatMap(httpRoute.Spec.ParentRefs, func(parentRef gwapiv1.ParentReference, _ int) []Targetable {
+								parentRefGroup := ptr.Deref(parentRef.Group, gwapiv1.Group(gwapiv1.GroupName))
+								parentRefKind := ptr.Deref(parentRef.Kind, gwapiv1.Kind("Gateway"))
+								if parentRefGroup != gwapiv1.GroupName || parentRefKind != "Gateway" {
+									return nil
+								}
+								gatewayNamespace := string(ptr.Deref(parentRef.Namespace, gwapiv1.Namespace(httpRoute.Namespace)))
+								gateway, ok := lo.Find(gateways, func(g Gateway) bool {
+									return g.Namespace == gatewayNamespace && g.Name == string(parentRef.Name)
+								})
+								if !ok {
+									return nil
+								}
+								if parentRef.SectionName != nil {
+									listener, ok := lo.Find(listeners, func(l Listener) bool {
+										return l.gateway.GetURL() == gateway.GetURL() && l.Name == *parentRef.SectionName
+									})
+									if !ok {
+										return nil
+									}
+									return []Targetable{listener}
+								}
+								return lo.FilterMap(listeners, func(l Listener, _ int) (Targetable, bool) {
+									return l, l.gateway.GetURL() == gateway.GetURL()
+								})
+							})
+						},
+					},
+					LinkFunc{
+						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
+						To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
+						Func: func(child Targetable) []Targetable {
+							httpRouteRule := child.(HTTPRouteRule)
+							return []Targetable{httpRouteRule.httpRoute}
+						},
+					},
+					LinkFunc{
+						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
+						To:   schema.GroupKind{Kind: "Service"},
+						Func: func(child Targetable) []Targetable {
+							service := child.(Service)
+							return lo.FilterMap(httpRouteRules, func(httpRouteRule HTTPRouteRule, _ int) (Targetable, bool) {
+								backendRefs := lo.FilterMap(httpRouteRule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) (gwapiv1.BackendRef, bool) {
+									return backendRef.BackendRef, backendRef.Port == nil
+								})
+								return httpRouteRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(service, httpRouteRule.httpRoute.Namespace))
+							})
+						},
+					},
+					LinkFunc{
+						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
+						To:   schema.GroupKind{Kind: "ServicePort"},
+						Func: func(child Targetable) []Targetable {
+							servicePort := child.(ServicePort)
+							return lo.FilterMap(httpRouteRules, func(httpRouteRule HTTPRouteRule, _ int) (Targetable, bool) {
+								backendRefs := lo.FilterMap(httpRouteRule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) (gwapiv1.BackendRef, bool) {
+									return backendRef.BackendRef, backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
+								})
+								return httpRouteRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(*servicePort.service, httpRouteRule.httpRoute.Namespace))
+							})
+						},
+					},
+					LinkFunc{
+						From: schema.GroupKind{Kind: "Service"},
+						To:   schema.GroupKind{Kind: "ServicePort"},
+						Func: func(child Targetable) []Targetable {
+							servicePort := child.(ServicePort)
+							return []Targetable{servicePort.service}
+						},
+					},
+				),
+				WithPolicies(tc.policies...),
+			)
+
 			fmt.Println(topology.ToDot())
 		})
 	}
@@ -407,7 +524,7 @@ func buildHTTPBackendRef(f ...func(*gwapiv1.BackendObjectReference)) gwapiv1.HTT
 	}
 }
 
-func buildBackend(f ...func(*core.Service)) *core.Service {
+func buildService(f ...func(*core.Service)) *core.Service {
 	s := &core.Service{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: core.SchemeGroupVersion.String(),
@@ -456,4 +573,45 @@ func buildPolicy(f ...func(*TestPolicy)) *TestPolicy {
 		fn(p)
 	}
 	return p
+}
+
+func listenersFromGatewayFunc(gateway Gateway, _ int) []Listener {
+	return lo.Map(gateway.Spec.Listeners, func(listener gwapiv1.Listener, _ int) Listener {
+		return Listener{
+			Listener: &listener,
+			gateway:  &gateway,
+		}
+	})
+}
+
+func httpRouteRulesFromHTTPRouteFunc(httpRoute HTTPRoute, _ int) []HTTPRouteRule {
+	return lo.Map(httpRoute.Spec.Rules, func(rule gwapiv1.HTTPRouteRule, i int) HTTPRouteRule {
+		return HTTPRouteRule{
+			HTTPRouteRule: &rule,
+			httpRoute:     &httpRoute,
+			name:          gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
+		}
+	})
+}
+
+func ServicePortsFromBackendFunc(service Service, _ int) []ServicePort {
+	return lo.Map(service.Spec.Ports, func(port core.ServicePort, _ int) ServicePort {
+		return ServicePort{
+			ServicePort: &port,
+			service:     &service,
+		}
+	})
+}
+
+func backendRefContainsServiceFunc(service Service, defaultNamespace string) func(backendRef gwapiv1.BackendRef) bool {
+	return func(backendRef gwapiv1.BackendRef) bool {
+		return backendRefEqualToService(backendRef, service, defaultNamespace)
+	}
+}
+
+func backendRefEqualToService(backendRef gwapiv1.BackendRef, service Service, defaultNamespace string) bool {
+	backendRefGroup := string(ptr.Deref(backendRef.Group, gwapiv1.Group("")))
+	backendRefKind := string(ptr.Deref(backendRef.Kind, gwapiv1.Kind("Service")))
+	backendRefNamespace := string(ptr.Deref(backendRef.Namespace, gwapiv1.Namespace(defaultNamespace)))
+	return backendRefGroup == service.GroupVersionKind().Group && backendRefKind == service.GroupVersionKind().Kind && backendRefNamespace == service.Namespace && string(backendRef.Name) == service.Name
 }
