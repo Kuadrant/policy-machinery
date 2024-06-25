@@ -46,7 +46,7 @@ type TestPolicySpec struct {
 	TargetRef gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 }
 
-// TestTopology tests for a topology of Gateway API resources with the following architecture:
+// TestGatewayAPITopology tests for a topology of Gateway API resources with the following architecture:
 //
 //	GatewayClass -> Gateway -> Listener -> HTTPRoute -> HTTPRouteRule -> Service -> ServicePort
 //	                                                                  ∟> ServicePort <- Service
