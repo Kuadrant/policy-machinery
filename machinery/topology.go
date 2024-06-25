@@ -9,6 +9,7 @@ import (
 	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
 type TopologyOptions struct {
@@ -149,7 +150,7 @@ func associateURL[T Object](obj T) (string, T) {
 
 func addObjectsToGraph[T Object](graph *cgraph.Graph, objects []T, shape cgraph.Shape) []*cgraph.Node {
 	return lo.Map(objects, func(object T, _ int) *cgraph.Node {
-		name := strings.TrimPrefix(namespacedName(object.GetNamespace(), object.GetName()), "/")
+		name := strings.TrimPrefix(namespacedName(object.GetNamespace(), object.GetName()), string(k8stypes.Separator))
 		n, _ := graph.CreateNode(string(object.GetURL()))
 		n.SetLabel(fmt.Sprintf("%s\\n%s", object.GroupVersionKind().Kind, name))
 		n.SetShape(shape)
