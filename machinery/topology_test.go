@@ -46,25 +46,27 @@ type TestPolicySpec struct {
 	TargetRef gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 }
 
+type topologyTestCase struct {
+	name           string
+	gatewayClasses []*gwapiv1.GatewayClass
+	gateways       []*gwapiv1.Gateway
+	httpRoutes     []*gwapiv1.HTTPRoute
+	services       []*core.Service
+	policies       []Policy
+}
+
 // TestGatewayAPITopology tests for a topology of Gateway API resources with the following architecture:
 //
 //	GatewayClass -> Gateway -> Listener -> HTTPRoute -> HTTPRouteRule -> Service -> ServicePort
 //	                                                                  ∟> ServicePort <- Service
 func TestGatewayAPITopology(t *testing.T) {
-	testCases := []struct {
-		name           string
-		gatewayClasses []*gwapiv1.GatewayClass
-		gateways       []*gwapiv1.Gateway
-		httpRoutes     []*gwapiv1.HTTPRoute
-		services       []*core.Service
-		policies       []Policy
-	}{
+	testCases := []topologyTestCase{
 		{
 			name: "empty",
 		},
 		{
-			name:     "single node",
-			gateways: []*gwapiv1.Gateway{buildGateway()},
+			name:           "single node",
+			gatewayClasses: []*gwapiv1.GatewayClass{buildGatewayClass()},
 		},
 		{
 			name:           "one of each kind",
@@ -74,237 +76,7 @@ func TestGatewayAPITopology(t *testing.T) {
 			services:       []*core.Service{buildService()},
 			policies:       []Policy{buildPolicy()},
 		},
-		{
-			name: "complex network",
-			//                                             ┌────────────────┐                                                                        ┌────────────────┐
-			//                                             │ gatewayclass-1 │                                                                        │ gatewayclass-2 │
-			//                                             └────────────────┘                                                                        └────────────────┘
-			//                                                     ▲                                                                                         ▲
-			//                                                     │                                                                                         │
-			//                           ┌─────────────────────────┼──────────────────────────┐                                                 ┌────────────┴─────────────┐
-			//                           │                         │                          │                                                 │                          │
-			//           ┌───────────────┴───────────────┐ ┌───────┴────────┐ ┌───────────────┴───────────────┐                  ┌──────────────┴────────────────┐ ┌───────┴────────┐
-			//           │           gateway-1           │ │   gateway-2    │ │           gateway-3           │                  │           gateway-4           │ │   gateway-5    │
-			//           │                               │ │                │ │                               │                  │                               │ │                │
-			//           │ ┌────────────┐ ┌────────────┐ │ │ ┌────────────┐ │ │ ┌────────────┐ ┌────────────┐ │                  │ ┌────────────┐ ┌────────────┐ │ │ ┌────────────┐ │
-			//           │ │ listener-1 │ │ listener-2 │ │ │ │ listener-1 │ │ │ │ listener-1 │ │ listener-2 │ │                  │ │ listener-1 │ │ listener-2 │ │ │ │ listener-1 │ │
-			//           │ └────────────┘ └────────────┘ │ │ └────────────┘ │ │ └────────────┘ └────────────┘ │                  │ └────────────┘ └────────────┘ │ │ └────────────┘ │
-			//           │                        ▲      │ │      ▲         │ │                               │                  │                               │ │                │
-			//           └────────────────────────┬──────┘ └──────┬─────────┘ └───────────────────────────────┘                  └───────────────────────────────┘ └────────────────┘
-			//                       ▲            │               │     ▲                    ▲            ▲                          ▲           ▲                          ▲
-			//                       │            │               │     │                    │            │                          │           │                          │
-			//                       │            └───────┬───────┘     │                    │            └────────────┬─────────────┘           │                          │
-			//                       │                    │             │                    │                         │                         │                          │
-			//           ┌───────────┴───────────┐ ┌──────┴─────┐ ┌─────┴──────┐ ┌───────────┴───────────┐ ┌───────────┴───────────┐ ┌───────────┴───────────┐        ┌─────┴──────┐
-			//           │        route-1        │ │  route-2   │ │  route-3   │ │        route-4        │ │        route-5        │ │        route-6        │        │   route-7  │
-			//           │                       │ │            │ │            │ │                       │ │                       │ │                       │        │            │
-			//           │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ │ │ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │        │ ┌────────┐ │
-			//           │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ │ │ rule-1 │ │ │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ rule-2 │ │        │ │ rule-1 │ │
-			//           │ └────┬───┘ └────┬───┘ │ │ └────┬───┘ │ │ └───┬────┘ │ │ └─┬──────┘ └───┬────┘ │ │ └───┬────┘ └────┬───┘ │ │ └─┬────┬─┘ └────┬───┘ │        │ └────┬───┘ │
-			//           │      │          │     │ │      │     │ │     │      │ │   │            │      │ │     │           │     │ │   │    │        │     │        │      │     │
-			//           └──────┼──────────┼─────┘ └──────┼─────┘ └─────┼──────┘ └───┼────────────┼──────┘ └─────┼───────────┼─────┘ └───┼────┼────────┼─────┘        └──────┼─────┘
-			//                  │          │              │             │            │            │              │           │           │    │        │                     │
-			//                  │          │              └─────────────┤            │            │              └───────────┴───────────┘    │        │                     │
-			//                  ▼          ▼                            │            │            │                          ▼                ▼        │                     ▼
-			// ┌───────────────────────┐ ┌────────────┐          ┌──────┴────────────┴───┐  ┌─────┴──────┐             ┌────────────┐        ┌─────────┴──┐           ┌────────────┐
-			// │                       │ │            │          │      ▼            ▼   │  │     ▼      │             │            │        │         ▼  │           │            │
-			// │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ │          │ ┌────────┐ ┌────────┐ │  │ ┌────────┐ │             │ ┌────────┐ │        │ ┌────────┐ │           │ ┌────────┐ │
-			// │ │ port-1 │ │ port-2 │ │ │ │ port-1 │ │          │ │ port-1 │ │ port-2 │ │  │ │ port-1 │ │             │ │ port-1 │ │        │ │ port-1 │ │           │ │ port-1 │ │
-			// │ └────────┘ └────────┘ │ │ └────────┘ │          │ └────────┘ └────────┘ │  │ └────────┘ │             │ └────────┘ │        │ └────────┘ │           │ └────────┘ │
-			// │                       │ │            │          │                       │  │            │             │            │        │            │           │            │
-			// │       service-1       │ │  service-2 │          │       service-3       │  │  service-4 │             │  service-5 │        │  service-6 │           │  service-7 │
-			// └───────────────────────┘ └────────────┘          └───────────────────────┘  └────────────┘             └────────────┘        └────────────┘           └────────────┘
-			gatewayClasses: []*gwapiv1.GatewayClass{
-				buildGatewayClass(func(gc *gwapiv1.GatewayClass) { gc.Name = "gatewayclass-1" }),
-				buildGatewayClass(func(gc *gwapiv1.GatewayClass) { gc.Name = "gatewayclass-2" }),
-			},
-			gateways: []*gwapiv1.Gateway{
-				buildGateway(func(g *gwapiv1.Gateway) {
-					g.Name = "gateway-1"
-					g.Spec.GatewayClassName = "gatewayclass-1"
-					g.Spec.Listeners[0].Name = "listener-1"
-					g.Spec.Listeners = append(g.Spec.Listeners, gwapiv1.Listener{
-						Name:     "listener-2",
-						Port:     443,
-						Protocol: "HTTPS",
-					})
-				}),
-				buildGateway(func(g *gwapiv1.Gateway) {
-					g.Name = "gateway-2"
-					g.Spec.GatewayClassName = "gatewayclass-1"
-					g.Spec.Listeners[0].Name = "listener-1"
-				}),
-				buildGateway(func(g *gwapiv1.Gateway) {
-					g.Name = "gateway-3"
-					g.Spec.GatewayClassName = "gatewayclass-1"
-					g.Spec.Listeners[0].Name = "listener-1"
-					g.Spec.Listeners = append(g.Spec.Listeners, gwapiv1.Listener{
-						Name:     "listener-2",
-						Port:     443,
-						Protocol: "HTTPS",
-					})
-				}),
-				buildGateway(func(g *gwapiv1.Gateway) {
-					g.Name = "gateway-4"
-					g.Spec.GatewayClassName = "gatewayclass-2"
-					g.Spec.Listeners[0].Name = "listener-1"
-					g.Spec.Listeners = append(g.Spec.Listeners, gwapiv1.Listener{
-						Name:     "listener-2",
-						Port:     443,
-						Protocol: "HTTPS",
-					})
-				}),
-				buildGateway(func(g *gwapiv1.Gateway) {
-					g.Name = "gateway-5"
-					g.Spec.GatewayClassName = "gatewayclass-2"
-					g.Spec.Listeners[0].Name = "listener-1"
-				}),
-			},
-			httpRoutes: []*gwapiv1.HTTPRoute{
-				buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-					r.Name = "route-1"
-					r.Spec.ParentRefs[0].Name = "gateway-1"
-					r.Spec.Rules = []gwapiv1.HTTPRouteRule{
-						{ // rule-1
-							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-1"
-							})},
-						},
-						{ // rule-2
-							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-2"
-							})},
-						},
-					}
-				}),
-				buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-					r.Name = "route-2"
-					r.Spec.ParentRefs = []gwapiv1.ParentReference{
-						{
-							Name:        "gateway-1",
-							SectionName: ptr.To(gwapiv1.SectionName("listener-2")),
-						},
-						{
-							Name:        "gateway-2",
-							SectionName: ptr.To(gwapiv1.SectionName("listener-1")),
-						},
-					}
-					r.Spec.Rules[0].BackendRefs[0] = buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-						backendRef.Name = "service-3"
-						backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
-					})
-				}),
-				buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-					r.Name = "route-3"
-					r.Spec.ParentRefs[0].Name = "gateway-2"
-					r.Spec.Rules[0].BackendRefs[0] = buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-						backendRef.Name = "service-3"
-						backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
-					})
-				}),
-				buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-					r.Name = "route-4"
-					r.Spec.ParentRefs[0].Name = "gateway-3"
-					r.Spec.Rules = []gwapiv1.HTTPRouteRule{
-						{ // rule-1
-							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-3"
-								backendRef.Port = ptr.To(gwapiv1.PortNumber(443)) // port-2
-							})},
-						},
-						{ // rule-2
-							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-4"
-							})},
-						},
-					}
-				}),
-				buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-					r.Name = "route-5"
-					r.Spec.ParentRefs[0].Name = "gateway-3"
-					r.Spec.ParentRefs = append(r.Spec.ParentRefs, gwapiv1.ParentReference{Name: "gateway-4"})
-					r.Spec.Rules = []gwapiv1.HTTPRouteRule{
-						{ // rule-1
-							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-5"
-							})},
-						},
-						{ // rule-2
-							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-5"
-							})},
-						},
-					}
-				}),
-				buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-					r.Name = "route-6"
-					r.Spec.ParentRefs[0].Name = "gateway-4"
-					r.Spec.Rules = []gwapiv1.HTTPRouteRule{
-						{ // rule-1
-							BackendRefs: []gwapiv1.HTTPBackendRef{
-								buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-									backendRef.Name = "service-5"
-								}),
-								buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-									backendRef.Name = "service-6"
-								}),
-							},
-						},
-						{ // rule-2
-							BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-6"
-								backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
-							})},
-						},
-					}
-				}),
-				buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-					r.Name = "route-7"
-					r.Spec.ParentRefs[0].Name = "gateway-5"
-					r.Spec.Rules[0].BackendRefs[0] = buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-						backendRef.Name = "service-7"
-					})
-				}),
-			},
-			services: []*core.Service{
-				buildService(func(s *core.Service) {
-					s.Name = "service-1"
-					s.Spec.Ports[0].Name = "port-1"
-					s.Spec.Ports = append(s.Spec.Ports, core.ServicePort{
-						Name: "port-2",
-						Port: 443,
-					})
-				}),
-				buildService(func(s *core.Service) {
-					s.Name = "service-2"
-					s.Spec.Ports[0].Name = "port-1"
-				}),
-				buildService(func(s *core.Service) {
-					s.Name = "service-3"
-					s.Spec.Ports[0].Name = "port-1"
-					s.Spec.Ports = append(s.Spec.Ports, core.ServicePort{
-						Name: "port-2",
-						Port: 443,
-					})
-				}),
-				buildService(func(s *core.Service) {
-					s.Name = "service-4"
-					s.Spec.Ports[0].Name = "port-1"
-				}),
-				buildService(func(s *core.Service) {
-					s.Name = "service-5"
-					s.Spec.Ports[0].Name = "port-1"
-				}),
-				buildService(func(s *core.Service) {
-					s.Name = "service-6"
-					s.Spec.Ports[0].Name = "port-1"
-				}),
-				buildService(func(s *core.Service) {
-					s.Name = "service-7"
-					s.Spec.Ports[0].Name = "port-1"
-				}),
-			},
-		},
+		complexTopologyTestCase(),
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -316,7 +88,7 @@ func TestGatewayAPITopology(t *testing.T) {
 			httpRoutes := lo.Map(tc.httpRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) HTTPRoute { return HTTPRoute{HTTPRoute: httpRoute} })
 			httpRouteRules := lo.FlatMap(httpRoutes, httpRouteRulesFromHTTPRouteFunc)
 			services := lo.Map(tc.services, func(service *core.Service, _ int) Service { return Service{Service: service} })
-			servicePorts := lo.FlatMap(services, ServicePortsFromBackendFunc)
+			servicePorts := lo.FlatMap(services, servicePortsFromBackendFunc)
 
 			topology := NewTopology(
 				WithTargetables(gatewayClasses...),
@@ -327,103 +99,13 @@ func TestGatewayAPITopology(t *testing.T) {
 				WithTargetables(services...),
 				WithTargetables(servicePorts...),
 				WithLinks(
-					LinkFunc{
-						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"},
-						To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
-						Func: func(child Targetable) []Targetable {
-							gateway := child.(Gateway)
-							gatewayClass, ok := lo.Find(gatewayClasses, func(gc GatewayClass) bool {
-								return gc.Name == string(gateway.Spec.GatewayClassName)
-							})
-							if ok {
-								return []Targetable{gatewayClass}
-							}
-							return nil
-						},
-					},
-					LinkFunc{
-						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
-						To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
-						Func: func(child Targetable) []Targetable {
-							listener := child.(Listener)
-							return []Targetable{listener.gateway}
-						},
-					},
-					LinkFunc{
-						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
-						To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
-						Func: func(child Targetable) []Targetable {
-							httpRoute := child.(HTTPRoute)
-							return lo.FlatMap(httpRoute.Spec.ParentRefs, func(parentRef gwapiv1.ParentReference, _ int) []Targetable {
-								parentRefGroup := ptr.Deref(parentRef.Group, gwapiv1.Group(gwapiv1.GroupName))
-								parentRefKind := ptr.Deref(parentRef.Kind, gwapiv1.Kind("Gateway"))
-								if parentRefGroup != gwapiv1.GroupName || parentRefKind != "Gateway" {
-									return nil
-								}
-								gatewayNamespace := string(ptr.Deref(parentRef.Namespace, gwapiv1.Namespace(httpRoute.Namespace)))
-								gateway, ok := lo.Find(gateways, func(g Gateway) bool {
-									return g.Namespace == gatewayNamespace && g.Name == string(parentRef.Name)
-								})
-								if !ok {
-									return nil
-								}
-								if parentRef.SectionName != nil {
-									listener, ok := lo.Find(listeners, func(l Listener) bool {
-										return l.gateway.GetURL() == gateway.GetURL() && l.Name == *parentRef.SectionName
-									})
-									if !ok {
-										return nil
-									}
-									return []Targetable{listener}
-								}
-								return lo.FilterMap(listeners, func(l Listener, _ int) (Targetable, bool) {
-									return l, l.gateway.GetURL() == gateway.GetURL()
-								})
-							})
-						},
-					},
-					LinkFunc{
-						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
-						To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
-						Func: func(child Targetable) []Targetable {
-							httpRouteRule := child.(HTTPRouteRule)
-							return []Targetable{httpRouteRule.httpRoute}
-						},
-					},
-					LinkFunc{
-						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
-						To:   schema.GroupKind{Kind: "Service"},
-						Func: func(child Targetable) []Targetable {
-							service := child.(Service)
-							return lo.FilterMap(httpRouteRules, func(httpRouteRule HTTPRouteRule, _ int) (Targetable, bool) {
-								backendRefs := lo.FilterMap(httpRouteRule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) (gwapiv1.BackendRef, bool) {
-									return backendRef.BackendRef, backendRef.Port == nil
-								})
-								return httpRouteRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(service, httpRouteRule.httpRoute.Namespace))
-							})
-						},
-					},
-					LinkFunc{
-						From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
-						To:   schema.GroupKind{Kind: "ServicePort"},
-						Func: func(child Targetable) []Targetable {
-							servicePort := child.(ServicePort)
-							return lo.FilterMap(httpRouteRules, func(httpRouteRule HTTPRouteRule, _ int) (Targetable, bool) {
-								backendRefs := lo.FilterMap(httpRouteRule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) (gwapiv1.BackendRef, bool) {
-									return backendRef.BackendRef, backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
-								})
-								return httpRouteRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(*servicePort.service, httpRouteRule.httpRoute.Namespace))
-							})
-						},
-					},
-					LinkFunc{
-						From: schema.GroupKind{Kind: "Service"},
-						To:   schema.GroupKind{Kind: "ServicePort"},
-						Func: func(child Targetable) []Targetable {
-							servicePort := child.(ServicePort)
-							return []Targetable{servicePort.service}
-						},
-					},
+					linkGatewayClassToGatewayFunc(gatewayClasses),
+					linkGatewayToListenerFunc(),
+					linkListenerToHTTPRouteFunc(gateways, listeners),
+					linkHTTPRouteToHTTPRouteRuleFunc(),
+					linkHTTPRouteRuleToServiceFunc(httpRouteRules),
+					linkHTTPRouteRuleToServicePortFunc(httpRouteRules),
+					linkServiceToServicePortFunc(),
 				),
 				WithPolicies(tc.policies...),
 			)
@@ -431,6 +113,290 @@ func TestGatewayAPITopology(t *testing.T) {
 			fmt.Println(topology.ToDot())
 		})
 	}
+}
+
+// TestGatewayAPITopologyWithoutSectionName tests for a simplified topology of Gateway API resources without
+// section names, i.e. where HTTPRoutes are not expanded to link to specific Listeners, and Policy TargetRefs
+// are not of LocalPolicyTargetReferenceWithSectionName kind. This results in the following architecture:
+//
+//	GatewayClass -> Gateway -> HTTPRoute -> Service
+func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
+	testCases := []topologyTestCase{
+		{
+			name:           "one of each kind",
+			gatewayClasses: []*gwapiv1.GatewayClass{buildGatewayClass()},
+			gateways:       []*gwapiv1.Gateway{buildGateway()},
+			httpRoutes:     []*gwapiv1.HTTPRoute{buildHTTPRoute()},
+			services:       []*core.Service{buildService()},
+			policies:       []Policy{buildPolicy()},
+		},
+		complexTopologyTestCase(),
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			gatewayClasses := lo.Map(tc.gatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) GatewayClass {
+				return GatewayClass{GatewayClass: gatewayClass}
+			})
+			gateways := lo.Map(tc.gateways, func(gateway *gwapiv1.Gateway, _ int) Gateway { return Gateway{Gateway: gateway} })
+			httpRoutes := lo.Map(tc.httpRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) HTTPRoute { return HTTPRoute{HTTPRoute: httpRoute} })
+			services := lo.Map(tc.services, func(service *core.Service, _ int) Service { return Service{Service: service} })
+
+			topology := NewTopology(
+				WithTargetables(gatewayClasses...),
+				WithTargetables(gateways...),
+				WithTargetables(httpRoutes...),
+				WithTargetables(services...),
+				WithLinks(
+					linkGatewayClassToGatewayFunc(gatewayClasses),
+					linkGatewayToHTTPRouteFunc(gateways),
+					linkHTTPRouteToServiceFunc(httpRoutes),
+				),
+				WithPolicies(tc.policies...),
+			)
+
+			fmt.Println(topology.ToDot())
+		})
+	}
+}
+
+// complexTopologyTestCase returns a topologyTestCase for the following complex network of Gateway API resources:
+//
+//	                                            ┌────────────────┐                                                                        ┌────────────────┐
+//	                                            │ gatewayclass-1 │                                                                        │ gatewayclass-2 │
+//	                                            └────────────────┘                                                                        └────────────────┘
+//	                                                    ▲                                                                                         ▲
+//	                                                    │                                                                                         │
+//	                          ┌─────────────────────────┼──────────────────────────┐                                                 ┌────────────┴─────────────┐
+//	                          │                         │                          │                                                 │                          │
+//	          ┌───────────────┴───────────────┐ ┌───────┴────────┐ ┌───────────────┴───────────────┐                  ┌──────────────┴────────────────┐ ┌───────┴────────┐
+//	          │           gateway-1           │ │   gateway-2    │ │           gateway-3           │                  │           gateway-4           │ │   gateway-5    │
+//	          │                               │ │                │ │                               │                  │                               │ │                │
+//	          │ ┌────────────┐ ┌────────────┐ │ │ ┌────────────┐ │ │ ┌────────────┐ ┌────────────┐ │                  │ ┌────────────┐ ┌────────────┐ │ │ ┌────────────┐ │
+//	          │ │ listener-1 │ │ listener-2 │ │ │ │ listener-1 │ │ │ │ listener-1 │ │ listener-2 │ │                  │ │ listener-1 │ │ listener-2 │ │ │ │ listener-1 │ │
+//	          │ └────────────┘ └────────────┘ │ │ └────────────┘ │ │ └────────────┘ └────────────┘ │                  │ └────────────┘ └────────────┘ │ │ └────────────┘ │
+//	          │                        ▲      │ │      ▲         │ │                               │                  │                               │ │                │
+//	          └────────────────────────┬──────┘ └──────┬─────────┘ └───────────────────────────────┘                  └───────────────────────────────┘ └────────────────┘
+//	                      ▲            │               │     ▲                    ▲            ▲                          ▲           ▲                          ▲
+//	                      │            │               │     │                    │            │                          │           │                          │
+//	                      │            └───────┬───────┘     │                    │            └────────────┬─────────────┘           │                          │
+//	                      │                    │             │                    │                         │                         │                          │
+//	          ┌───────────┴───────────┐ ┌──────┴─────┐ ┌─────┴──────┐ ┌───────────┴───────────┐ ┌───────────┴───────────┐ ┌───────────┴───────────┐        ┌─────┴──────┐
+//	          │        route-1        │ │  route-2   │ │  route-3   │ │        route-4        │ │        route-5        │ │        route-6        │        │   route-7  │
+//	          │                       │ │            │ │            │ │                       │ │                       │ │                       │        │            │
+//	          │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ │ │ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │        │ ┌────────┐ │
+//	          │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ │ │ rule-1 │ │ │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ rule-2 │ │        │ │ rule-1 │ │
+//	          │ └────┬───┘ └────┬───┘ │ │ └────┬───┘ │ │ └───┬────┘ │ │ └─┬──────┘ └───┬────┘ │ │ └───┬────┘ └────┬───┘ │ │ └─┬────┬─┘ └────┬───┘ │        │ └────┬───┘ │
+//	          │      │          │     │ │      │     │ │     │      │ │   │            │      │ │     │           │     │ │   │    │        │     │        │      │     │
+//	          └──────┼──────────┼─────┘ └──────┼─────┘ └─────┼──────┘ └───┼────────────┼──────┘ └─────┼───────────┼─────┘ └───┼────┼────────┼─────┘        └──────┼─────┘
+//	                 │          │              │             │            │            │              │           │           │    │        │                     │
+//	                 │          │              └─────────────┤            │            │              └───────────┴───────────┘    │        │                     │
+//	                 ▼          ▼                            │            │            │                          ▼                ▼        │                     ▼
+//	┌───────────────────────┐ ┌────────────┐          ┌──────┴────────────┴───┐  ┌─────┴──────┐             ┌────────────┐        ┌─────────┴──┐           ┌────────────┐
+//	│                       │ │            │          │      ▼            ▼   │  │     ▼      │             │            │        │         ▼  │           │            │
+//	│ ┌────────┐ ┌────────┐ │ │ ┌────────┐ │          │ ┌────────┐ ┌────────┐ │  │ ┌────────┐ │             │ ┌────────┐ │        │ ┌────────┐ │           │ ┌────────┐ │
+//	│ │ port-1 │ │ port-2 │ │ │ │ port-1 │ │          │ │ port-1 │ │ port-2 │ │  │ │ port-1 │ │             │ │ port-1 │ │        │ │ port-1 │ │           │ │ port-1 │ │
+//	│ └────────┘ └────────┘ │ │ └────────┘ │          │ └────────┘ └────────┘ │  │ └────────┘ │             │ └────────┘ │        │ └────────┘ │           │ └────────┘ │
+//	│                       │ │            │          │                       │  │            │             │            │        │            │           │            │
+//	│       service-1       │ │  service-2 │          │       service-3       │  │  service-4 │             │  service-5 │        │  service-6 │           │  service-7 │
+//	└───────────────────────┘ └────────────┘          └───────────────────────┘  └────────────┘             └────────────┘        └────────────┘           └────────────┘
+func complexTopologyTestCase(opts ...func(*topologyTestCase)) topologyTestCase {
+	tc := topologyTestCase{
+		name: "complex topology",
+		gatewayClasses: []*gwapiv1.GatewayClass{
+			buildGatewayClass(func(gc *gwapiv1.GatewayClass) { gc.Name = "gatewayclass-1" }),
+			buildGatewayClass(func(gc *gwapiv1.GatewayClass) { gc.Name = "gatewayclass-2" }),
+		},
+		gateways: []*gwapiv1.Gateway{
+			buildGateway(func(g *gwapiv1.Gateway) {
+				g.Name = "gateway-1"
+				g.Spec.GatewayClassName = "gatewayclass-1"
+				g.Spec.Listeners[0].Name = "listener-1"
+				g.Spec.Listeners = append(g.Spec.Listeners, gwapiv1.Listener{
+					Name:     "listener-2",
+					Port:     443,
+					Protocol: "HTTPS",
+				})
+			}),
+			buildGateway(func(g *gwapiv1.Gateway) {
+				g.Name = "gateway-2"
+				g.Spec.GatewayClassName = "gatewayclass-1"
+				g.Spec.Listeners[0].Name = "listener-1"
+			}),
+			buildGateway(func(g *gwapiv1.Gateway) {
+				g.Name = "gateway-3"
+				g.Spec.GatewayClassName = "gatewayclass-1"
+				g.Spec.Listeners[0].Name = "listener-1"
+				g.Spec.Listeners = append(g.Spec.Listeners, gwapiv1.Listener{
+					Name:     "listener-2",
+					Port:     443,
+					Protocol: "HTTPS",
+				})
+			}),
+			buildGateway(func(g *gwapiv1.Gateway) {
+				g.Name = "gateway-4"
+				g.Spec.GatewayClassName = "gatewayclass-2"
+				g.Spec.Listeners[0].Name = "listener-1"
+				g.Spec.Listeners = append(g.Spec.Listeners, gwapiv1.Listener{
+					Name:     "listener-2",
+					Port:     443,
+					Protocol: "HTTPS",
+				})
+			}),
+			buildGateway(func(g *gwapiv1.Gateway) {
+				g.Name = "gateway-5"
+				g.Spec.GatewayClassName = "gatewayclass-2"
+				g.Spec.Listeners[0].Name = "listener-1"
+			}),
+		},
+		httpRoutes: []*gwapiv1.HTTPRoute{
+			buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+				r.Name = "route-1"
+				r.Spec.ParentRefs[0].Name = "gateway-1"
+				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
+					{ // rule-1
+						BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-1"
+						})},
+					},
+					{ // rule-2
+						BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-2"
+						})},
+					},
+				}
+			}),
+			buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+				r.Name = "route-2"
+				r.Spec.ParentRefs = []gwapiv1.ParentReference{
+					{
+						Name:        "gateway-1",
+						SectionName: ptr.To(gwapiv1.SectionName("listener-2")),
+					},
+					{
+						Name:        "gateway-2",
+						SectionName: ptr.To(gwapiv1.SectionName("listener-1")),
+					},
+				}
+				r.Spec.Rules[0].BackendRefs[0] = buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+					backendRef.Name = "service-3"
+					backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
+				})
+			}),
+			buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+				r.Name = "route-3"
+				r.Spec.ParentRefs[0].Name = "gateway-2"
+				r.Spec.Rules[0].BackendRefs[0] = buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+					backendRef.Name = "service-3"
+					backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
+				})
+			}),
+			buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+				r.Name = "route-4"
+				r.Spec.ParentRefs[0].Name = "gateway-3"
+				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
+					{ // rule-1
+						BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-3"
+							backendRef.Port = ptr.To(gwapiv1.PortNumber(443)) // port-2
+						})},
+					},
+					{ // rule-2
+						BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-4"
+						})},
+					},
+				}
+			}),
+			buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+				r.Name = "route-5"
+				r.Spec.ParentRefs[0].Name = "gateway-3"
+				r.Spec.ParentRefs = append(r.Spec.ParentRefs, gwapiv1.ParentReference{Name: "gateway-4"})
+				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
+					{ // rule-1
+						BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-5"
+						})},
+					},
+					{ // rule-2
+						BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-5"
+						})},
+					},
+				}
+			}),
+			buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+				r.Name = "route-6"
+				r.Spec.ParentRefs[0].Name = "gateway-4"
+				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
+					{ // rule-1
+						BackendRefs: []gwapiv1.HTTPBackendRef{
+							buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+								backendRef.Name = "service-5"
+							}),
+							buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+								backendRef.Name = "service-6"
+							}),
+						},
+					},
+					{ // rule-2
+						BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-6"
+							backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
+						})},
+					},
+				}
+			}),
+			buildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+				r.Name = "route-7"
+				r.Spec.ParentRefs[0].Name = "gateway-5"
+				r.Spec.Rules[0].BackendRefs[0] = buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+					backendRef.Name = "service-7"
+				})
+			}),
+		},
+		services: []*core.Service{
+			buildService(func(s *core.Service) {
+				s.Name = "service-1"
+				s.Spec.Ports[0].Name = "port-1"
+				s.Spec.Ports = append(s.Spec.Ports, core.ServicePort{
+					Name: "port-2",
+					Port: 443,
+				})
+			}),
+			buildService(func(s *core.Service) {
+				s.Name = "service-2"
+				s.Spec.Ports[0].Name = "port-1"
+			}),
+			buildService(func(s *core.Service) {
+				s.Name = "service-3"
+				s.Spec.Ports[0].Name = "port-1"
+				s.Spec.Ports = append(s.Spec.Ports, core.ServicePort{
+					Name: "port-2",
+					Port: 443,
+				})
+			}),
+			buildService(func(s *core.Service) {
+				s.Name = "service-4"
+				s.Spec.Ports[0].Name = "port-1"
+			}),
+			buildService(func(s *core.Service) {
+				s.Name = "service-5"
+				s.Spec.Ports[0].Name = "port-1"
+			}),
+			buildService(func(s *core.Service) {
+				s.Name = "service-6"
+				s.Spec.Ports[0].Name = "port-1"
+			}),
+			buildService(func(s *core.Service) {
+				s.Name = "service-7"
+				s.Spec.Ports[0].Name = "port-1"
+			}),
+		},
+	}
+	for _, opt := range opts {
+		opt(&tc)
+	}
+	return tc
 }
 
 func buildGatewayClass(f ...func(*gwapiv1.GatewayClass)) *gwapiv1.GatewayClass {
@@ -596,13 +562,168 @@ func httpRouteRulesFromHTTPRouteFunc(httpRoute HTTPRoute, _ int) []HTTPRouteRule
 	})
 }
 
-func ServicePortsFromBackendFunc(service Service, _ int) []ServicePort {
+func servicePortsFromBackendFunc(service Service, _ int) []ServicePort {
 	return lo.Map(service.Spec.Ports, func(port core.ServicePort, _ int) ServicePort {
 		return ServicePort{
 			ServicePort: &port,
 			service:     &service,
 		}
 	})
+}
+
+func linkGatewayClassToGatewayFunc(gatewayClasses []GatewayClass) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"},
+		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
+		Func: func(child Targetable) []Targetable {
+			gateway := child.(Gateway)
+			gatewayClass, ok := lo.Find(gatewayClasses, func(gc GatewayClass) bool {
+				return gc.Name == string(gateway.Spec.GatewayClassName)
+			})
+			if ok {
+				return []Targetable{gatewayClass}
+			}
+			return nil
+		},
+	}
+}
+
+func linkGatewayToHTTPRouteFunc(gateways []Gateway) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
+		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
+		Func: func(child Targetable) []Targetable {
+			httpRoute := child.(HTTPRoute)
+			return lo.FilterMap(httpRoute.Spec.ParentRefs, func(parentRef gwapiv1.ParentReference, _ int) (Targetable, bool) {
+				parentRefGroup := ptr.Deref(parentRef.Group, gwapiv1.Group(gwapiv1.GroupName))
+				parentRefKind := ptr.Deref(parentRef.Kind, gwapiv1.Kind("Gateway"))
+				if parentRefGroup != gwapiv1.GroupName || parentRefKind != "Gateway" {
+					return nil, false
+				}
+				gatewayNamespace := string(ptr.Deref(parentRef.Namespace, gwapiv1.Namespace(httpRoute.Namespace)))
+				return lo.Find(gateways, func(g Gateway) bool {
+					return g.Namespace == gatewayNamespace && g.Name == string(parentRef.Name)
+				})
+			})
+		},
+	}
+}
+
+func linkGatewayToListenerFunc() LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
+		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
+		Func: func(child Targetable) []Targetable {
+			listener := child.(Listener)
+			return []Targetable{listener.gateway}
+		},
+	}
+}
+
+func linkListenerToHTTPRouteFunc(gateways []Gateway, listeners []Listener) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
+		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
+		Func: func(child Targetable) []Targetable {
+			httpRoute := child.(HTTPRoute)
+			return lo.FlatMap(httpRoute.Spec.ParentRefs, func(parentRef gwapiv1.ParentReference, _ int) []Targetable {
+				parentRefGroup := ptr.Deref(parentRef.Group, gwapiv1.Group(gwapiv1.GroupName))
+				parentRefKind := ptr.Deref(parentRef.Kind, gwapiv1.Kind("Gateway"))
+				if parentRefGroup != gwapiv1.GroupName || parentRefKind != "Gateway" {
+					return nil
+				}
+				gatewayNamespace := string(ptr.Deref(parentRef.Namespace, gwapiv1.Namespace(httpRoute.Namespace)))
+				gateway, ok := lo.Find(gateways, func(g Gateway) bool {
+					return g.Namespace == gatewayNamespace && g.Name == string(parentRef.Name)
+				})
+				if !ok {
+					return nil
+				}
+				if parentRef.SectionName != nil {
+					listener, ok := lo.Find(listeners, func(l Listener) bool {
+						return l.gateway.GetURL() == gateway.GetURL() && l.Name == *parentRef.SectionName
+					})
+					if !ok {
+						return nil
+					}
+					return []Targetable{listener}
+				}
+				return lo.FilterMap(listeners, func(l Listener, _ int) (Targetable, bool) {
+					return l, l.gateway.GetURL() == gateway.GetURL()
+				})
+			})
+		},
+	}
+}
+
+func linkHTTPRouteToServiceFunc(httpRoutes []HTTPRoute) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
+		To:   schema.GroupKind{Kind: "Service"},
+		Func: func(child Targetable) []Targetable {
+			service := child.(Service)
+			return lo.FilterMap(httpRoutes, func(httpRoute HTTPRoute, _ int) (Targetable, bool) {
+				return httpRoute, lo.ContainsBy(httpRoute.Spec.Rules, func(rule gwapiv1.HTTPRouteRule) bool {
+					backendRefs := lo.Map(rule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) gwapiv1.BackendRef { return backendRef.BackendRef })
+					return lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(service, httpRoute.Namespace))
+				})
+			})
+		},
+	}
+}
+
+func linkHTTPRouteToHTTPRouteRuleFunc() LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
+		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
+		Func: func(child Targetable) []Targetable {
+			httpRouteRule := child.(HTTPRouteRule)
+			return []Targetable{httpRouteRule.httpRoute}
+		},
+	}
+}
+
+func linkHTTPRouteRuleToServiceFunc(httpRouteRules []HTTPRouteRule) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
+		To:   schema.GroupKind{Kind: "Service"},
+		Func: func(child Targetable) []Targetable {
+			service := child.(Service)
+			return lo.FilterMap(httpRouteRules, func(httpRouteRule HTTPRouteRule, _ int) (Targetable, bool) {
+				backendRefs := lo.FilterMap(httpRouteRule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) (gwapiv1.BackendRef, bool) {
+					return backendRef.BackendRef, backendRef.Port == nil
+				})
+				return httpRouteRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(service, httpRouteRule.httpRoute.Namespace))
+			})
+		},
+	}
+}
+
+func linkHTTPRouteRuleToServicePortFunc(httpRouteRules []HTTPRouteRule) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
+		To:   schema.GroupKind{Kind: "ServicePort"},
+		Func: func(child Targetable) []Targetable {
+			servicePort := child.(ServicePort)
+			return lo.FilterMap(httpRouteRules, func(httpRouteRule HTTPRouteRule, _ int) (Targetable, bool) {
+				backendRefs := lo.FilterMap(httpRouteRule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) (gwapiv1.BackendRef, bool) {
+					return backendRef.BackendRef, backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
+				})
+				return httpRouteRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(*servicePort.service, httpRouteRule.httpRoute.Namespace))
+			})
+		},
+	}
+}
+
+func linkServiceToServicePortFunc() LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Kind: "Service"},
+		To:   schema.GroupKind{Kind: "ServicePort"},
+		Func: func(child Targetable) []Targetable {
+			servicePort := child.(ServicePort)
+			return []Targetable{servicePort.service}
+		},
+	}
 }
 
 func backendRefContainsServiceFunc(service Service, defaultNamespace string) func(backendRef gwapiv1.BackendRef) bool {
