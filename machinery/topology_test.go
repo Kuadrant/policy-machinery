@@ -81,7 +81,6 @@ func TestGatewayAPITopology(t *testing.T) {
 			services:       []*core.Service{buildService()},
 			policies:       []Policy{buildPolicy()},
 		},
-		complexTopologyTestCase(),
 		{
 			name: "policies with section names",
 			gateways: []*gwapiv1.Gateway{buildGateway(func(gateway *gwapiv1.Gateway) {
@@ -117,6 +116,7 @@ func TestGatewayAPITopology(t *testing.T) {
 				}),
 			},
 		},
+		complexTopologyTestCase(),
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
