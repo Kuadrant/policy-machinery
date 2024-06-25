@@ -108,14 +108,14 @@ func (t LocalPolicyTargetReferenceWithSectionName) GetURL() string {
 }
 
 func (t LocalPolicyTargetReferenceWithSectionName) GetNamespace() string {
-	return t.PolicyNamespace
+	return namespacedName(t.PolicyNamespace, string(t.LocalPolicyTargetReference.Name))
 }
 
 func (t LocalPolicyTargetReferenceWithSectionName) GetName() string {
 	if t.SectionName == nil {
-		return string(t.LocalPolicyTargetReference.Name)
+		return ""
 	}
-	return namespacedName(string(t.LocalPolicyTargetReference.Name), string(*t.SectionName))
+	return string(*t.SectionName)
 }
 
 // MergeStrategy is a function that merges two Policy objects into a new Policy object.
