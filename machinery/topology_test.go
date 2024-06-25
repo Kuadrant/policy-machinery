@@ -77,6 +77,41 @@ func TestGatewayAPITopology(t *testing.T) {
 			policies:       []Policy{buildPolicy()},
 		},
 		complexTopologyTestCase(),
+		{
+			name: "policies with section names",
+			gateways: []*gwapiv1.Gateway{buildGateway(func(gateway *gwapiv1.Gateway) {
+				gateway.Spec.Listeners[0].Name = "http"
+				gateway.Spec.Listeners = append(gateway.Spec.Listeners, gwapiv1.Listener{
+					Name:     "https",
+					Port:     443,
+					Protocol: "HTTPS",
+				})
+			})},
+			policies: []Policy{
+				buildPolicy(func(policy *TestPolicy) {
+					policy.Name = "my-policy-1"
+					policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+							Group: gwapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  "my-gateway",
+						},
+						SectionName: ptr.To(gwapiv1.SectionName("http")),
+					}
+				}),
+				buildPolicy(func(policy *TestPolicy) {
+					policy.Name = "my-policy-2"
+					policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+							Group: gwapiv1.GroupName,
+							Kind:  "Gateway",
+							Name:  "my-gateway",
+						},
+						SectionName: ptr.To(gwapiv1.SectionName("https")),
+					}
+				}),
+			},
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
