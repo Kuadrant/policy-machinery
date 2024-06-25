@@ -3,7 +3,10 @@
 package machinery
 
 import (
+	"bytes"
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/samber/lo"
@@ -14,6 +17,8 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
+
+const outDir = "../tests/out"
 
 type TestPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -145,7 +150,7 @@ func TestGatewayAPITopology(t *testing.T) {
 				WithPolicies(tc.policies...),
 			)
 
-			fmt.Println(topology.ToDot())
+			saveTestCaseOutput(t, topology.ToDot())
 		})
 	}
 }
@@ -189,7 +194,7 @@ func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
 				WithPolicies(tc.policies...),
 			)
 
-			fmt.Println(topology.ToDot())
+			saveTestCaseOutput(t, topology.ToDot())
 		})
 	}
 }
@@ -772,4 +777,17 @@ func backendRefEqualToService(backendRef gwapiv1.BackendRef, service Service, de
 	backendRefKind := string(ptr.Deref(backendRef.Kind, gwapiv1.Kind("Service")))
 	backendRefNamespace := string(ptr.Deref(backendRef.Namespace, gwapiv1.Namespace(defaultNamespace)))
 	return backendRefGroup == service.GroupVersionKind().Group && backendRefKind == service.GroupVersionKind().Kind && backendRefNamespace == service.Namespace && string(backendRef.Name) == service.Name
+}
+
+// saveTestCaseOutput saves the output of a test case to a file in the output directory.
+func saveTestCaseOutput(t *testing.T, out *bytes.Buffer) {
+	file, err := os.Create(fmt.Sprintf("%s/%s.dot", outDir, strings.ReplaceAll(t.Name(), "/", "__")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	_, err = file.Write(out.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
 }

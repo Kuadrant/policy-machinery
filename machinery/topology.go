@@ -83,11 +83,11 @@ func (t *Topology) Policies(filters ...FilterFunc) []Policy {
 	})
 }
 
-func (t *Topology) ToDot() string {
+func (t *Topology) ToDot() *bytes.Buffer {
 	gz := graphviz.New()
 	var buf bytes.Buffer
 	gz.Render(t.graph, "dot", &buf)
-	return buf.String()
+	return &buf
 }
 
 // NewTopology returns a network of targetable resources and attached policies.
