@@ -249,36 +249,35 @@ func TestTopologyPaths(t *testing.T) {
 	}
 }
 
-type gwapiTopologyTestCase struct {
-	name           string
-	gatewayClasses []*gwapiv1.GatewayClass
-	gateways       []*gwapiv1.Gateway
-	httpRoutes     []*gwapiv1.HTTPRoute
-	services       []*core.Service
-	policies       []Policy
-	expectedLinks  map[string][]string
-}
-
 // TestGatewayAPITopology tests for a topology of Gateway API resources with the following architecture:
 //
 //	GatewayClass -> Gateway -> Listener -> HTTPRoute -> HTTPRouteRule -> Service -> ServicePort
 //	                                                                  ∟> ServicePort <- Service
 func TestGatewayAPITopology(t *testing.T) {
-	testCases := []gwapiTopologyTestCase{
+	testCases := []struct {
+		name          string
+		targetables   gwapiTargetables
+		policies      []Policy
+		expectedLinks map[string][]string
+	}{
 		{
 			name: "empty",
 		},
 		{
-			name:           "single node",
-			gatewayClasses: []*gwapiv1.GatewayClass{buildGatewayClass()},
+			name: "single node",
+			targetables: gwapiTargetables{
+				gatewayClasses: []*gwapiv1.GatewayClass{buildGatewayClass()},
+			},
 		},
 		{
-			name:           "one of each kind",
-			gatewayClasses: []*gwapiv1.GatewayClass{buildGatewayClass()},
-			gateways:       []*gwapiv1.Gateway{buildGateway()},
-			httpRoutes:     []*gwapiv1.HTTPRoute{buildHTTPRoute()},
-			services:       []*core.Service{buildService()},
-			policies:       []Policy{buildPolicy()},
+			name: "one of each kind",
+			targetables: gwapiTargetables{
+				gatewayClasses: []*gwapiv1.GatewayClass{buildGatewayClass()},
+				gateways:       []*gwapiv1.Gateway{buildGateway()},
+				httpRoutes:     []*gwapiv1.HTTPRoute{buildHTTPRoute()},
+				services:       []*core.Service{buildService()},
+			},
+			policies: []Policy{buildPolicy()},
 			expectedLinks: map[string][]string{
 				"my-gateway-class":       {"my-gateway"},
 				"my-gateway":             {"my-gateway#my-listener"},
@@ -290,14 +289,16 @@ func TestGatewayAPITopology(t *testing.T) {
 		},
 		{
 			name: "policies with section names",
-			gateways: []*gwapiv1.Gateway{buildGateway(func(gateway *gwapiv1.Gateway) {
-				gateway.Spec.Listeners[0].Name = "http"
-				gateway.Spec.Listeners = append(gateway.Spec.Listeners, gwapiv1.Listener{
-					Name:     "https",
-					Port:     443,
-					Protocol: "HTTPS",
-				})
-			})},
+			targetables: gwapiTargetables{
+				gateways: []*gwapiv1.Gateway{buildGateway(func(gateway *gwapiv1.Gateway) {
+					gateway.Spec.Listeners[0].Name = "http"
+					gateway.Spec.Listeners = append(gateway.Spec.Listeners, gwapiv1.Listener{
+						Name:     "https",
+						Port:     443,
+						Protocol: "HTTPS",
+					})
+				})},
+			},
 			policies: []Policy{
 				buildPolicy(func(policy *TestPolicy) {
 					policy.Name = "my-policy-1"
@@ -326,8 +327,10 @@ func TestGatewayAPITopology(t *testing.T) {
 				"my-gateway": {"my-gateway#http", "my-gateway#https"},
 			},
 		},
-		complexTopologyTestCase(func(tc *gwapiTopologyTestCase) {
-			tc.expectedLinks = map[string][]string{
+		{
+			name:        "complex topology",
+			targetables: complexGatewayAPITopology(),
+			expectedLinks: map[string][]string{
 				"gatewayclass-1":       {"gateway-1", "gateway-2", "gateway-3"},
 				"gatewayclass-2":       {"gateway-4", "gateway-5"},
 				"gateway-1":            {"gateway-1#listener-1", "gateway-1#listener-2"},
@@ -368,19 +371,19 @@ func TestGatewayAPITopology(t *testing.T) {
 				"service-5":            {"service-5#port-1"},
 				"service-6":            {"service-6#port-1"},
 				"service-7":            {"service-7#port-1"},
-			}
-		}),
+			},
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			gatewayClasses := lo.Map(tc.gatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) GatewayClass {
+			gatewayClasses := lo.Map(tc.targetables.gatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) GatewayClass {
 				return GatewayClass{GatewayClass: gatewayClass}
 			})
-			gateways := lo.Map(tc.gateways, func(gateway *gwapiv1.Gateway, _ int) Gateway { return Gateway{Gateway: gateway} })
+			gateways := lo.Map(tc.targetables.gateways, func(gateway *gwapiv1.Gateway, _ int) Gateway { return Gateway{Gateway: gateway} })
 			listeners := lo.FlatMap(gateways, listenersFromGatewayFunc)
-			httpRoutes := lo.Map(tc.httpRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) HTTPRoute { return HTTPRoute{HTTPRoute: httpRoute} })
+			httpRoutes := lo.Map(tc.targetables.httpRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) HTTPRoute { return HTTPRoute{HTTPRoute: httpRoute} })
 			httpRouteRules := lo.FlatMap(httpRoutes, httpRouteRulesFromHTTPRouteFunc)
-			services := lo.Map(tc.services, func(service *core.Service, _ int) Service { return Service{Service: service} })
+			services := lo.Map(tc.targetables.services, func(service *core.Service, _ int) Service { return Service{Service: service} })
 			servicePorts := lo.FlatMap(services, servicePortsFromBackendFunc)
 
 			topology := NewTopology(
@@ -427,22 +430,31 @@ func TestGatewayAPITopology(t *testing.T) {
 //
 //	GatewayClass -> Gateway -> HTTPRoute -> Service
 func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
-	testCases := []gwapiTopologyTestCase{
+	testCases := []struct {
+		name          string
+		targetables   gwapiTargetables
+		policies      []Policy
+		expectedLinks map[string][]string
+	}{
 		{
-			name:           "one of each kind",
-			gatewayClasses: []*gwapiv1.GatewayClass{buildGatewayClass()},
-			gateways:       []*gwapiv1.Gateway{buildGateway()},
-			httpRoutes:     []*gwapiv1.HTTPRoute{buildHTTPRoute()},
-			services:       []*core.Service{buildService()},
-			policies:       []Policy{buildPolicy()},
+			name: "one of each kind",
+			targetables: gwapiTargetables{
+				gatewayClasses: []*gwapiv1.GatewayClass{buildGatewayClass()},
+				gateways:       []*gwapiv1.Gateway{buildGateway()},
+				httpRoutes:     []*gwapiv1.HTTPRoute{buildHTTPRoute()},
+				services:       []*core.Service{buildService()},
+			},
+			policies: []Policy{buildPolicy()},
 			expectedLinks: map[string][]string{
 				"my-gateway-class": {"my-gateway"},
 				"my-gateway":       {"my-http-route"},
 				"my-http-route":    {"my-service"},
 			},
 		},
-		complexTopologyTestCase(func(tc *gwapiTopologyTestCase) {
-			tc.expectedLinks = map[string][]string{
+		{
+			name:        "complex topology",
+			targetables: complexGatewayAPITopology(),
+			expectedLinks: map[string][]string{
 				"gatewayclass-1": {"gateway-1", "gateway-2", "gateway-3"},
 				"gatewayclass-2": {"gateway-4", "gateway-5"},
 				"gateway-1":      {"route-1", "route-2"},
@@ -457,17 +469,17 @@ func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
 				"route-5":        {"service-5"},
 				"route-6":        {"service-5", "service-6"},
 				"route-7":        {"service-7"},
-			}
-		}),
+			},
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			gatewayClasses := lo.Map(tc.gatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) GatewayClass {
+			gatewayClasses := lo.Map(tc.targetables.gatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) GatewayClass {
 				return GatewayClass{GatewayClass: gatewayClass}
 			})
-			gateways := lo.Map(tc.gateways, func(gateway *gwapiv1.Gateway, _ int) Gateway { return Gateway{Gateway: gateway} })
-			httpRoutes := lo.Map(tc.httpRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) HTTPRoute { return HTTPRoute{HTTPRoute: httpRoute} })
-			services := lo.Map(tc.services, func(service *core.Service, _ int) Service { return Service{Service: service} })
+			gateways := lo.Map(tc.targetables.gateways, func(gateway *gwapiv1.Gateway, _ int) Gateway { return Gateway{Gateway: gateway} })
+			httpRoutes := lo.Map(tc.targetables.httpRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) HTTPRoute { return HTTPRoute{HTTPRoute: httpRoute} })
+			services := lo.Map(tc.targetables.services, func(service *core.Service, _ int) Service { return Service{Service: service} })
 
 			topology := NewTopology(
 				WithTargetables(gatewayClasses...),
@@ -500,7 +512,14 @@ func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
 	}
 }
 
-// complexTopologyTestCase returns a gwapiTopologyTestCase for the following complex network of Gateway API resources:
+type gwapiTargetables struct {
+	gatewayClasses []*gwapiv1.GatewayClass
+	gateways       []*gwapiv1.Gateway
+	httpRoutes     []*gwapiv1.HTTPRoute
+	services       []*core.Service
+}
+
+// complexGatewayAPITopology returns a gwapiTopologyTestCase for the following complex network of Gateway API resources:
 //
 //	                                            ┌────────────────┐                                                                        ┌────────────────┐
 //	                                            │ gatewayclass-1 │                                                                        │ gatewayclass-2 │
@@ -540,9 +559,8 @@ func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
 //	│                       │ │            │          │                       │  │            │             │            │        │            │           │            │
 //	│       service-1       │ │  service-2 │          │       service-3       │  │  service-4 │             │  service-5 │        │  service-6 │           │  service-7 │
 //	└───────────────────────┘ └────────────┘          └───────────────────────┘  └────────────┘             └────────────┘        └────────────┘           └────────────┘
-func complexTopologyTestCase(opts ...func(*gwapiTopologyTestCase)) gwapiTopologyTestCase {
-	tc := gwapiTopologyTestCase{
-		name: "complex topology",
+func complexGatewayAPITopology(funcs ...func(*gwapiTargetables)) gwapiTargetables {
+	t := gwapiTargetables{
 		gatewayClasses: []*gwapiv1.GatewayClass{
 			buildGatewayClass(func(gc *gwapiv1.GatewayClass) { gc.Name = "gatewayclass-1" }),
 			buildGatewayClass(func(gc *gwapiv1.GatewayClass) { gc.Name = "gatewayclass-2" }),
@@ -735,10 +753,10 @@ func complexTopologyTestCase(opts ...func(*gwapiTopologyTestCase)) gwapiTopology
 			}),
 		},
 	}
-	for _, opt := range opts {
-		opt(&tc)
+	for _, f := range funcs {
+		f(&t)
 	}
-	return tc
+	return t
 }
 
 func buildGatewayClass(f ...func(*gwapiv1.GatewayClass)) *gwapiv1.GatewayClass {
