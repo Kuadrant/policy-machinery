@@ -52,6 +52,203 @@ type TestPolicySpec struct {
 	TargetRef gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 }
 
+func TestTopologyRoots(t *testing.T) {
+	gateways := []Gateway{
+		{Gateway: buildGateway()},
+		{Gateway: buildGateway(func(g *gwapiv1.Gateway) { g.Name = "my-gateway-2" })},
+	}
+	httpRoute := HTTPRoute{HTTPRoute: buildHTTPRoute()}
+	httpRouteRules := httpRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+	topology := NewTopology(
+		WithTargetables(gateways...),
+		WithTargetables(httpRoute),
+		WithTargetables(httpRouteRules...),
+		WithLinks(
+			linkGatewayToHTTPRouteFunc(gateways),
+			linkHTTPRouteToHTTPRouteRuleFunc(),
+		),
+		WithPolicies(
+			buildPolicy(func(policy *TestPolicy) {
+				policy.Name = "my-policy-1"
+				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  "my-http-route",
+					},
+				}
+			}),
+			buildPolicy(func(policy *TestPolicy) {
+				policy.Name = "my-policy-2"
+				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  "Gateway",
+						Name:  "my-gateway-2",
+					},
+				}
+			}),
+		),
+	)
+	roots := topology.Roots()
+	if expected := len(gateways); len(roots) != expected {
+		t.Errorf("expected %d roots, got %d", expected, len(roots))
+	}
+	rootURLs := lo.Map(roots, mapTargetableToURLFunc)
+	for _, gateway := range gateways {
+		if !lo.Contains(rootURLs, gateway.GetURL()) {
+			t.Errorf("expected root %s not found", gateway.GetURL())
+		}
+	}
+}
+
+func TestTopologyParents(t *testing.T) {
+	gateways := []Gateway{{Gateway: buildGateway()}}
+	httpRoute := HTTPRoute{HTTPRoute: buildHTTPRoute()}
+	httpRouteRules := httpRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+	topology := NewTopology(
+		WithTargetables(gateways...),
+		WithTargetables(httpRoute),
+		WithTargetables(httpRouteRules...),
+		WithLinks(
+			linkGatewayToHTTPRouteFunc(gateways),
+			linkHTTPRouteToHTTPRouteRuleFunc(),
+		),
+		WithPolicies(
+			buildPolicy(func(policy *TestPolicy) {
+				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  "my-http-route",
+					},
+				}
+			}),
+		),
+	)
+	parents := topology.Parents(httpRoute)
+	if expected := 1; len(parents) != expected {
+		t.Errorf("expected %d parent, got %d", expected, len(parents))
+	}
+	parentURLs := lo.Map(parents, mapTargetableToURLFunc)
+	for _, gateway := range gateways {
+		if !lo.Contains(parentURLs, gateway.GetURL()) {
+			t.Errorf("expected parent %s not found", gateway.GetURL())
+		}
+	}
+}
+
+func TestTopologyChildren(t *testing.T) {
+	gateways := []Gateway{{Gateway: buildGateway()}}
+	httpRoute := HTTPRoute{HTTPRoute: buildHTTPRoute()}
+	httpRouteRules := httpRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+	topology := NewTopology(
+		WithTargetables(gateways...),
+		WithTargetables(httpRoute),
+		WithTargetables(httpRouteRules...),
+		WithLinks(
+			linkGatewayToHTTPRouteFunc(gateways),
+			linkHTTPRouteToHTTPRouteRuleFunc(),
+		),
+		WithPolicies(
+			buildPolicy(func(policy *TestPolicy) {
+				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  "my-http-route",
+					},
+				}
+			}),
+		),
+	)
+	children := topology.Children(httpRoute)
+	if expected := 1; len(children) != expected {
+		t.Errorf("expected %d child, got %d", expected, len(children))
+	}
+	childURLs := lo.Map(children, mapTargetableToURLFunc)
+	for _, httpRouteRule := range httpRouteRules {
+		if !lo.Contains(childURLs, httpRouteRule.GetURL()) {
+			t.Errorf("expected child %s not found", httpRouteRule.GetURL())
+		}
+	}
+}
+
+func TestTopologyPaths(t *testing.T) {
+	gateways := []Gateway{{Gateway: buildGateway()}}
+	httpRoutes := []HTTPRoute{
+		{HTTPRoute: buildHTTPRoute(func(r *gwapiv1.HTTPRoute) { r.Name = "route-1" })},
+		{HTTPRoute: buildHTTPRoute(func(r *gwapiv1.HTTPRoute) { r.Name = "route-2" })},
+	}
+	services := []Service{{Service: buildService()}}
+	topology := NewTopology(
+		WithTargetables(gateways...),
+		WithTargetables(httpRoutes...),
+		WithTargetables(services...),
+		WithLinks(
+			linkGatewayToHTTPRouteFunc(gateways),
+			linkHTTPRouteToServiceFunc(httpRoutes),
+		),
+	)
+
+	testCases := []struct {
+		name          string
+		from          Targetable
+		to            Targetable
+		expectedPaths [][]Targetable
+	}{
+		{
+			name: "single path",
+			from: httpRoutes[0],
+			to:   services[0],
+			expectedPaths: [][]Targetable{
+				{httpRoutes[0], services[0]},
+			},
+		},
+		{
+			name: "multiple paths",
+			from: gateways[0],
+			to:   services[0],
+			expectedPaths: [][]Targetable{
+				{gateways[0], httpRoutes[0], services[0]},
+				{gateways[0], httpRoutes[1], services[0]},
+			},
+		},
+		{
+			name: "trivial path",
+			from: gateways[0],
+			to:   gateways[0],
+			expectedPaths: [][]Targetable{
+				{gateways[0]},
+			},
+		},
+		{
+			name:          "no path",
+			from:          services[0],
+			to:            gateways[0],
+			expectedPaths: [][]Targetable{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			paths := topology.Paths(tc.from, tc.to)
+			if len(paths) != len(tc.expectedPaths) {
+				t.Errorf("expected %d paths, got %d", len(tc.expectedPaths), len(paths))
+			}
+			expectedPaths := lo.Map(tc.expectedPaths, func(expectedPath []Targetable, _ int) string {
+				return strings.Join(lo.Map(expectedPath, mapTargetableToURLFunc), "→")
+			})
+			for _, path := range paths {
+				pathString := strings.Join(lo.Map(path, mapTargetableToURLFunc), "→")
+				if !lo.Contains(expectedPaths, pathString) {
+					t.Errorf("expected path %v not found", pathString)
+				}
+			}
+		})
+	}
+}
+
 type gwapiTopologyTestCase struct {
 	name           string
 	gatewayClasses []*gwapiv1.GatewayClass
@@ -300,128 +497,6 @@ func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
 
 			saveTestCaseOutput(t, topology.ToDot())
 		})
-	}
-}
-
-func TestTopologyRoots(t *testing.T) {
-	gateways := []Gateway{
-		Gateway{Gateway: buildGateway()},
-		Gateway{Gateway: buildGateway(func(g *gwapiv1.Gateway) { g.Name = "my-gateway-2" })},
-	}
-	httpRoute := HTTPRoute{HTTPRoute: buildHTTPRoute()}
-	httpRouteRules := httpRouteRulesFromHTTPRouteFunc(httpRoute, 0)
-	topology := NewTopology(
-		WithTargetables(gateways...),
-		WithTargetables(httpRoute),
-		WithTargetables(httpRouteRules...),
-		WithLinks(
-			linkGatewayToHTTPRouteFunc(gateways),
-			linkHTTPRouteToHTTPRouteRuleFunc(),
-		),
-		WithPolicies(
-			buildPolicy(func(policy *TestPolicy) {
-				policy.Name = "my-policy-1"
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-						Group: gwapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  "my-http-route",
-					},
-				}
-			}),
-			buildPolicy(func(policy *TestPolicy) {
-				policy.Name = "my-policy-2"
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-						Group: gwapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  "my-gateway-2",
-					},
-				}
-			}),
-		),
-	)
-	roots := topology.Roots()
-	if expected := len(gateways); len(roots) != expected {
-		t.Errorf("expected %d roots, got %d", expected, len(roots))
-	}
-	rootURLs := lo.Map(roots, mapTargetableToURLFunc)
-	for _, gateway := range gateways {
-		if !lo.Contains(rootURLs, gateway.GetURL()) {
-			t.Errorf("expected root %s not found", gateway.GetURL())
-		}
-	}
-}
-
-func TestTopologyParents(t *testing.T) {
-	gateways := []Gateway{Gateway{Gateway: buildGateway()}}
-	httpRoute := HTTPRoute{HTTPRoute: buildHTTPRoute()}
-	httpRouteRules := httpRouteRulesFromHTTPRouteFunc(httpRoute, 0)
-	topology := NewTopology(
-		WithTargetables(gateways...),
-		WithTargetables(httpRoute),
-		WithTargetables(httpRouteRules...),
-		WithLinks(
-			linkGatewayToHTTPRouteFunc(gateways),
-			linkHTTPRouteToHTTPRouteRuleFunc(),
-		),
-		WithPolicies(
-			buildPolicy(func(policy *TestPolicy) {
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-						Group: gwapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  "my-http-route",
-					},
-				}
-			}),
-		),
-	)
-	parents := topology.Parents(httpRoute)
-	if expected := 1; len(parents) != expected {
-		t.Errorf("expected %d parent, got %d", expected, len(parents))
-	}
-	parentURLs := lo.Map(parents, mapTargetableToURLFunc)
-	for _, gateway := range gateways {
-		if !lo.Contains(parentURLs, gateway.GetURL()) {
-			t.Errorf("expected parent %s not found", gateway.GetURL())
-		}
-	}
-}
-
-func TestTopologyChildren(t *testing.T) {
-	gateways := []Gateway{Gateway{Gateway: buildGateway()}}
-	httpRoute := HTTPRoute{HTTPRoute: buildHTTPRoute()}
-	httpRouteRules := httpRouteRulesFromHTTPRouteFunc(httpRoute, 0)
-	topology := NewTopology(
-		WithTargetables(gateways...),
-		WithTargetables(httpRoute),
-		WithTargetables(httpRouteRules...),
-		WithLinks(
-			linkGatewayToHTTPRouteFunc(gateways),
-			linkHTTPRouteToHTTPRouteRuleFunc(),
-		),
-		WithPolicies(
-			buildPolicy(func(policy *TestPolicy) {
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-						Group: gwapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  "my-http-route",
-					},
-				}
-			}),
-		),
-	)
-	children := topology.Children(httpRoute)
-	if expected := 1; len(children) != expected {
-		t.Errorf("expected %d child, got %d", expected, len(children))
-	}
-	childURLs := lo.Map(children, mapTargetableToURLFunc)
-	for _, httpRouteRule := range httpRouteRules {
-		if !lo.Contains(childURLs, httpRouteRule.GetURL()) {
-			t.Errorf("expected child %s not found", httpRouteRule.GetURL())
-		}
 	}
 }
 
