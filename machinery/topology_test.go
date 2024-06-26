@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -51,13 +52,14 @@ type TestPolicySpec struct {
 	TargetRef gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 }
 
-type topologyTestCase struct {
+type gwapiTopologyTestCase struct {
 	name           string
 	gatewayClasses []*gwapiv1.GatewayClass
 	gateways       []*gwapiv1.Gateway
 	httpRoutes     []*gwapiv1.HTTPRoute
 	services       []*core.Service
 	policies       []Policy
+	expectedLinks  map[string][]string
 }
 
 // TestGatewayAPITopology tests for a topology of Gateway API resources with the following architecture:
@@ -65,7 +67,7 @@ type topologyTestCase struct {
 //	GatewayClass -> Gateway -> Listener -> HTTPRoute -> HTTPRouteRule -> Service -> ServicePort
 //	                                                                  ∟> ServicePort <- Service
 func TestGatewayAPITopology(t *testing.T) {
-	testCases := []topologyTestCase{
+	testCases := []gwapiTopologyTestCase{
 		{
 			name: "empty",
 		},
@@ -80,6 +82,14 @@ func TestGatewayAPITopology(t *testing.T) {
 			httpRoutes:     []*gwapiv1.HTTPRoute{buildHTTPRoute()},
 			services:       []*core.Service{buildService()},
 			policies:       []Policy{buildPolicy()},
+			expectedLinks: map[string][]string{
+				"my-gateway-class":       {"my-gateway"},
+				"my-gateway":             {"my-gateway#my-listener"},
+				"my-gateway#my-listener": {"my-http-route"},
+				"my-http-route":          {"my-http-route#rule-1"},
+				"my-http-route#rule-1":   {"my-service"},
+				"my-service":             {"my-service#http"},
+			},
 		},
 		{
 			name: "policies with section names",
@@ -115,8 +125,54 @@ func TestGatewayAPITopology(t *testing.T) {
 					}
 				}),
 			},
+			expectedLinks: map[string][]string{
+				"my-gateway": {"my-gateway#http", "my-gateway#https"},
+			},
 		},
-		complexTopologyTestCase(),
+		complexTopologyTestCase(func(tc *gwapiTopologyTestCase) {
+			tc.expectedLinks = map[string][]string{
+				"gatewayclass-1":       {"gateway-1", "gateway-2", "gateway-3"},
+				"gatewayclass-2":       {"gateway-4", "gateway-5"},
+				"gateway-1":            {"gateway-1#listener-1", "gateway-1#listener-2"},
+				"gateway-2":            {"gateway-2#listener-1"},
+				"gateway-3":            {"gateway-3#listener-1", "gateway-3#listener-2"},
+				"gateway-4":            {"gateway-4#listener-1", "gateway-4#listener-2"},
+				"gateway-5":            {"gateway-5#listener-1"},
+				"gateway-1#listener-1": {"route-1"},
+				"gateway-1#listener-2": {"route-1", "route-2"},
+				"gateway-2#listener-1": {"route-2", "route-3"},
+				"gateway-3#listener-1": {"route-4", "route-5"},
+				"gateway-3#listener-2": {"route-4", "route-5"},
+				"gateway-4#listener-1": {"route-5", "route-6"},
+				"gateway-4#listener-2": {"route-5", "route-6"},
+				"gateway-5#listener-1": {"route-7"},
+				"route-1":              {"route-1#rule-1", "route-1#rule-2"},
+				"route-2":              {"route-2#rule-1"},
+				"route-3":              {"route-3#rule-1"},
+				"route-4":              {"route-4#rule-1", "route-4#rule-2"},
+				"route-5":              {"route-5#rule-1", "route-5#rule-2"},
+				"route-6":              {"route-6#rule-1", "route-6#rule-2"},
+				"route-7":              {"route-7#rule-1"},
+				"route-1#rule-1":       {"service-1"},
+				"route-1#rule-2":       {"service-2"},
+				"route-2#rule-1":       {"service-3#port-1"},
+				"route-3#rule-1":       {"service-3#port-1"},
+				"route-4#rule-1":       {"service-3#port-2"},
+				"route-4#rule-2":       {"service-4#port-1"},
+				"route-5#rule-1":       {"service-5"},
+				"route-5#rule-2":       {"service-5"},
+				"route-6#rule-1":       {"service-5", "service-6"},
+				"route-6#rule-2":       {"service-6#port-1"},
+				"route-7#rule-1":       {"service-7"},
+				"service-1":            {"service-1#port-1", "service-1#port-2"},
+				"service-2":            {"service-2#port-1"},
+				"service-3":            {"service-3#port-1", "service-3#port-2"},
+				"service-4":            {"service-4#port-1"},
+				"service-5":            {"service-5#port-1"},
+				"service-6":            {"service-6#port-1"},
+				"service-7":            {"service-7#port-1"},
+			}
+		}),
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,6 +206,19 @@ func TestGatewayAPITopology(t *testing.T) {
 				WithPolicies(tc.policies...),
 			)
 
+			links := make(map[string][]string)
+			for _, root := range topology.Roots() {
+				linksFromNode(topology, root, links)
+			}
+			for from, tos := range links {
+				expectedTos := tc.expectedLinks[from]
+				slices.Sort(expectedTos)
+				slices.Sort(tos)
+				if !slices.Equal(expectedTos, tos) {
+					t.Errorf("expected links from %s to be %v, got %v", from, expectedTos, tos)
+				}
+			}
+
 			saveTestCaseOutput(t, topology.ToDot())
 		})
 	}
@@ -161,7 +230,7 @@ func TestGatewayAPITopology(t *testing.T) {
 //
 //	GatewayClass -> Gateway -> HTTPRoute -> Service
 func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
-	testCases := []topologyTestCase{
+	testCases := []gwapiTopologyTestCase{
 		{
 			name:           "one of each kind",
 			gatewayClasses: []*gwapiv1.GatewayClass{buildGatewayClass()},
@@ -169,8 +238,30 @@ func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
 			httpRoutes:     []*gwapiv1.HTTPRoute{buildHTTPRoute()},
 			services:       []*core.Service{buildService()},
 			policies:       []Policy{buildPolicy()},
+			expectedLinks: map[string][]string{
+				"my-gateway-class": {"my-gateway"},
+				"my-gateway":       {"my-http-route"},
+				"my-http-route":    {"my-service"},
+			},
 		},
-		complexTopologyTestCase(),
+		complexTopologyTestCase(func(tc *gwapiTopologyTestCase) {
+			tc.expectedLinks = map[string][]string{
+				"gatewayclass-1": {"gateway-1", "gateway-2", "gateway-3"},
+				"gatewayclass-2": {"gateway-4", "gateway-5"},
+				"gateway-1":      {"route-1", "route-2"},
+				"gateway-2":      {"route-2", "route-3"},
+				"gateway-3":      {"route-4", "route-5"},
+				"gateway-4":      {"route-5", "route-6"},
+				"gateway-5":      {"route-7"},
+				"route-1":        {"service-1", "service-2"},
+				"route-2":        {"service-3"},
+				"route-3":        {"service-3"},
+				"route-4":        {"service-3", "service-4"},
+				"route-5":        {"service-5"},
+				"route-6":        {"service-5", "service-6"},
+				"route-7":        {"service-7"},
+			}
+		}),
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -194,12 +285,147 @@ func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
 				WithPolicies(tc.policies...),
 			)
 
+			links := make(map[string][]string)
+			for _, root := range topology.Roots() {
+				linksFromNode(topology, root, links)
+			}
+			for from, tos := range links {
+				expectedTos := tc.expectedLinks[from]
+				slices.Sort(expectedTos)
+				slices.Sort(tos)
+				if !slices.Equal(expectedTos, tos) {
+					t.Errorf("expected links from %s to be %v, got %v", from, expectedTos, tos)
+				}
+			}
+
 			saveTestCaseOutput(t, topology.ToDot())
 		})
 	}
 }
 
-// complexTopologyTestCase returns a topologyTestCase for the following complex network of Gateway API resources:
+func TestTopologyRoots(t *testing.T) {
+	gateways := []Gateway{
+		Gateway{Gateway: buildGateway()},
+		Gateway{Gateway: buildGateway(func(g *gwapiv1.Gateway) { g.Name = "my-gateway-2" })},
+	}
+	httpRoute := HTTPRoute{HTTPRoute: buildHTTPRoute()}
+	httpRouteRules := httpRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+	topology := NewTopology(
+		WithTargetables(gateways...),
+		WithTargetables(httpRoute),
+		WithTargetables(httpRouteRules...),
+		WithLinks(
+			linkGatewayToHTTPRouteFunc(gateways),
+			linkHTTPRouteToHTTPRouteRuleFunc(),
+		),
+		WithPolicies(
+			buildPolicy(func(policy *TestPolicy) {
+				policy.Name = "my-policy-1"
+				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  "my-http-route",
+					},
+				}
+			}),
+			buildPolicy(func(policy *TestPolicy) {
+				policy.Name = "my-policy-2"
+				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  "Gateway",
+						Name:  "my-gateway-2",
+					},
+				}
+			}),
+		),
+	)
+	roots := topology.Roots()
+	if expected := len(gateways); len(roots) != expected {
+		t.Errorf("expected %d roots, got %d", expected, len(roots))
+	}
+	rootURLs := lo.Map(roots, mapTargetableToURLFunc)
+	for _, gateway := range gateways {
+		if !lo.Contains(rootURLs, gateway.GetURL()) {
+			t.Errorf("expected root %s not found", gateway.GetURL())
+		}
+	}
+}
+
+func TestTopologyParents(t *testing.T) {
+	gateways := []Gateway{Gateway{Gateway: buildGateway()}}
+	httpRoute := HTTPRoute{HTTPRoute: buildHTTPRoute()}
+	httpRouteRules := httpRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+	topology := NewTopology(
+		WithTargetables(gateways...),
+		WithTargetables(httpRoute),
+		WithTargetables(httpRouteRules...),
+		WithLinks(
+			linkGatewayToHTTPRouteFunc(gateways),
+			linkHTTPRouteToHTTPRouteRuleFunc(),
+		),
+		WithPolicies(
+			buildPolicy(func(policy *TestPolicy) {
+				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  "my-http-route",
+					},
+				}
+			}),
+		),
+	)
+	parents := topology.Parents(httpRoute)
+	if expected := 1; len(parents) != expected {
+		t.Errorf("expected %d parent, got %d", expected, len(parents))
+	}
+	parentURLs := lo.Map(parents, mapTargetableToURLFunc)
+	for _, gateway := range gateways {
+		if !lo.Contains(parentURLs, gateway.GetURL()) {
+			t.Errorf("expected parent %s not found", gateway.GetURL())
+		}
+	}
+}
+
+func TestTopologyChildren(t *testing.T) {
+	gateways := []Gateway{Gateway{Gateway: buildGateway()}}
+	httpRoute := HTTPRoute{HTTPRoute: buildHTTPRoute()}
+	httpRouteRules := httpRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+	topology := NewTopology(
+		WithTargetables(gateways...),
+		WithTargetables(httpRoute),
+		WithTargetables(httpRouteRules...),
+		WithLinks(
+			linkGatewayToHTTPRouteFunc(gateways),
+			linkHTTPRouteToHTTPRouteRuleFunc(),
+		),
+		WithPolicies(
+			buildPolicy(func(policy *TestPolicy) {
+				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  "HTTPRoute",
+						Name:  "my-http-route",
+					},
+				}
+			}),
+		),
+	)
+	children := topology.Children(httpRoute)
+	if expected := 1; len(children) != expected {
+		t.Errorf("expected %d child, got %d", expected, len(children))
+	}
+	childURLs := lo.Map(children, mapTargetableToURLFunc)
+	for _, httpRouteRule := range httpRouteRules {
+		if !lo.Contains(childURLs, httpRouteRule.GetURL()) {
+			t.Errorf("expected child %s not found", httpRouteRule.GetURL())
+		}
+	}
+}
+
+// complexTopologyTestCase returns a gwapiTopologyTestCase for the following complex network of Gateway API resources:
 //
 //	                                            ┌────────────────┐                                                                        ┌────────────────┐
 //	                                            │ gatewayclass-1 │                                                                        │ gatewayclass-2 │
@@ -239,8 +465,8 @@ func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
 //	│                       │ │            │          │                       │  │            │             │            │        │            │           │            │
 //	│       service-1       │ │  service-2 │          │       service-3       │  │  service-4 │             │  service-5 │        │  service-6 │           │  service-7 │
 //	└───────────────────────┘ └────────────┘          └───────────────────────┘  └────────────┘             └────────────┘        └────────────┘           └────────────┘
-func complexTopologyTestCase(opts ...func(*topologyTestCase)) topologyTestCase {
-	tc := topologyTestCase{
+func complexTopologyTestCase(opts ...func(*gwapiTopologyTestCase)) gwapiTopologyTestCase {
+	tc := gwapiTopologyTestCase{
 		name: "complex topology",
 		gatewayClasses: []*gwapiv1.GatewayClass{
 			buildGatewayClass(func(gc *gwapiv1.GatewayClass) { gc.Name = "gatewayclass-1" }),
@@ -343,6 +569,7 @@ func complexTopologyTestCase(opts ...func(*topologyTestCase)) topologyTestCase {
 					{ // rule-2
 						BackendRefs: []gwapiv1.HTTPBackendRef{buildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
 							backendRef.Name = "service-4"
+							backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
 						})},
 					},
 				}
@@ -583,6 +810,10 @@ func buildPolicy(f ...func(*TestPolicy)) *TestPolicy {
 	return p
 }
 
+func mapTargetableToURLFunc(t Targetable, _ int) string {
+	return t.GetURL()
+}
+
 func listenersFromGatewayFunc(gateway Gateway, _ int) []Listener {
 	return lo.Map(gateway.Spec.Listeners, func(listener gwapiv1.Listener, _ int) Listener {
 		return Listener{
@@ -777,6 +1008,17 @@ func backendRefEqualToService(backendRef gwapiv1.BackendRef, service Service, de
 	backendRefKind := string(ptr.Deref(backendRef.Kind, gwapiv1.Kind("Service")))
 	backendRefNamespace := string(ptr.Deref(backendRef.Namespace, gwapiv1.Namespace(defaultNamespace)))
 	return backendRefGroup == service.GroupVersionKind().Group && backendRefKind == service.GroupVersionKind().Kind && backendRefNamespace == service.Namespace && string(backendRef.Name) == service.Name
+}
+
+func linksFromNode(topology *Topology, node Targetable, edges map[string][]string) {
+	if _, ok := edges[node.GetName()]; ok {
+		return
+	}
+	children := topology.Children(node)
+	edges[node.GetName()] = lo.Map(children, func(child Targetable, _ int) string { return child.GetName() })
+	for _, child := range children {
+		linksFromNode(topology, child, edges)
+	}
 }
 
 // saveTestCaseOutput saves the output of a test case to a file in the output directory.

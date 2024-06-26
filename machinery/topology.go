@@ -58,6 +58,55 @@ type Topology struct {
 
 type FilterFunc func(Object) bool
 
+// Roots returns all targetables that have no parents in the topology.
+func (t *Topology) Roots() []Targetable {
+	return lo.Filter(lo.Values(t.targetables), func(targetable Targetable, _ int) bool {
+		return len(t.Parents(targetable)) == 0
+	})
+}
+
+// Parents returns all parents of a given targetable in the topology.
+func (t *Topology) Parents(targetable Targetable) []Targetable {
+	var parents []Targetable
+	n, err := t.graph.Node(string(targetable.GetURL()))
+	if err != nil {
+		return nil
+	}
+	edge := t.graph.FirstIn(n)
+	for {
+		if edge == nil {
+			break
+		}
+		_, ok := t.targetables[edge.Node().Name()]
+		if ok {
+			parents = append(parents, t.targetables[edge.Node().Name()])
+		}
+		edge = t.graph.NextIn(edge)
+	}
+	return parents
+}
+
+// Children returns all children of a given targetable in the topology.
+func (t *Topology) Children(targetable Targetable) []Targetable {
+	var children []Targetable
+	n, err := t.graph.Node(string(targetable.GetURL()))
+	if err != nil {
+		return nil
+	}
+	edge := t.graph.FirstOut(n)
+	for {
+		if edge == nil {
+			break
+		}
+		_, ok := t.targetables[edge.Node().Name()]
+		if ok {
+			children = append(children, t.targetables[edge.Node().Name()])
+		}
+		edge = t.graph.NextOut(edge)
+	}
+	return children
+}
+
 // Targetables returns all targetable nodes of a given kind in the topology.
 func (t *Topology) Targetables(filters ...FilterFunc) []Targetable {
 	return lo.Filter(lo.Values(t.targetables), func(targetable Targetable, _ int) bool {
