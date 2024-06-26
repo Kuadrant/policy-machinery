@@ -111,6 +111,32 @@ type Topology struct {
 
 type FilterFunc func(Object) bool
 
+// Targetables returns all targetable nodes of a given kind in the topology.
+func (t *Topology) Targetables(filters ...FilterFunc) []Targetable {
+	return lo.Filter(lo.Values(t.targetables), func(targetable Targetable, _ int) bool {
+		o := targetable.(Object)
+		for _, f := range filters {
+			if !f(o) {
+				return false
+			}
+		}
+		return true
+	})
+}
+
+// Policies returns all policies of a given kind in the topology.
+func (t *Topology) Policies(filters ...FilterFunc) []Policy {
+	return lo.Filter(lo.Values(t.policies), func(policy Policy, _ int) bool {
+		o := policy.(Object)
+		for _, f := range filters {
+			if !f(o) {
+				return false
+			}
+		}
+		return true
+	})
+}
+
 // Roots returns all targetables that have no parents in the topology.
 func (t *Topology) Roots() []Targetable {
 	return lo.Filter(lo.Values(t.targetables), func(targetable Targetable, _ int) bool {
@@ -171,32 +197,6 @@ func (t *Topology) Paths(from, to Targetable) [][]Targetable {
 	visited := make(map[string]bool)
 	t.dfs(from, to, path, &paths, visited)
 	return paths
-}
-
-// Targetables returns all targetable nodes of a given kind in the topology.
-func (t *Topology) Targetables(filters ...FilterFunc) []Targetable {
-	return lo.Filter(lo.Values(t.targetables), func(targetable Targetable, _ int) bool {
-		o := targetable.(Object)
-		for _, f := range filters {
-			if !f(o) {
-				return false
-			}
-		}
-		return true
-	})
-}
-
-// Policies returns all policies of a given kind in the topology.
-func (t *Topology) Policies(filters ...FilterFunc) []Policy {
-	return lo.Filter(lo.Values(t.policies), func(policy Policy, _ int) bool {
-		o := policy.(Object)
-		for _, f := range filters {
-			if !f(o) {
-				return false
-			}
-		}
-		return true
-	})
 }
 
 func (t *Topology) ToDot() *bytes.Buffer {
