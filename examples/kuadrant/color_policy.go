@@ -4,7 +4,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gwapi "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	machinery "github.com/guicassolato/policy-machinery/machinery"
+	"github.com/kuadrant/policy-machinery/machinery"
 )
 
 type ColorPolicy struct {

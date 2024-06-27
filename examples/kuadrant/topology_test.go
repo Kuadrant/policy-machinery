@@ -14,7 +14,7 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	machinery "github.com/guicassolato/policy-machinery/machinery"
+	"github.com/kuadrant/policy-machinery/machinery"
 )
 
 // TestMergeBasedOnTopology tests ColorPolicy's merge strategies for painting a house, based on network traffic

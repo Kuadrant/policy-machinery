@@ -1,4 +1,4 @@
-module github.com/guicassolato/policy-machinery
+module github.com/kuadrant/policy-machinery
 
 go 1.22.2
 

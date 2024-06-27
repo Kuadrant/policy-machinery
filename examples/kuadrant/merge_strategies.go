@@ -3,7 +3,7 @@ package kuadrant
 import (
 	"github.com/samber/lo"
 
-	machinery "github.com/guicassolato/policy-machinery/machinery"
+	"github.com/kuadrant/policy-machinery/machinery"
 )
 
 const (
