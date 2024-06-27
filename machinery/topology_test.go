@@ -217,7 +217,7 @@ func TestTopologyPaths(t *testing.T) {
 	}
 }
 
-// TestGatewayAPITopology tests for a topology of Gateway API resources with the following architecture:
+// TestGatewayAPITopology tests for a topology of Gateway API resources with the following scheme:
 //
 //	GatewayClass -> Gateway -> Listener -> HTTPRoute -> HTTPRouteRule -> Service -> ServicePort
 //	                                                                  ∟> ServicePort <- Service
@@ -394,7 +394,7 @@ func TestGatewayAPITopology(t *testing.T) {
 
 // TestGatewayAPITopologyWithoutSectionName tests for a simplified topology of Gateway API resources without
 // section names, i.e. where HTTPRoutes are not expanded to link to specific Listeners, and Policy TargetRefs
-// are not of LocalPolicyTargetReferenceWithSectionName kind. This results in the following architecture:
+// are not of LocalPolicyTargetReferenceWithSectionName kind. This results in the following scheme:
 //
 //	GatewayClass -> Gateway -> HTTPRoute -> Service
 func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
