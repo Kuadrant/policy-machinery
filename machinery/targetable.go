@@ -14,23 +14,27 @@ type Targetable interface {
 	Policies() []Policy
 }
 
+func MapTargetableToURLFunc(t Targetable, _ int) string {
+	return t.GetURL()
+}
+
 type GatewayClass struct {
 	*gwapiv1.GatewayClass
 
 	attachedPolicies []Policy
 }
 
-var _ Targetable = GatewayClass{}
+var _ Targetable = &GatewayClass{}
 
-func (g GatewayClass) GetURL() string {
+func (g *GatewayClass) GetURL() string {
 	return UrlFromObject(g)
 }
 
-func (g GatewayClass) SetPolicies(policies []Policy) {
+func (g *GatewayClass) SetPolicies(policies []Policy) {
 	g.attachedPolicies = policies
 }
 
-func (g GatewayClass) Policies() []Policy {
+func (g *GatewayClass) Policies() []Policy {
 	return g.attachedPolicies
 }
 
@@ -40,30 +44,30 @@ type Gateway struct {
 	attachedPolicies []Policy
 }
 
-var _ Targetable = Gateway{}
+var _ Targetable = &Gateway{}
 
-func (g Gateway) GetURL() string {
+func (g *Gateway) GetURL() string {
 	return UrlFromObject(g)
 }
 
-func (g Gateway) SetPolicies(policies []Policy) {
+func (g *Gateway) SetPolicies(policies []Policy) {
 	g.attachedPolicies = policies
 }
 
-func (g Gateway) Policies() []Policy {
+func (g *Gateway) Policies() []Policy {
 	return g.attachedPolicies
 }
 
 type Listener struct {
 	*gwapiv1.Listener
 
-	gateway          *Gateway
+	Gateway          *Gateway
 	attachedPolicies []Policy
 }
 
-var _ Targetable = Listener{}
+var _ Targetable = &Listener{}
 
-func (l Listener) GroupVersionKind() schema.GroupVersionKind {
+func (l *Listener) GroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   gwapiv1.GroupName,
 		Version: gwapiv1.GroupVersion.Version,
@@ -71,25 +75,25 @@ func (l Listener) GroupVersionKind() schema.GroupVersionKind {
 	}
 }
 
-func (l Listener) SetGroupVersionKind(schema.GroupVersionKind) {}
+func (l *Listener) SetGroupVersionKind(schema.GroupVersionKind) {}
 
-func (l Listener) GetURL() string {
-	return namespacedSectionName(UrlFromObject(l.gateway), l.Name)
+func (l *Listener) GetURL() string {
+	return namespacedSectionName(UrlFromObject(l.Gateway), l.Name)
 }
 
-func (l Listener) GetNamespace() string {
-	return l.gateway.GetNamespace()
+func (l *Listener) GetNamespace() string {
+	return l.Gateway.GetNamespace()
 }
 
-func (l Listener) GetName() string {
-	return namespacedSectionName(l.gateway.GetName(), l.Name)
+func (l *Listener) GetName() string {
+	return namespacedSectionName(l.Gateway.GetName(), l.Name)
 }
 
-func (l Listener) SetPolicies(policies []Policy) {
+func (l *Listener) SetPolicies(policies []Policy) {
 	l.attachedPolicies = policies
 }
 
-func (l Listener) Policies() []Policy {
+func (l *Listener) Policies() []Policy {
 	return l.attachedPolicies
 }
 
@@ -99,31 +103,31 @@ type HTTPRoute struct {
 	attachedPolicies []Policy
 }
 
-var _ Targetable = HTTPRoute{}
+var _ Targetable = &HTTPRoute{}
 
-func (r HTTPRoute) GetURL() string {
+func (r *HTTPRoute) GetURL() string {
 	return UrlFromObject(r)
 }
 
-func (r HTTPRoute) SetPolicies(policies []Policy) {
+func (r *HTTPRoute) SetPolicies(policies []Policy) {
 	r.attachedPolicies = policies
 }
 
-func (r HTTPRoute) Policies() []Policy {
+func (r *HTTPRoute) Policies() []Policy {
 	return r.attachedPolicies
 }
 
 type HTTPRouteRule struct {
 	*gwapiv1.HTTPRouteRule
 
-	httpRoute        *HTTPRoute
-	name             gwapiv1.SectionName // TODO(guicassolato): Use the `name` field of the HTTPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	HTTPRoute        *HTTPRoute
+	Name             gwapiv1.SectionName // TODO(guicassolato): Use the `name` field of the HTTPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
 	attachedPolicies []Policy
 }
 
-var _ Targetable = HTTPRouteRule{}
+var _ Targetable = &HTTPRouteRule{}
 
-func (r HTTPRouteRule) GroupVersionKind() schema.GroupVersionKind {
+func (r *HTTPRouteRule) GroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Group:   gwapiv1.GroupName,
 		Version: gwapiv1.GroupVersion.Version,
@@ -131,25 +135,25 @@ func (r HTTPRouteRule) GroupVersionKind() schema.GroupVersionKind {
 	}
 }
 
-func (r HTTPRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
+func (r *HTTPRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
 
-func (r HTTPRouteRule) GetURL() string {
-	return namespacedSectionName(UrlFromObject(r.httpRoute), r.name)
+func (r *HTTPRouteRule) GetURL() string {
+	return namespacedSectionName(UrlFromObject(r.HTTPRoute), r.Name)
 }
 
-func (r HTTPRouteRule) GetNamespace() string {
-	return r.httpRoute.GetNamespace()
+func (r *HTTPRouteRule) GetNamespace() string {
+	return r.HTTPRoute.GetNamespace()
 }
 
-func (r HTTPRouteRule) GetName() string {
-	return namespacedSectionName(r.httpRoute.Name, r.name)
+func (r *HTTPRouteRule) GetName() string {
+	return namespacedSectionName(r.HTTPRoute.Name, r.Name)
 }
 
-func (r HTTPRouteRule) SetPolicies(policies []Policy) {
+func (r *HTTPRouteRule) SetPolicies(policies []Policy) {
 	r.attachedPolicies = policies
 }
 
-func (r HTTPRouteRule) Policies() []Policy {
+func (r *HTTPRouteRule) Policies() []Policy {
 	return r.attachedPolicies
 }
 
@@ -159,53 +163,53 @@ type Service struct {
 	attachedPolicies []Policy
 }
 
-var _ Targetable = Service{}
+var _ Targetable = &Service{}
 
-func (s Service) GetURL() string {
+func (s *Service) GetURL() string {
 	return UrlFromObject(s)
 }
 
-func (s Service) SetPolicies(policies []Policy) {
+func (s *Service) SetPolicies(policies []Policy) {
 	s.attachedPolicies = policies
 }
 
-func (s Service) Policies() []Policy {
+func (s *Service) Policies() []Policy {
 	return s.attachedPolicies
 }
 
 type ServicePort struct {
 	*core.ServicePort
 
-	service          *Service
+	Service          *Service
 	attachedPolicies []Policy
 }
 
-var _ Targetable = ServicePort{}
+var _ Targetable = &ServicePort{}
 
-func (p ServicePort) GroupVersionKind() schema.GroupVersionKind {
+func (p *ServicePort) GroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
 		Kind: "ServicePort",
 	}
 }
 
-func (p ServicePort) SetGroupVersionKind(schema.GroupVersionKind) {}
+func (p *ServicePort) SetGroupVersionKind(schema.GroupVersionKind) {}
 
-func (p ServicePort) GetURL() string {
-	return namespacedSectionName(UrlFromObject(p.service), gwapiv1.SectionName(p.Name))
+func (p *ServicePort) GetURL() string {
+	return namespacedSectionName(UrlFromObject(p.Service), gwapiv1.SectionName(p.Name))
 }
 
-func (p ServicePort) GetNamespace() string {
-	return p.service.GetNamespace()
+func (p *ServicePort) GetNamespace() string {
+	return p.Service.GetNamespace()
 }
 
-func (p ServicePort) GetName() string {
-	return namespacedSectionName(p.service.Name, gwapiv1.SectionName(p.Name))
+func (p *ServicePort) GetName() string {
+	return namespacedSectionName(p.Service.Name, gwapiv1.SectionName(p.Name))
 }
 
-func (p ServicePort) SetPolicies(policies []Policy) {
+func (p *ServicePort) SetPolicies(policies []Policy) {
 	p.attachedPolicies = policies
 }
 
-func (p ServicePort) Policies() []Policy {
+func (p *ServicePort) Policies() []Policy {
 	return p.attachedPolicies
 }

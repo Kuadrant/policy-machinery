@@ -21,7 +21,12 @@ func (p *ColorPolicy) GetURL() string {
 }
 
 func (p *ColorPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
-	return []machinery.PolicyTargetReference{machinery.LocalPolicyTargetReference{LocalPolicyTargetReference: p.Spec.TargetRef, PolicyNamespace: p.Namespace}}
+	return []machinery.PolicyTargetReference{
+		machinery.LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef,
+			PolicyNamespace: p.Namespace,
+		},
+	}
 }
 
 func (p *ColorPolicy) GetMergeStrategy() machinery.MergeStrategy {
@@ -49,7 +54,7 @@ func (p *ColorPolicy) DeepCopy() *ColorPolicy {
 }
 
 type ColorSpec struct {
-	TargetRef gwapi.LocalPolicyTargetReference `json:"targetRef"`
+	TargetRef gwapi.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	Defaults  *MergeableColorSpec `json:"defaults,omitempty"`
 	Overrides *MergeableColorSpec `json:"overrides,omitempty"`
@@ -93,25 +98,15 @@ type ColorRule struct {
 	Color ColorValue `json:"color"`
 }
 
-type ColorValue int
+type ColorValue string
 
 const (
-	Red ColorValue = iota
-	Blue
-	Green
-	Yellow
+	Black  ColorValue = "black"
+	Blue   ColorValue = "blue"
+	Green  ColorValue = "green"
+	Orange ColorValue = "orange"
+	Purple ColorValue = "purple"
+	Red    ColorValue = "red"
+	White  ColorValue = "white"
+	Yellow ColorValue = "yellow"
 )
-
-func (v ColorValue) String() string {
-	switch v {
-	case Red:
-		return "red"
-	case Blue:
-		return "blue"
-	case Green:
-		return "green"
-	case Yellow:
-		return "yellow"
-	}
-	return "unknown"
-}

@@ -211,7 +211,7 @@ func (t *Topology) dfs(current, to Targetable, path []Targetable, paths *[][]Tar
 	if visited[currentURL] {
 		return
 	}
-	path = append(path, current)
+	path = append(path, t.targetables[currentURL])
 	visited[currentURL] = true
 	if currentURL == to.GetURL() {
 		pathCopy := make([]Targetable, len(path))
