@@ -86,7 +86,7 @@ topology := machinery.NewTopology(
   machinery.WithTargetables(services...),
   machinery.WithLinks(
     machinery.LinkGatewayToHTTPRouteFunc(gateways),
-    machinery.LinkHTTPRouteToServiceFunc(httpRoutes),
+    machinery.LinkHTTPRouteToServiceFunc(httpRoutes, false),
   ),
   machinery.WithPolicies(policies...),
 )
