@@ -155,7 +155,7 @@ func TestTopologyPaths(t *testing.T) {
 		WithTargetables(services...),
 		WithLinks(
 			LinkGatewayToHTTPRouteFunc(gateways),
-			LinkHTTPRouteToServiceFunc(httpRoutes),
+			LinkHTTPRouteToServiceFunc(httpRoutes, false),
 		),
 	)
 
@@ -367,7 +367,7 @@ func TestGatewayAPITopology(t *testing.T) {
 					LinkGatewayToListenerFunc(),
 					LinkListenerToHTTPRouteFunc(gateways, listeners),
 					LinkHTTPRouteToHTTPRouteRuleFunc(),
-					LinkHTTPRouteRuleToServiceFunc(httpRouteRules),
+					LinkHTTPRouteRuleToServiceFunc(httpRouteRules, true),
 					LinkHTTPRouteRuleToServicePortFunc(httpRouteRules),
 					LinkServiceToServicePortFunc(),
 				),
@@ -457,7 +457,7 @@ func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
 				WithLinks(
 					LinkGatewayClassToGatewayFunc(gatewayClasses),
 					LinkGatewayToHTTPRouteFunc(gateways),
-					LinkHTTPRouteToServiceFunc(httpRoutes),
+					LinkHTTPRouteToServiceFunc(httpRoutes, false),
 				),
 				WithPolicies(tc.policies...),
 			)

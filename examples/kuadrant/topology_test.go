@@ -149,7 +149,7 @@ func TestMergeBasedOnTopology(t *testing.T) {
 		machinery.WithLinks(
 			machinery.LinkGatewayToHTTPRouteFunc([]*machinery.Gateway{gateway}),
 			machinery.LinkHTTPRouteToHTTPRouteRuleFunc(),
-			machinery.LinkHTTPRouteRuleToServiceFunc(httpRouteRules),
+			machinery.LinkHTTPRouteRuleToServiceFunc(httpRouteRules, false),
 		),
 		machinery.WithPolicies(policies...),
 	)
