@@ -10,6 +10,153 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+type GatewayAPITopologyOptions struct {
+	GatewayClasses []*GatewayClass
+	Gateways       []*Gateway
+	HTTPRoutes     []*HTTPRoute
+	Services       []*Service
+	Policies       []Policy
+
+	ExpandGatewayListeners bool
+	ExpandHTTPRouteRules   bool
+	ExpandServicePorts     bool
+}
+
+type GatewayAPITopologyOptionsFunc func(*GatewayAPITopologyOptions)
+
+// WithGatewayClasses adds gateway classes to the options to initialize a new Gateway API topology.
+func WithGatewayClasses(gatewayClasses ...*gwapiv1.GatewayClass) GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.GatewayClasses = append(o.GatewayClasses, lo.Map(gatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) *GatewayClass {
+			return &GatewayClass{GatewayClass: gatewayClass}
+		})...)
+	}
+}
+
+// WithGateways adds gateways to the options to initialize a new Gateway API topology.
+func WithGateways(gateways ...*gwapiv1.Gateway) GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.Gateways = append(o.Gateways, lo.Map(gateways, func(gateway *gwapiv1.Gateway, _ int) *Gateway {
+			return &Gateway{Gateway: gateway}
+		})...)
+	}
+}
+
+// WithHTTPRoutes adds HTTP routes to the options to initialize a new Gateway API topology.
+func WithHTTPRoutes(httpRoutes ...*gwapiv1.HTTPRoute) GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.HTTPRoutes = append(o.HTTPRoutes, lo.Map(httpRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) *HTTPRoute {
+			return &HTTPRoute{HTTPRoute: httpRoute}
+		})...)
+	}
+}
+
+// WithServices adds services to the options to initialize a new Gateway API topology.
+func WithServices(services ...*core.Service) GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.Services = append(o.Services, lo.Map(services, func(service *core.Service, _ int) *Service {
+			return &Service{Service: service}
+		})...)
+	}
+}
+
+// WithGatewayAPITopologyPolicies adds policies to the options to initialize a new Gateway API topology.
+func WithGatewayAPITopologyPolicies(policies ...Policy) GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.Policies = append(o.Policies, policies...)
+	}
+}
+
+// ExpandGatewayListeners adds targetable gateway listeners to the options to initialize a new Gateway API topology.
+func ExpandGatewayListeners() GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.ExpandGatewayListeners = true
+	}
+}
+
+// ExpandHTTPRouteRules adds targetable HTTP route rules to the options to initialize a new Gateway API topology.
+func ExpandHTTPRouteRules() GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.ExpandHTTPRouteRules = true
+	}
+}
+
+// ExpandServicePorts adds targetable service ports to the options to initialize a new Gateway API topology.
+func ExpandServicePorts() GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.ExpandServicePorts = true
+	}
+}
+
+// NewGatewayAPITopology returns a topology of Gateway API objects and attached policies.
+//
+// The links between the targetables are established based on the relationships defined by Gateway API.
+//
+// Principal objects like Gateways, HTTPRoutes and Services can be expanded to automatically include their targetable
+// sections (listeners, route rules, service ports) as independent objects in the topology, by supplying the
+// corresponding options ExpandGatewayListeners(), ExpandHTTPRouteRules(), and ExpandServicePorts().
+// The links will then be established accordingly. E.g.:
+//   - Without expanding Gateway listeners (default): Gateway -> HTTPRoute links.
+//   - Expanding Gateway listeners: Gateway -> Listener and Listener -> HTTPRoute links.
+func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
+	o := &GatewayAPITopologyOptions{}
+	for _, f := range options {
+		f(o)
+	}
+
+	opts := []TopologyOptionsFunc{
+		WithPolicies(o.Policies...),
+		WithTargetables(o.GatewayClasses...),
+		WithTargetables(o.Gateways...),
+		WithTargetables(o.HTTPRoutes...),
+		WithTargetables(o.Services...),
+		WithLinks(LinkGatewayClassToGatewayFunc(o.GatewayClasses)), // GatewayClass -> Gateway
+	}
+
+	if o.ExpandGatewayListeners {
+		listeners := lo.FlatMap(o.Gateways, ListenersFromGatewayFunc)
+		opts = append(opts, WithTargetables(listeners...))
+		opts = append(opts, WithLinks(
+			LinkGatewayToListenerFunc(),                        // Gateway -> Listener
+			LinkListenerToHTTPRouteFunc(o.Gateways, listeners), // Listener -> HTTPRoute
+		))
+	} else {
+		opts = append(opts, WithLinks(LinkGatewayToHTTPRouteFunc(o.Gateways))) // Gateway -> HTTPRoute
+	}
+
+	if o.ExpandHTTPRouteRules {
+		httpRouteRules := lo.FlatMap(o.HTTPRoutes, HTTPRouteRulesFromHTTPRouteFunc)
+		opts = append(opts, WithTargetables(httpRouteRules...))
+		opts = append(opts, WithLinks(LinkHTTPRouteToHTTPRouteRuleFunc())) // HTTPRoute -> HTTPRouteRule
+
+		if o.ExpandServicePorts {
+			servicePorts := lo.FlatMap(o.Services, ServicePortsFromBackendFunc)
+			opts = append(opts, WithTargetables(servicePorts...))
+			opts = append(opts, WithLinks(
+				LinkHTTPRouteRuleToServicePortFunc(httpRouteRules),   // HTTPRouteRule -> ServicePort
+				LinkHTTPRouteRuleToServiceFunc(httpRouteRules, true), // HTTPRouteRule -> Service
+			))
+		} else {
+			opts = append(opts, WithLinks(LinkHTTPRouteRuleToServiceFunc(httpRouteRules, false))) // HTTPRouteRule -> Service
+		}
+	} else {
+		if o.ExpandServicePorts {
+			opts = append(opts, WithLinks(
+				LinkHTTPRouteToServicePortFunc(o.HTTPRoutes),   // HTTPRoute -> ServicePort
+				LinkHTTPRouteToServiceFunc(o.HTTPRoutes, true), // HTTPRoute -> Service
+			))
+		} else {
+			opts = append(opts, WithLinks(LinkHTTPRouteToServiceFunc(o.HTTPRoutes, false))) // HTTPRoute -> Service
+		}
+	}
+
+	if o.ExpandServicePorts {
+		opts = append(opts, WithLinks(LinkServiceToServicePortFunc())) // Service -> ServicePort
+	}
+
+	return NewTopology(opts...)
+}
+
 // ListenersFromGatewayFunc returns a list of targetable listeners from a targetable gateway.
 func ListenersFromGatewayFunc(gateway *Gateway, _ int) []*Listener {
 	return lo.Map(gateway.Spec.Listeners, func(listener gwapiv1.Listener, _ int) *Listener {

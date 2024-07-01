@@ -3,162 +3,165 @@
 package machinery
 
 import (
-	"bytes"
-	"fmt"
-	"os"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/samber/lo"
-	core "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
-	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
-const outDir = "../tests/out"
-
 func TestTopologyRoots(t *testing.T) {
-	gateways := []*Gateway{
-		{Gateway: BuildGateway()},
-		{Gateway: BuildGateway(func(g *gwapiv1.Gateway) { g.Name = "my-gateway-2" })},
+	apples := []*Apple{
+		{Name: "apple-1"},
+		{Name: "apple-2"},
 	}
-	httpRoute := &HTTPRoute{HTTPRoute: BuildHTTPRoute()}
-	httpRouteRules := HTTPRouteRulesFromHTTPRouteFunc(httpRoute, 0)
 	topology := NewTopology(
-		WithTargetables(gateways...),
-		WithTargetables(httpRoute),
-		WithTargetables(httpRouteRules...),
-		WithLinks(
-			LinkGatewayToHTTPRouteFunc(gateways),
-			LinkHTTPRouteToHTTPRouteRuleFunc(),
-		),
+		WithTargetables(apples...),
+		WithTargetables(&Orange{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1"}}),
+		WithLinks(LinkApplesToOranges(apples)),
 		WithPolicies(
-			buildPolicy(func(policy *TestPolicy) {
-				policy.Name = "my-policy-1"
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-						Group: gwapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  "my-http-route",
-					},
+			buildFruitPolicy(func(policy *FruitPolicy) {
+				policy.Name = "policy-1"
+				policy.Spec.TargetRef = FruitPolicyTargetReference{
+					Group: TestGroupName,
+					Kind:  "Apple",
+					Name:  "apple-2",
 				}
 			}),
-			buildPolicy(func(policy *TestPolicy) {
-				policy.Name = "my-policy-2"
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-						Group: gwapiv1.GroupName,
-						Kind:  "Gateway",
-						Name:  "my-gateway-2",
-					},
+			buildFruitPolicy(func(policy *FruitPolicy) {
+				policy.Name = "policy-2"
+				policy.Spec.TargetRef = FruitPolicyTargetReference{
+					Group: TestGroupName,
+					Kind:  "Orange",
+					Name:  "orange-1",
 				}
 			}),
 		),
 	)
 	roots := topology.Roots()
-	if expected := len(gateways); len(roots) != expected {
+	if expected := len(apples); len(roots) != expected {
 		t.Errorf("expected %d roots, got %d", expected, len(roots))
 	}
 	rootURLs := lo.Map(roots, MapTargetableToURLFunc)
-	for _, gateway := range gateways {
-		if !lo.Contains(rootURLs, gateway.GetURL()) {
-			t.Errorf("expected root %s not found", gateway.GetURL())
+	for _, apple := range apples {
+		if !lo.Contains(rootURLs, apple.GetURL()) {
+			t.Errorf("expected root %s not found", apple.GetURL())
 		}
 	}
 }
 
 func TestTopologyParents(t *testing.T) {
-	gateways := []*Gateway{{Gateway: BuildGateway()}}
-	httpRoute := &HTTPRoute{HTTPRoute: BuildHTTPRoute()}
-	httpRouteRules := HTTPRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+	apple1 := &Apple{Name: "apple-1"}
+	apple2 := &Apple{Name: "apple-2"}
+	orange1 := &Orange{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1", "apple-2"}}
+	orange2 := &Orange{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-2"}}
 	topology := NewTopology(
-		WithTargetables(gateways...),
-		WithTargetables(httpRoute),
-		WithTargetables(httpRouteRules...),
-		WithLinks(
-			LinkGatewayToHTTPRouteFunc(gateways),
-			LinkHTTPRouteToHTTPRouteRuleFunc(),
-		),
+		WithTargetables(apple1, apple2),
+		WithTargetables(orange1, orange2),
+		WithLinks(LinkApplesToOranges([]*Apple{apple1, apple2})),
 		WithPolicies(
-			buildPolicy(func(policy *TestPolicy) {
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-						Group: gwapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  "my-http-route",
-					},
+			buildFruitPolicy(func(policy *FruitPolicy) {
+				policy.Name = "policy-2"
+				policy.Spec.TargetRef = FruitPolicyTargetReference{
+					Group: TestGroupName,
+					Kind:  "Orange",
+					Name:  "orange-1",
 				}
 			}),
 		),
 	)
-	parents := topology.Parents(httpRoute)
-	if expected := 1; len(parents) != expected {
+	// orange-1
+	parents := topology.Parents(orange1)
+	if expected := 2; len(parents) != expected {
 		t.Errorf("expected %d parent, got %d", expected, len(parents))
 	}
 	parentURLs := lo.Map(parents, MapTargetableToURLFunc)
-	for _, gateway := range gateways {
-		if !lo.Contains(parentURLs, gateway.GetURL()) {
-			t.Errorf("expected parent %s not found", gateway.GetURL())
-		}
+	if !lo.Contains(parentURLs, apple1.GetURL()) {
+		t.Errorf("expected parent %s not found", apple1.GetURL())
+	}
+	if !lo.Contains(parentURLs, apple2.GetURL()) {
+		t.Errorf("expected parent %s not found", apple2.GetURL())
+	}
+	// orange-2
+	parents = topology.Parents(orange2)
+	if expected := 1; len(parents) != expected {
+		t.Errorf("expected %d parent, got %d", expected, len(parents))
+	}
+	parentURLs = lo.Map(parents, MapTargetableToURLFunc)
+	if !lo.Contains(parentURLs, apple2.GetURL()) {
+		t.Errorf("expected parent %s not found", apple2.GetURL())
 	}
 }
 
 func TestTopologyChildren(t *testing.T) {
-	gateways := []*Gateway{{Gateway: BuildGateway()}}
-	httpRoute := &HTTPRoute{HTTPRoute: BuildHTTPRoute()}
-	httpRouteRules := HTTPRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+	apple1 := &Apple{Name: "apple-1"}
+	apple2 := &Apple{Name: "apple-2"}
+	orange1 := &Orange{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1", "apple-2"}}
+	orange2 := &Orange{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-2"}}
 	topology := NewTopology(
-		WithTargetables(gateways...),
-		WithTargetables(httpRoute),
-		WithTargetables(httpRouteRules...),
-		WithLinks(
-			LinkGatewayToHTTPRouteFunc(gateways),
-			LinkHTTPRouteToHTTPRouteRuleFunc(),
-		),
+		WithTargetables(apple1, apple2),
+		WithTargetables(orange1, orange2),
+		WithLinks(LinkApplesToOranges([]*Apple{apple1, apple2})),
 		WithPolicies(
-			buildPolicy(func(policy *TestPolicy) {
-				policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-						Group: gwapiv1.GroupName,
-						Kind:  "HTTPRoute",
-						Name:  "my-http-route",
-					},
+			buildFruitPolicy(func(policy *FruitPolicy) {
+				policy.Name = "policy-2"
+				policy.Spec.TargetRef = FruitPolicyTargetReference{
+					Group: TestGroupName,
+					Kind:  "Orange",
+					Name:  "orange-1",
 				}
 			}),
 		),
 	)
-	children := topology.Children(httpRoute)
+	// apple-1
+	children := topology.Children(apple1)
 	if expected := 1; len(children) != expected {
 		t.Errorf("expected %d child, got %d", expected, len(children))
 	}
 	childURLs := lo.Map(children, MapTargetableToURLFunc)
-	for _, httpRouteRule := range httpRouteRules {
-		if !lo.Contains(childURLs, httpRouteRule.GetURL()) {
-			t.Errorf("expected child %s not found", httpRouteRule.GetURL())
-		}
+	if !lo.Contains(childURLs, orange1.GetURL()) {
+		t.Errorf("expected child %s not found", orange1.GetURL())
+	}
+	// apple-2
+	children = topology.Children(apple2)
+	if expected := 2; len(children) != expected {
+		t.Errorf("expected %d child, got %d", expected, len(children))
+	}
+	childURLs = lo.Map(children, MapTargetableToURLFunc)
+	if !lo.Contains(childURLs, orange1.GetURL()) {
+		t.Errorf("expected child %s not found", orange1.GetURL())
+	}
+	if !lo.Contains(childURLs, orange2.GetURL()) {
+		t.Errorf("expected child %s not found", orange2.GetURL())
 	}
 }
 
 func TestTopologyPaths(t *testing.T) {
-	gateways := []*Gateway{{Gateway: BuildGateway()}}
-	httpRoutes := []*HTTPRoute{
-		{HTTPRoute: BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) { r.Name = "route-1" })},
-		{HTTPRoute: BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) { r.Name = "route-2" })},
+	apples := []*Apple{{Name: "apple-1"}}
+	oranges := []*Orange{
+		{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1"}, ChildBananas: []string{"banana-1"}},
+		{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-1"}, ChildBananas: []string{"banana-1"}},
 	}
-	services := []*Service{{Service: BuildService()}}
+	bananas := []*Banana{{Name: "banana-1"}}
 	topology := NewTopology(
-		WithTargetables(gateways...),
-		WithTargetables(httpRoutes...),
-		WithTargetables(services...),
+		WithTargetables(apples...),
+		WithTargetables(oranges...),
+		WithTargetables(bananas...),
 		WithLinks(
-			LinkGatewayToHTTPRouteFunc(gateways),
-			LinkHTTPRouteToServiceFunc(httpRoutes, false),
+			LinkApplesToOranges(apples),
+			LinkOrangesToBananas(oranges),
+		),
+		WithPolicies(
+			buildFruitPolicy(func(policy *FruitPolicy) {
+				policy.Name = "policy-2"
+				policy.Spec.TargetRef = FruitPolicyTargetReference{
+					Group: TestGroupName,
+					Kind:  "Orange",
+					Name:  "orange-1",
+				}
+			}),
 		),
 	)
-
 	testCases := []struct {
 		name          string
 		from          Targetable
@@ -167,33 +170,33 @@ func TestTopologyPaths(t *testing.T) {
 	}{
 		{
 			name: "single path",
-			from: httpRoutes[0],
-			to:   services[0],
+			from: oranges[0],
+			to:   bananas[0],
 			expectedPaths: [][]Targetable{
-				{httpRoutes[0], services[0]},
+				{oranges[0], bananas[0]},
 			},
 		},
 		{
 			name: "multiple paths",
-			from: gateways[0],
-			to:   services[0],
+			from: apples[0],
+			to:   bananas[0],
 			expectedPaths: [][]Targetable{
-				{gateways[0], httpRoutes[0], services[0]},
-				{gateways[0], httpRoutes[1], services[0]},
+				{apples[0], oranges[0], bananas[0]},
+				{apples[0], oranges[1], bananas[0]},
 			},
 		},
 		{
 			name: "trivial path",
-			from: gateways[0],
-			to:   gateways[0],
+			from: apples[0],
+			to:   apples[0],
 			expectedPaths: [][]Targetable{
-				{gateways[0]},
+				{apples[0]},
 			},
 		},
 		{
 			name:          "no path",
-			from:          services[0],
-			to:            gateways[0],
+			from:          bananas[0],
+			to:            apples[0],
 			expectedPaths: [][]Targetable{},
 		},
 	}
@@ -217,14 +220,16 @@ func TestTopologyPaths(t *testing.T) {
 	}
 }
 
-// TestGatewayAPITopology tests for a topology of Gateway API resources with the following scheme:
-//
-//	GatewayClass -> Gateway -> Listener -> HTTPRoute -> HTTPRouteRule -> Service -> ServicePort
-//	                                                                  ∟> ServicePort <- Service
-func TestGatewayAPITopology(t *testing.T) {
+type fruits struct {
+	apples  []*Apple
+	oranges []*Orange
+	bananas []*Banana
+}
+
+func TestFruitTopology(t *testing.T) {
 	testCases := []struct {
 		name          string
-		targetables   GatewayAPIResources
+		targetables   fruits
 		policies      []Policy
 		expectedLinks map[string][]string
 	}{
@@ -233,143 +238,60 @@ func TestGatewayAPITopology(t *testing.T) {
 		},
 		{
 			name: "single node",
-			targetables: GatewayAPIResources{
-				GatewayClasses: []*gwapiv1.GatewayClass{BuildGatewayClass()},
+			targetables: fruits{
+				apples: []*Apple{{Name: "my-apple"}},
 			},
 		},
 		{
-			name: "one of each kind",
-			targetables: GatewayAPIResources{
-				GatewayClasses: []*gwapiv1.GatewayClass{BuildGatewayClass()},
-				Gateways:       []*gwapiv1.Gateway{BuildGateway()},
-				HTTPRoutes:     []*gwapiv1.HTTPRoute{BuildHTTPRoute()},
-				Services:       []*core.Service{BuildService()},
+			name: "multiple gvk",
+			targetables: fruits{
+				apples:  []*Apple{{Name: "my-apple"}},
+				oranges: []*Orange{{Name: "my-orange", Namespace: "my-namespace", AppleParents: []string{"my-apple"}}},
 			},
-			policies: []Policy{buildPolicy()},
+			policies: []Policy{buildFruitPolicy()},
 			expectedLinks: map[string][]string{
-				"my-gateway-class":       {"my-gateway"},
-				"my-gateway":             {"my-gateway#my-listener"},
-				"my-gateway#my-listener": {"my-http-route"},
-				"my-http-route":          {"my-http-route#rule-1"},
-				"my-http-route#rule-1":   {"my-service"},
-				"my-service":             {"my-service#http"},
+				"my-apple": {"my-orange"},
 			},
 		},
 		{
-			name: "policies with section names",
-			targetables: GatewayAPIResources{
-				Gateways: []*gwapiv1.Gateway{BuildGateway(func(gateway *gwapiv1.Gateway) {
-					gateway.Spec.Listeners[0].Name = "http"
-					gateway.Spec.Listeners = append(gateway.Spec.Listeners, gwapiv1.Listener{
-						Name:     "https",
-						Port:     443,
-						Protocol: "HTTPS",
-					})
-				})},
+			name: "complex topology",
+			targetables: fruits{
+				apples: []*Apple{{Name: "apple-1"}, {Name: "apple-2"}},
+				oranges: []*Orange{
+					{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1", "apple-2"}, ChildBananas: []string{"banana-1", "banana-2"}},
+					{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-2"}, ChildBananas: []string{"banana-2", "banana-3"}},
+				},
+				bananas: []*Banana{{Name: "banana-1"}, {Name: "banana-2"}, {Name: "banana-3"}},
 			},
 			policies: []Policy{
-				buildPolicy(func(policy *TestPolicy) {
-					policy.Name = "my-policy-1"
-					policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-							Group: gwapiv1.GroupName,
-							Kind:  "Gateway",
-							Name:  "my-gateway",
-						},
-						SectionName: ptr.To(gwapiv1.SectionName("http")),
-					}
+				buildFruitPolicy(func(policy *FruitPolicy) {
+					policy.Name = "policy-1"
+					policy.Spec.TargetRef.Kind = "Apple"
+					policy.Spec.TargetRef.Name = "apple-1"
 				}),
-				buildPolicy(func(policy *TestPolicy) {
-					policy.Name = "my-policy-2"
-					policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-							Group: gwapiv1.GroupName,
-							Kind:  "Gateway",
-							Name:  "my-gateway",
-						},
-						SectionName: ptr.To(gwapiv1.SectionName("https")),
-					}
+				buildFruitPolicy(func(policy *FruitPolicy) {
+					policy.Name = "policy-2"
+					policy.Spec.TargetRef.Kind = "Orange"
+					policy.Spec.TargetRef.Name = "orange-2"
 				}),
 			},
 			expectedLinks: map[string][]string{
-				"my-gateway": {"my-gateway#http", "my-gateway#https"},
-			},
-		},
-		{
-			name:        "complex topology",
-			targetables: BuildComplexGatewayAPITopology(),
-			expectedLinks: map[string][]string{
-				"gatewayclass-1":       {"gateway-1", "gateway-2", "gateway-3"},
-				"gatewayclass-2":       {"gateway-4", "gateway-5"},
-				"gateway-1":            {"gateway-1#listener-1", "gateway-1#listener-2"},
-				"gateway-2":            {"gateway-2#listener-1"},
-				"gateway-3":            {"gateway-3#listener-1", "gateway-3#listener-2"},
-				"gateway-4":            {"gateway-4#listener-1", "gateway-4#listener-2"},
-				"gateway-5":            {"gateway-5#listener-1"},
-				"gateway-1#listener-1": {"route-1"},
-				"gateway-1#listener-2": {"route-1", "route-2"},
-				"gateway-2#listener-1": {"route-2", "route-3"},
-				"gateway-3#listener-1": {"route-4", "route-5"},
-				"gateway-3#listener-2": {"route-4", "route-5"},
-				"gateway-4#listener-1": {"route-5", "route-6"},
-				"gateway-4#listener-2": {"route-5", "route-6"},
-				"gateway-5#listener-1": {"route-7"},
-				"route-1":              {"route-1#rule-1", "route-1#rule-2"},
-				"route-2":              {"route-2#rule-1"},
-				"route-3":              {"route-3#rule-1"},
-				"route-4":              {"route-4#rule-1", "route-4#rule-2"},
-				"route-5":              {"route-5#rule-1", "route-5#rule-2"},
-				"route-6":              {"route-6#rule-1", "route-6#rule-2"},
-				"route-7":              {"route-7#rule-1"},
-				"route-1#rule-1":       {"service-1"},
-				"route-1#rule-2":       {"service-2"},
-				"route-2#rule-1":       {"service-3#port-1"},
-				"route-3#rule-1":       {"service-3#port-1"},
-				"route-4#rule-1":       {"service-3#port-2"},
-				"route-4#rule-2":       {"service-4#port-1"},
-				"route-5#rule-1":       {"service-5"},
-				"route-5#rule-2":       {"service-5"},
-				"route-6#rule-1":       {"service-5", "service-6"},
-				"route-6#rule-2":       {"service-6#port-1"},
-				"route-7#rule-1":       {"service-7"},
-				"service-1":            {"service-1#port-1", "service-1#port-2"},
-				"service-2":            {"service-2#port-1"},
-				"service-3":            {"service-3#port-1", "service-3#port-2"},
-				"service-4":            {"service-4#port-1"},
-				"service-5":            {"service-5#port-1"},
-				"service-6":            {"service-6#port-1"},
-				"service-7":            {"service-7#port-1"},
+				"apple-1":  {"orange-1"},
+				"apple-2":  {"orange-1", "orange-2"},
+				"orange-1": {"banana-1", "banana-2"},
+				"orange-2": {"banana-2", "banana-3"},
 			},
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			gatewayClasses := lo.Map(tc.targetables.GatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) *GatewayClass {
-				return &GatewayClass{GatewayClass: gatewayClass}
-			})
-			gateways := lo.Map(tc.targetables.Gateways, func(gateway *gwapiv1.Gateway, _ int) *Gateway { return &Gateway{Gateway: gateway} })
-			listeners := lo.FlatMap(gateways, ListenersFromGatewayFunc)
-			httpRoutes := lo.Map(tc.targetables.HTTPRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) *HTTPRoute { return &HTTPRoute{HTTPRoute: httpRoute} })
-			httpRouteRules := lo.FlatMap(httpRoutes, HTTPRouteRulesFromHTTPRouteFunc)
-			services := lo.Map(tc.targetables.Services, func(service *core.Service, _ int) *Service { return &Service{Service: service} })
-			servicePorts := lo.FlatMap(services, ServicePortsFromBackendFunc)
-
 			topology := NewTopology(
-				WithTargetables(gatewayClasses...),
-				WithTargetables(gateways...),
-				WithTargetables(listeners...),
-				WithTargetables(httpRoutes...),
-				WithTargetables(httpRouteRules...),
-				WithTargetables(services...),
-				WithTargetables(servicePorts...),
+				WithTargetables(tc.targetables.apples...),
+				WithTargetables(tc.targetables.oranges...),
+				WithTargetables(tc.targetables.bananas...),
 				WithLinks(
-					LinkGatewayClassToGatewayFunc(gatewayClasses),
-					LinkGatewayToListenerFunc(),
-					LinkListenerToHTTPRouteFunc(gateways, listeners),
-					LinkHTTPRouteToHTTPRouteRuleFunc(),
-					LinkHTTPRouteRuleToServiceFunc(httpRouteRules, true),
-					LinkHTTPRouteRuleToServicePortFunc(httpRouteRules),
-					LinkServiceToServicePortFunc(),
+					LinkApplesToOranges(tc.targetables.apples),
+					LinkOrangesToBananas(tc.targetables.oranges),
 				),
 				WithPolicies(tc.policies...),
 			)
@@ -387,175 +309,7 @@ func TestGatewayAPITopology(t *testing.T) {
 				}
 			}
 
-			saveTestCaseOutput(t, topology.ToDot())
+			SaveToOutputDir(t, topology.ToDot(), "../tests/out", ".dot")
 		})
-	}
-}
-
-// TestGatewayAPITopologyWithoutSectionName tests for a simplified topology of Gateway API resources without
-// section names, i.e. where HTTPRoutes are not expanded to link to specific Listeners, and Policy TargetRefs
-// are not of LocalPolicyTargetReferenceWithSectionName kind. This results in the following scheme:
-//
-//	GatewayClass -> Gateway -> HTTPRoute -> Service
-func TestGatewayAPITopologyWithoutSectionName(t *testing.T) {
-	testCases := []struct {
-		name          string
-		targetables   GatewayAPIResources
-		policies      []Policy
-		expectedLinks map[string][]string
-	}{
-		{
-			name: "one of each kind",
-			targetables: GatewayAPIResources{
-				GatewayClasses: []*gwapiv1.GatewayClass{BuildGatewayClass()},
-				Gateways:       []*gwapiv1.Gateway{BuildGateway()},
-				HTTPRoutes:     []*gwapiv1.HTTPRoute{BuildHTTPRoute()},
-				Services:       []*core.Service{BuildService()},
-			},
-			policies: []Policy{buildPolicy()},
-			expectedLinks: map[string][]string{
-				"my-gateway-class": {"my-gateway"},
-				"my-gateway":       {"my-http-route"},
-				"my-http-route":    {"my-service"},
-			},
-		},
-		{
-			name:        "complex topology",
-			targetables: BuildComplexGatewayAPITopology(),
-			expectedLinks: map[string][]string{
-				"gatewayclass-1": {"gateway-1", "gateway-2", "gateway-3"},
-				"gatewayclass-2": {"gateway-4", "gateway-5"},
-				"gateway-1":      {"route-1", "route-2"},
-				"gateway-2":      {"route-2", "route-3"},
-				"gateway-3":      {"route-4", "route-5"},
-				"gateway-4":      {"route-5", "route-6"},
-				"gateway-5":      {"route-7"},
-				"route-1":        {"service-1", "service-2"},
-				"route-2":        {"service-3"},
-				"route-3":        {"service-3"},
-				"route-4":        {"service-3", "service-4"},
-				"route-5":        {"service-5"},
-				"route-6":        {"service-5", "service-6"},
-				"route-7":        {"service-7"},
-			},
-		},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			gatewayClasses := lo.Map(tc.targetables.GatewayClasses, func(gatewayClass *gwapiv1.GatewayClass, _ int) *GatewayClass {
-				return &GatewayClass{GatewayClass: gatewayClass}
-			})
-			gateways := lo.Map(tc.targetables.Gateways, func(gateway *gwapiv1.Gateway, _ int) *Gateway { return &Gateway{Gateway: gateway} })
-			httpRoutes := lo.Map(tc.targetables.HTTPRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) *HTTPRoute { return &HTTPRoute{HTTPRoute: httpRoute} })
-			services := lo.Map(tc.targetables.Services, func(service *core.Service, _ int) *Service { return &Service{Service: service} })
-
-			topology := NewTopology(
-				WithTargetables(gatewayClasses...),
-				WithTargetables(gateways...),
-				WithTargetables(httpRoutes...),
-				WithTargetables(services...),
-				WithLinks(
-					LinkGatewayClassToGatewayFunc(gatewayClasses),
-					LinkGatewayToHTTPRouteFunc(gateways),
-					LinkHTTPRouteToServiceFunc(httpRoutes, false),
-				),
-				WithPolicies(tc.policies...),
-			)
-
-			links := make(map[string][]string)
-			for _, root := range topology.Roots() {
-				linksFromNode(topology, root, links)
-			}
-			for from, tos := range links {
-				expectedTos := tc.expectedLinks[from]
-				slices.Sort(expectedTos)
-				slices.Sort(tos)
-				if !slices.Equal(expectedTos, tos) {
-					t.Errorf("expected links from %s to be %v, got %v", from, expectedTos, tos)
-				}
-			}
-
-			saveTestCaseOutput(t, topology.ToDot())
-		})
-	}
-}
-
-type TestPolicy struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec TestPolicySpec `json:"spec"`
-}
-
-var _ Policy = &TestPolicy{}
-
-func (p *TestPolicy) GetURL() string {
-	return UrlFromObject(p)
-}
-
-func (p *TestPolicy) GetTargetRefs() []PolicyTargetReference {
-	return []PolicyTargetReference{LocalPolicyTargetReferenceWithSectionName{LocalPolicyTargetReferenceWithSectionName: p.Spec.TargetRef, PolicyNamespace: p.Namespace}}
-}
-
-func (p *TestPolicy) GetMergeStrategy() MergeStrategy {
-	return DefaultMergeStrategy
-}
-
-func (p *TestPolicy) Merge(policy Policy) Policy {
-	return &TestPolicy{
-		Spec: p.Spec,
-	}
-}
-
-type TestPolicySpec struct {
-	TargetRef gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
-}
-
-func buildPolicy(f ...func(*TestPolicy)) *TestPolicy {
-	p := &TestPolicy{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "test/v1",
-			Kind:       "TestPolicy",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-policy",
-			Namespace: "my-namespace",
-		},
-		Spec: TestPolicySpec{
-			TargetRef: gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-				LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-					Kind: "Service",
-					Name: "my-service",
-				},
-			},
-		},
-	}
-	for _, fn := range f {
-		fn(p)
-	}
-	return p
-}
-
-func linksFromNode(topology *Topology, node Targetable, edges map[string][]string) {
-	if _, ok := edges[node.GetName()]; ok {
-		return
-	}
-	children := topology.Children(node)
-	edges[node.GetName()] = lo.Map(children, func(child Targetable, _ int) string { return child.GetName() })
-	for _, child := range children {
-		linksFromNode(topology, child, edges)
-	}
-}
-
-// saveTestCaseOutput saves the output of a test case to a file in the output directory.
-func saveTestCaseOutput(t *testing.T, out *bytes.Buffer) {
-	file, err := os.Create(fmt.Sprintf("%s/%s.dot", outDir, strings.ReplaceAll(t.Name(), "/", "__")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	_, err = file.Write(out.Bytes())
-	if err != nil {
-		t.Fatal(err)
 	}
 }
