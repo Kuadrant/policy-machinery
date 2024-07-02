@@ -3,6 +3,7 @@ module github.com/kuadrant/policy-machinery
 go 1.22.2
 
 require (
+	github.com/evanphx/json-patch v5.9.0+incompatible
 	github.com/goccy/go-graphviz v0.1.3
 	github.com/samber/lo v1.39.0
 	k8s.io/api v0.30.0
