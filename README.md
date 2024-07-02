@@ -11,20 +11,21 @@ Machinery for implementing [Gateway API](https://gateway-api.sigs.k8s.io/referen
 
 ## Use
 
-❶ Import the package
+① Import the package:
 
 ```sh
 go get github.com/kuadrant/policy-machinery
 ```
 
-❷ Implement the `machinery.Policy` interface
+② Implement the `Policy` interface:
 
 ```go
 package mypolicy
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
   "github.com/kuadrant/policy-machinery/machinery"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+  gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 var _ machinery.Policy = &MyPolicy{}
@@ -33,7 +34,11 @@ type MyPolicy struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec struct{} `json:"spec"`
+	Spec MyPolicySpec `json:"spec"`
+}
+
+type MyPolicySpec struct {
+  TargetRef gwapiv1alpha2.LocalPolicyTargetReference
 }
 
 func (p *MyPolicy) GetURL() string {
@@ -68,7 +73,7 @@ func (p *MyPolicy) DeepCopy() *MyPolicy {
 }
 ```
 
-❸ Build a topology of targetable network resources
+③ Build a topology of targetable network resources:
 
 ```go
 import (
@@ -110,3 +115,20 @@ for _, path := range paths {
   }, emptyPolicy)
 }
 ```
+
+Alternatively, use the `NewGatewayAPITopology` helper function to build a topology of Gateway API resources.
+The links between objects will be inferred automatically according to the specs. I.e.:
+
+```go
+topology := machinery.NewGatewayAPITopology(
+  machinery.WithGateways(gateways...),
+  machinery.WithHTTPRoutes(httpRoutes...),
+  machinery.WithServices(services...),
+  machinery.WithPolicies(policies...),
+)
+```
+
+> **Tip:** You can use the topology option functions `ExpandGatewayListeners()`, `ExpandHTTPRouteRules()`,
+> `ExpandServicePorts()` to automatically expand Gateways, HTTPRoutes and Services so their inner sections
+> (listeners, route rules, service ports) are added as targetables to the topology. The links between objects
+> are then adjusted accordingly.
