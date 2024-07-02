@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/samber/lo"
+	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -17,7 +18,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
-// TestMergeBasedOnTopology tests ColorPolicy's merge strategies for painting a house, based on network traffic
+// TestKuadrantMergeBasedOnTopology tests ColorPolicy's merge strategies for painting a house, based on network traffic
 // flowing through the following topology of Gateway API resources:
 //
 //	                                                 ┌────────────┐
@@ -42,24 +43,23 @@ import (
 //	                                                 ┌────────────┐
 //	                                                 │ my-service │
 //	                                                 └────────────┘
-func TestMergeBasedOnTopology(t *testing.T) {
-	gateway := &machinery.Gateway{Gateway: machinery.BuildGateway()}
-	httpRoutes := []*machinery.HTTPRoute{
-		{HTTPRoute: machinery.BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+func TestKuadrantMergeBasedOnTopology(t *testing.T) {
+	gateway := machinery.BuildGateway()
+	httpRoutes := []*gwapiv1.HTTPRoute{
+		machinery.BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
 			r.Name = "my-route-1"
 			r.Spec.Rules = append(r.Spec.Rules, gwapiv1.HTTPRouteRule{
 				BackendRefs: []gwapiv1.HTTPBackendRef{machinery.BuildHTTPBackendRef()},
 			})
-		})},
-		{HTTPRoute: machinery.BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
+		}),
+		machinery.BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
 			r.Name = "my-route-2"
 			r.Spec.Rules = append(r.Spec.Rules, gwapiv1.HTTPRouteRule{
 				BackendRefs: []gwapiv1.HTTPBackendRef{machinery.BuildHTTPBackendRef()},
 			})
-		})},
+		}),
 	}
-	httpRouteRules := lo.FlatMap(httpRoutes, machinery.HTTPRouteRulesFromHTTPRouteFunc)
-	services := []*machinery.Service{{Service: machinery.BuildService()}}
+	services := []*core.Service{machinery.BuildService()}
 	policies := []machinery.Policy{
 		buildPolicy(func(p *ColorPolicy) { // atomic defaults
 			p.Name = "house-colors-gw"
@@ -141,23 +141,29 @@ func TestMergeBasedOnTopology(t *testing.T) {
 		}),
 	}
 
-	topology := machinery.NewTopology(
-		machinery.WithTargetables(gateway),
-		machinery.WithTargetables(httpRoutes...),
-		machinery.WithTargetables(httpRouteRules...),
-		machinery.WithTargetables(services...),
-		machinery.WithLinks(
-			machinery.LinkGatewayToHTTPRouteFunc([]*machinery.Gateway{gateway}),
-			machinery.LinkHTTPRouteToHTTPRouteRuleFunc(),
-			machinery.LinkHTTPRouteRuleToServiceFunc(httpRouteRules, false),
-		),
-		machinery.WithPolicies(policies...),
+	topology := machinery.NewGatewayAPITopology(
+		machinery.WithGateways(gateway),
+		machinery.WithHTTPRoutes(httpRoutes...),
+		machinery.ExpandHTTPRouteRules(),
+		machinery.WithServices(services...),
+		machinery.WithGatewayAPITopologyPolicies(policies...),
 	)
+
+	machinery.SaveToOutputDir(t, topology.ToDot(), "../../tests/out", ".dot")
+
+	gateways := topology.Targetables(func(o machinery.Object) bool {
+		_, ok := o.(*machinery.Gateway)
+		return ok
+	})
+	httpRouteRules := topology.Targetables(func(o machinery.Object) bool {
+		_, ok := o.(*machinery.HTTPRouteRule)
+		return ok
+	})
 
 	effectivePoliciesByPath := make(map[string]ColorPolicy)
 
 	for _, httpRouteRule := range httpRouteRules {
-		for _, path := range topology.Paths(gateway, httpRouteRule) {
+		for _, path := range topology.Paths(gateways[0], httpRouteRule) {
 			// Gather all policies in the path sorted from the least specific (gateway) to the most specific (httprouterule)
 			// Since in this example there are no targetables with more than one policy attached to it, we can safely just
 			// flat the slices of policies; otherwise we would need to ensure that the policies at the same level are sorted
