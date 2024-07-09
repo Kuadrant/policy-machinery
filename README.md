@@ -4,9 +4,13 @@ Machinery for implementing [Gateway API](https://gateway-api.sigs.k8s.io/referen
 
 ## Features
 - `Topology` struct for modeling topologies of targetable network resources and corresponding attached policies
-- Examples of policy struct (`ColorPolicy`) and implemented merge strategies based on Kuadrant's Defaults & Overrides
-  ([RFC 0009](https://docs.kuadrant.io/0.8.0/architecture/rfcs/0009-defaults-and-overrides/)): atomic defaults, atomic
+- Examples of policy struct and implemented merge strategies:
+  - JSON Patch strategy
+  - Kuadrant's Defaults & Overrides
+  ([RFC 0009](https://docs.kuadrant.io/0.8.0/architecture/rfcs/0009-defaults-and-overrides/)) – atomic defaults, atomic
   overrides, merge policy rule defaults, merge policy rule overrides
+- Helper for building Gateway API-specific topologies
+- [Full example](./examples/kuadrant/README.md) of custom controller leveraging a Gateway API topology with 4 kinds of policy
 - Helpers for testing your own topologies of Gateway API resources and policies
 
 ## Use
@@ -132,3 +136,64 @@ topology := machinery.NewGatewayAPITopology(
 > `ExpandServicePorts()` to automatically expand Gateways, HTTPRoutes and Services so their inner sections
 > (listeners, route rules, service ports) are added as targetables to the topology. The links between objects
 > are then adjusted accordingly.
+
+### Custom controller for Gateway API Topologies
+
+The `github.com/kuadrant/policy-machinery/controller` package defines a simplified controller abstraction based on
+the [k8s.io/apimachinery](https://pkg.go.dev/k8s.io/apimachinery)'s informers pattern, that keeps an in-memory
+Gateway API topology up to date from events the client has subscribed to.
+
+Example:
+
+```go
+import (
+  "k8s.io/apimachinery/pkg/runtime/schema"
+  "k8s.io/client-go/dynamic"
+  "k8s.io/client-go/tools/clientcmd"
+
+  gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+  "./mypolicy"
+
+  "github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
+)
+
+func main() {
+	// load kubeconfig
+	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{})
+	config, err := kubeconfig.ClientConfig()
+	if err != nil {
+		log.Fatalf("Error loading kubeconfig: %v", err)
+	}
+
+	// create a client
+	client, err := dynamic.NewForConfig(config)
+	if err != nil {
+		log.Fatalf("Error creating client: %v", err)
+	}
+
+	// create a controller with a built-in gateway api topology
+	controller := controller.NewController(
+		controller.WithClient(client),
+		controller.WithInformer("gateway", controller.For[*gwapiv1.Gateway](gwapiv1.SchemeGroupVersion.WithResource("gateways"), metav1.NamespaceAll)),
+		controller.WithInformer("httproute", controller.For[*gwapiv1.HTTPRoute](gwapiv1.SchemeGroupVersion.WithResource("httproutes"), metav1.NamespaceAll)),
+		controller.WithInformer("mypolicy", controller.For[*mypolicy.MyPolicy](mypolicy.SchemeGroupVersion.WithResource("mypolicies"), metav1.NamespaceAll)),
+		controller.WithPolicyKinds(schema.GroupKind{Group: mypolicy.SchemeGroupVersion.Group, Kind: "MyPolicy"}),
+		controller.WithCallback(reconcile),
+	)
+
+	controller.Start()
+}
+
+func reconcile(eventType controller.EventType, oldObj, newObj controller.RuntimeObject, topology *machinery.Topology) {
+  // TODO
+}
+```
+
+Check out the full [Kuadrant example](./examples/kuadrant/README.md) of using the
+`github.com/kuadrant/policy-machinery/controller` package to implement a full custom controller that watches for
+Gateway API resources, as well as policy resources of 4 kinds (DNSPolicy, TLSPolicy, AuthPolicy and RateLimitPolicy.)
+
+Each event the controller subscribes to generates a call to a reconcile function that saves a graphical representation
+of the updated Gateway API topology to a file in the fle system, and computes all applicable effective policies for
+all 4 kinds of policies.
