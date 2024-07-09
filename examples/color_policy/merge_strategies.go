@@ -1,4 +1,4 @@
-package kuadrant
+package color_policy
 
 import (
 	"github.com/samber/lo"

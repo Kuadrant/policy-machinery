@@ -1,6 +1,6 @@
 //go:build integration
 
-package kuadrant
+package color_policy
 
 import (
 	"encoding/json"

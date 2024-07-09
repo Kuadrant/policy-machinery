@@ -1,6 +1,6 @@
 //go:build unit
 
-package kuadrant
+package color_policy
 
 import (
 	"testing"
