@@ -23,6 +23,10 @@ func UrlFromObject(obj Object) string {
 	return fmt.Sprintf("%s%s%s", strings.ToLower(obj.GroupVersionKind().GroupKind().String()), string(kindNameURLSeparator), name)
 }
 
+func AsObject[T Object](t T, _ int) Object {
+	return t
+}
+
 func namespacedName(namespace, name string) string {
 	return k8stypes.NamespacedName{Namespace: namespace, Name: name}.String()
 }

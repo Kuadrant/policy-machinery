@@ -313,3 +313,59 @@ func TestFruitTopology(t *testing.T) {
 		})
 	}
 }
+
+func TestTopologyWithGenericObjects(t *testing.T) {
+	objects := []*Info{
+		{Name: "info-1", Ref: "apple.example.test:apple-1"},
+		{Name: "info-2", Ref: "orange.example.test:my-namespace/orange-1"},
+	}
+	apples := []*Apple{{Name: "apple-1"}}
+	oranges := []*Orange{
+		{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1"}},
+		{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-1"}},
+	}
+
+	topology := NewTopology(
+		WithObjects(objects...),
+		WithTargetables(apples...),
+		WithTargetables(oranges...),
+		WithPolicies(
+			buildFruitPolicy(func(policy *FruitPolicy) {
+				policy.Name = "policy-1"
+				policy.Spec.TargetRef.Kind = "Apple"
+				policy.Spec.TargetRef.Name = "apple-1"
+			}),
+			buildFruitPolicy(func(policy *FruitPolicy) {
+				policy.Name = "policy-2"
+				policy.Spec.TargetRef.Kind = "Orange"
+				policy.Spec.TargetRef.Name = "orange-1"
+			}),
+		),
+		WithLinks(
+			LinkApplesToOranges(apples),
+			LinkInfoFrom("Apple", lo.Map(apples, AsObject[*Apple])),
+			LinkInfoFrom("Orange", lo.Map(oranges, AsObject[*Orange])),
+		),
+	)
+
+	expectedLinks := map[string][]string{
+		"apple-1": {"orange-1", "orange-2"},
+		"info-1":  {"apple-1"},
+		"info-2":  {"orange-1"},
+	}
+
+	links := make(map[string][]string)
+	for _, root := range topology.Roots() {
+		linksFromNode(topology, root, links)
+	}
+	for from, tos := range links {
+		expectedTos := expectedLinks[from]
+		slices.Sort(expectedTos)
+		slices.Sort(tos)
+		if !slices.Equal(expectedTos, tos) {
+			t.Errorf("expected links from %s to be %v, got %v", from, expectedTos, tos)
+		}
+	}
+
+	SaveToOutputDir(t, topology.ToDot(), "../tests/out", ".dot")
+}

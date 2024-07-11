@@ -12,7 +12,14 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
+const (
+	ObjectShape     = cgraph.EllipseShape
+	TargetableShape = cgraph.BoxShape
+	PolicyShape     = cgraph.NoteShape
+)
+
 type TopologyOptions struct {
+	Objects     []Object
 	Targetables []Targetable
 	Links       []LinkFunc
 	Policies    []Policy
@@ -21,10 +28,21 @@ type TopologyOptions struct {
 type LinkFunc struct {
 	From schema.GroupKind
 	To   schema.GroupKind
-	Func func(child Targetable) (parents []Targetable)
+	Func func(child Object) (parents []Object)
 }
 
 type TopologyOptionsFunc func(*TopologyOptions)
+
+// WithObjects adds generic objects to the options to initialize a new topology.
+// Do not use this function to add targetables or policies.
+// Use WithLinks to define the relationships between objects of any kind.
+func WithObjects[T Object](objects ...T) TopologyOptionsFunc {
+	return func(o *TopologyOptions) {
+		o.Objects = append(o.Objects, lo.Map(objects, func(object T, _ int) Object {
+			return object
+		})...)
+	}
+}
 
 // WithTargetables adds targetables to the options to initialize a new topology.
 func WithTargetables[T Targetable](targetables ...T) TopologyOptionsFunc {
@@ -78,16 +96,19 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 	gz := graphviz.New()
 	graph, _ := gz.Graph(graphviz.StrictDirected)
 
+	addObjectsToGraph(graph, o.Objects, ObjectShape)
 	addTargetablesToGraph(graph, targetables)
 
+	linkables := append(o.Objects, lo.Map(targetables, AsObject[Targetable])...)
+
 	for _, link := range o.Links {
-		children := lo.Filter(targetables, func(t Targetable, _ int) bool {
-			return t.GroupVersionKind().GroupKind() == link.To
+		children := lo.Filter(linkables, func(l Object, _ int) bool {
+			return l.GroupVersionKind().GroupKind() == link.To
 		})
 		for _, child := range children {
 			for _, parent := range link.Func(child) {
 				if parent != nil {
-					addTargetablesEdgeToGraph(graph, fmt.Sprintf("%s -> %s", link.From.Kind, link.To.Kind), parent, child)
+					addEdgeToGraph(graph, fmt.Sprintf("%s -> %s", link.From.Kind, link.To.Kind), parent, child)
 				}
 			}
 		}
@@ -241,11 +262,11 @@ func addObjectsToGraph[T Object](graph *cgraph.Graph, objects []T, shape cgraph.
 }
 
 func addTargetablesToGraph[T Targetable](graph *cgraph.Graph, targetables []T) {
-	addObjectsToGraph(graph, targetables, cgraph.BoxShape)
+	addObjectsToGraph(graph, targetables, TargetableShape)
 }
 
 func addPoliciesToGraph[T Policy](graph *cgraph.Graph, policies []T) {
-	for i, policyNode := range addObjectsToGraph(graph, policies, cgraph.EllipseShape) {
+	for i, policyNode := range addObjectsToGraph(graph, policies, PolicyShape) {
 		// Policy -> Target edges
 		for _, targetRef := range policies[i].GetTargetRefs() {
 			targetNode, _ := graph.Node(string(targetRef.GetURL()))
@@ -257,7 +278,7 @@ func addPoliciesToGraph[T Policy](graph *cgraph.Graph, policies []T) {
 	}
 }
 
-func addTargetablesEdgeToGraph(graph *cgraph.Graph, name string, parent, child Targetable) {
+func addEdgeToGraph(graph *cgraph.Graph, name string, parent, child Object) {
 	p, _ := graph.Node(string(parent.GetURL()))
 	c, _ := graph.Node(string(child.GetURL()))
 	if p != nil && c != nil {

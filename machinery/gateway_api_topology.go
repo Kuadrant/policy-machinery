@@ -16,6 +16,8 @@ type GatewayAPITopologyOptions struct {
 	HTTPRoutes     []*HTTPRoute
 	Services       []*Service
 	Policies       []Policy
+	Objects        []Object
+	Links          []LinkFunc
 
 	ExpandGatewayListeners bool
 	ExpandHTTPRouteRules   bool
@@ -67,6 +69,22 @@ func WithGatewayAPITopologyPolicies(policies ...Policy) GatewayAPITopologyOption
 	}
 }
 
+// WithGatewayAPITopologyObjects adds objects to the options to initialize a new Gateway API topology.
+// Do not use this function to add targetables or policies.
+// Use WithGatewayAPITopologyLinks to define the relationships between objects of any kind.
+func WithGatewayAPITopologyObjects(objects ...Object) GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.Objects = append(o.Objects, objects...)
+	}
+}
+
+// WithLinks adds link functions to the options to initialize a new Gateway API topology.
+func WithGatewayAPITopologyLinks(links ...LinkFunc) GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.Links = append(o.Links, links...)
+	}
+}
+
 // ExpandGatewayListeners adds targetable gateway listeners to the options to initialize a new Gateway API topology.
 func ExpandGatewayListeners() GatewayAPITopologyOptionsFunc {
 	return func(o *GatewayAPITopologyOptions) {
@@ -105,11 +123,13 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 	}
 
 	opts := []TopologyOptionsFunc{
+		WithObjects(o.Objects...),
 		WithPolicies(o.Policies...),
 		WithTargetables(o.GatewayClasses...),
 		WithTargetables(o.Gateways...),
 		WithTargetables(o.HTTPRoutes...),
 		WithTargetables(o.Services...),
+		WithLinks(o.Links...),
 		WithLinks(LinkGatewayClassToGatewayFunc(o.GatewayClasses)), // GatewayClass -> Gateway
 	}
 
@@ -194,13 +214,13 @@ func LinkGatewayClassToGatewayFunc(gatewayClasses []*GatewayClass) LinkFunc {
 	return LinkFunc{
 		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"},
 		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			gateway := child.(*Gateway)
 			gatewayClass, ok := lo.Find(gatewayClasses, func(gc *GatewayClass) bool {
 				return gc.Name == string(gateway.Spec.GatewayClassName)
 			})
 			if ok {
-				return []Targetable{gatewayClass}
+				return []Object{gatewayClass}
 			}
 			return nil
 		},
@@ -213,9 +233,9 @@ func LinkGatewayToHTTPRouteFunc(gateways []*Gateway) LinkFunc {
 	return LinkFunc{
 		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
 		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			httpRoute := child.(*HTTPRoute)
-			return lo.FilterMap(httpRoute.Spec.ParentRefs, func(parentRef gwapiv1.ParentReference, _ int) (Targetable, bool) {
+			return lo.FilterMap(httpRoute.Spec.ParentRefs, func(parentRef gwapiv1.ParentReference, _ int) (Object, bool) {
 				parentRefGroup := ptr.Deref(parentRef.Group, gwapiv1.Group(gwapiv1.GroupName))
 				parentRefKind := ptr.Deref(parentRef.Kind, gwapiv1.Kind("Gateway"))
 				if parentRefGroup != gwapiv1.GroupName || parentRefKind != "Gateway" {
@@ -236,9 +256,9 @@ func LinkGatewayToListenerFunc() LinkFunc {
 	return LinkFunc{
 		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
 		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			listener := child.(*Listener)
-			return []Targetable{listener.Gateway}
+			return []Object{listener.Gateway}
 		},
 	}
 }
@@ -251,9 +271,9 @@ func LinkListenerToHTTPRouteFunc(gateways []*Gateway, listeners []*Listener) Lin
 	return LinkFunc{
 		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
 		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			httpRoute := child.(*HTTPRoute)
-			return lo.FlatMap(httpRoute.Spec.ParentRefs, func(parentRef gwapiv1.ParentReference, _ int) []Targetable {
+			return lo.FlatMap(httpRoute.Spec.ParentRefs, func(parentRef gwapiv1.ParentReference, _ int) []Object {
 				parentRefGroup := ptr.Deref(parentRef.Group, gwapiv1.Group(gwapiv1.GroupName))
 				parentRefKind := ptr.Deref(parentRef.Kind, gwapiv1.Kind("Gateway"))
 				if parentRefGroup != gwapiv1.GroupName || parentRefKind != "Gateway" {
@@ -273,9 +293,9 @@ func LinkListenerToHTTPRouteFunc(gateways []*Gateway, listeners []*Listener) Lin
 					if !ok {
 						return nil
 					}
-					return []Targetable{listener}
+					return []Object{listener}
 				}
-				return lo.FilterMap(listeners, func(l *Listener, _ int) (Targetable, bool) {
+				return lo.FilterMap(listeners, func(l *Listener, _ int) (Object, bool) {
 					return l, l.Gateway.GetURL() == gateway.GetURL()
 				})
 			})
@@ -289,9 +309,9 @@ func LinkHTTPRouteToHTTPRouteRuleFunc() LinkFunc {
 	return LinkFunc{
 		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
 		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			httpRouteRule := child.(*HTTPRouteRule)
-			return []Targetable{httpRouteRule.HTTPRoute}
+			return []Object{httpRouteRule.HTTPRoute}
 		},
 	}
 }
@@ -303,9 +323,9 @@ func LinkHTTPRouteToServiceFunc(httpRoutes []*HTTPRoute, strict bool) LinkFunc {
 	return LinkFunc{
 		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
 		To:   schema.GroupKind{Kind: "Service"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			service := child.(*Service)
-			return lo.FilterMap(httpRoutes, func(httpRoute *HTTPRoute, _ int) (Targetable, bool) {
+			return lo.FilterMap(httpRoutes, func(httpRoute *HTTPRoute, _ int) (Object, bool) {
 				return httpRoute, lo.ContainsBy(httpRoute.Spec.Rules, func(rule gwapiv1.HTTPRouteRule) bool {
 					backendRefs := lo.FilterMap(rule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) (gwapiv1.BackendRef, bool) {
 						return backendRef.BackendRef, !strict || backendRef.Port == nil
@@ -324,9 +344,9 @@ func LinkHTTPRouteToServicePortFunc(httpRoutes []*HTTPRoute) LinkFunc {
 	return LinkFunc{
 		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
 		To:   schema.GroupKind{Kind: "ServicePort"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
-			return lo.FilterMap(httpRoutes, func(httpRoute *HTTPRoute, _ int) (Targetable, bool) {
+			return lo.FilterMap(httpRoutes, func(httpRoute *HTTPRoute, _ int) (Object, bool) {
 				return httpRoute, lo.ContainsBy(httpRoute.Spec.Rules, func(rule gwapiv1.HTTPRouteRule) bool {
 					backendRefs := lo.FilterMap(rule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) (gwapiv1.BackendRef, bool) {
 						return backendRef.BackendRef, backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
@@ -345,9 +365,9 @@ func LinkHTTPRouteRuleToServiceFunc(httpRouteRules []*HTTPRouteRule, strict bool
 	return LinkFunc{
 		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
 		To:   schema.GroupKind{Kind: "Service"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			service := child.(*Service)
-			return lo.FilterMap(httpRouteRules, func(httpRouteRule *HTTPRouteRule, _ int) (Targetable, bool) {
+			return lo.FilterMap(httpRouteRules, func(httpRouteRule *HTTPRouteRule, _ int) (Object, bool) {
 				backendRefs := lo.FilterMap(httpRouteRule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) (gwapiv1.BackendRef, bool) {
 					return backendRef.BackendRef, !strict || backendRef.Port == nil
 				})
@@ -364,9 +384,9 @@ func LinkHTTPRouteRuleToServicePortFunc(httpRouteRules []*HTTPRouteRule) LinkFun
 	return LinkFunc{
 		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
 		To:   schema.GroupKind{Kind: "ServicePort"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
-			return lo.FilterMap(httpRouteRules, func(httpRouteRule *HTTPRouteRule, _ int) (Targetable, bool) {
+			return lo.FilterMap(httpRouteRules, func(httpRouteRule *HTTPRouteRule, _ int) (Object, bool) {
 				backendRefs := lo.FilterMap(httpRouteRule.BackendRefs, func(backendRef gwapiv1.HTTPBackendRef, _ int) (gwapiv1.BackendRef, bool) {
 					return backendRef.BackendRef, backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
 				})
@@ -382,9 +402,9 @@ func LinkServiceToServicePortFunc() LinkFunc {
 	return LinkFunc{
 		From: schema.GroupKind{Kind: "Service"},
 		To:   schema.GroupKind{Kind: "ServicePort"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
-			return []Targetable{servicePort.Service}
+			return []Object{servicePort.Service}
 		},
 	}
 }
