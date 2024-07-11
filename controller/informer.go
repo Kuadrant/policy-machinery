@@ -25,16 +25,51 @@ func (t *EventType) String() string {
 	return [...]string{"create", "update", "delete"}[*t]
 }
 
+type InformerBuilderOptions struct {
+	LabelSelector string
+	FieldSelector string
+}
+
+type InformerBuilderOptionsFunc func(*InformerBuilderOptions)
+
+func FilterResourcesByLabel(selector string) InformerBuilderOptionsFunc {
+	return func(o *InformerBuilderOptions) {
+		o.LabelSelector = selector
+	}
+}
+
+func FilterResourcesByField(selector string) InformerBuilderOptionsFunc {
+	return func(o *InformerBuilderOptions) {
+		o.FieldSelector = selector
+	}
+}
+
 type InformerBuilder func(controller *Controller) cache.SharedInformer
 
-func For[T RuntimeObject](resource schema.GroupVersionResource, namespace string) InformerBuilder {
+func For[T RuntimeObject](resource schema.GroupVersionResource, namespace string, options ...InformerBuilderOptionsFunc) InformerBuilder {
+	o := &InformerBuilderOptions{}
+	for _, f := range options {
+		f(o)
+	}
 	return func(controller *Controller) cache.SharedInformer {
 		informer := cache.NewSharedInformer(
 			&cache.ListWatch{
 				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+					if o.LabelSelector != "" {
+						options.LabelSelector = o.LabelSelector
+					}
+					if o.FieldSelector != "" {
+						options.FieldSelector = o.FieldSelector
+					}
 					return controller.client.Resource(resource).Namespace(namespace).List(context.Background(), options)
 				},
 				WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+					if o.LabelSelector != "" {
+						options.LabelSelector = o.LabelSelector
+					}
+					if o.FieldSelector != "" {
+						options.FieldSelector = o.FieldSelector
+					}
 					return controller.client.Resource(resource).Namespace(namespace).Watch(context.Background(), options)
 				},
 			},

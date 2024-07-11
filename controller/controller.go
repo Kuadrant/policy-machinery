@@ -12,11 +12,15 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
+type RuntimeLinkFunc func(objs Store) machinery.LinkFunc
+
 type ControllerOptions struct {
 	client      *dynamic.DynamicClient
 	informers   map[string]InformerBuilder
 	callback    CallbackFunc
 	policyKinds []schema.GroupKind
+	objectKinds []schema.GroupKind
+	objectLinks []RuntimeLinkFunc
 }
 
 type ControllerOptionFunc func(*ControllerOptions)
@@ -46,6 +50,18 @@ func WithPolicyKinds(policyKinds ...schema.GroupKind) ControllerOptionFunc {
 	}
 }
 
+func WithObjectKinds(objectKinds ...schema.GroupKind) ControllerOptionFunc {
+	return func(o *ControllerOptions) {
+		o.objectKinds = objectKinds
+	}
+}
+
+func WithObjectLinks(objectLinks ...RuntimeLinkFunc) ControllerOptionFunc {
+	return func(o *ControllerOptions) {
+		o.objectLinks = objectLinks
+	}
+}
+
 func NewController(f ...ControllerOptionFunc) *Controller {
 	opts := &ControllerOptions{
 		informers: map[string]InformerBuilder{},
@@ -59,7 +75,7 @@ func NewController(f ...ControllerOptionFunc) *Controller {
 	controller := &Controller{
 		client:    opts.client,
 		cache:     newCacheStore(),
-		topology:  NewGatewayAPITopology(opts.policyKinds...),
+		topology:  NewGatewayAPITopology(opts.policyKinds, opts.objectKinds, opts.objectLinks),
 		informers: map[string]cache.SharedInformer{},
 		callback:  opts.callback,
 	}

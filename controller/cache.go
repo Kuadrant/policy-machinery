@@ -13,24 +13,24 @@ type RuntimeObject interface {
 	metav1.Object
 }
 
-type cacheMap map[schema.GroupKind]map[string]RuntimeObject
+type Store map[schema.GroupKind]map[string]RuntimeObject
 
 type cacheStore struct {
 	mu    sync.RWMutex
-	store cacheMap
+	store Store
 }
 
 func newCacheStore() *cacheStore {
 	return &cacheStore{
-		store: make(cacheMap),
+		store: make(Store),
 	}
 }
 
-func (c *cacheStore) List() cacheMap {
+func (c *cacheStore) List() Store {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	cm := make(cacheMap, len(c.store))
+	cm := make(Store, len(c.store))
 	for gk, objs := range c.store {
 		if _, ok := cm[gk]; !ok {
 			cm[gk] = map[string]RuntimeObject{}
