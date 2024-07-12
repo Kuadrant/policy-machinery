@@ -12,12 +12,6 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
-const (
-	ObjectShape     = cgraph.EllipseShape
-	TargetableShape = cgraph.BoxShape
-	PolicyShape     = cgraph.NoteShape
-)
-
 type TopologyOptions struct {
 	Objects     []Object
 	Targetables []Targetable
@@ -96,7 +90,7 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 	gz := graphviz.New()
 	graph, _ := gz.Graph(graphviz.StrictDirected)
 
-	addObjectsToGraph(graph, o.Objects, ObjectShape)
+	addObjectsToGraph(graph, o.Objects)
 	addTargetablesToGraph(graph, targetables)
 
 	linkables := append(o.Objects, lo.Map(targetables, AsObject[Targetable])...)
@@ -251,22 +245,28 @@ func associateURL[T Object](obj T) (string, T) {
 	return obj.GetURL(), obj
 }
 
-func addObjectsToGraph[T Object](graph *cgraph.Graph, objects []T, shape cgraph.Shape) []*cgraph.Node {
+func addObjectsToGraph[T Object](graph *cgraph.Graph, objects []T) []*cgraph.Node {
 	return lo.Map(objects, func(object T, _ int) *cgraph.Node {
 		name := strings.TrimPrefix(namespacedName(object.GetNamespace(), object.GetName()), string(k8stypes.Separator))
 		n, _ := graph.CreateNode(string(object.GetURL()))
 		n.SetLabel(fmt.Sprintf("%s\\n%s", object.GroupVersionKind().Kind, name))
-		n.SetShape(shape)
+		n.SetShape(cgraph.EllipseShape)
 		return n
 	})
 }
 
 func addTargetablesToGraph[T Targetable](graph *cgraph.Graph, targetables []T) {
-	addObjectsToGraph(graph, targetables, TargetableShape)
+	for _, node := range addObjectsToGraph(graph, targetables) {
+		node.SetShape(cgraph.BoxShape)
+		node.SetStyle(cgraph.FilledNodeStyle)
+		node.SetFillColor("#e5e5e5")
+	}
 }
 
 func addPoliciesToGraph[T Policy](graph *cgraph.Graph, policies []T) {
-	for i, policyNode := range addObjectsToGraph(graph, policies, PolicyShape) {
+	for i, policyNode := range addObjectsToGraph(graph, policies) {
+		policyNode.SetShape(cgraph.NoteShape)
+		policyNode.SetStyle(cgraph.DashedNodeStyle)
 		// Policy -> Target edges
 		for _, targetRef := range policies[i].GetTargetRefs() {
 			targetNode, _ := graph.Node(string(targetRef.GetURL()))
