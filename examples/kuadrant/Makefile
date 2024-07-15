@@ -49,6 +49,23 @@ $(CONTROLLER_GEN):
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN)  ## Download controller-gen locally if necessary.
 
+HELM_VERSION = v3.15.0
+HELM = $(PROJECT_PATH)/bin/helm
+$(HELM):
+	@{ \
+	set -e ;\
+	mkdir -p $(dir $(HELM)) ;\
+	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
+	curl -sL -o helm.tar.gz https://get.helm.sh/helm-$(HELM_VERSION)-$${OS}-$${ARCH}.tar.gz ;\
+	tar -zxvf helm.tar.gz ;\
+	mv $${OS}-$${ARCH}/helm $(HELM) ;\
+	chmod +x $(HELM) ;\
+	rm -rf $${OS}-$${ARCH} helm.tar.gz ;\
+	}
+
+.PHONY: helm
+helm: $(HELM) ## Download helm locally if necessary.
+
 ##@ Development
 
 .PHONY: generate
@@ -67,3 +84,14 @@ install: manifests ## Install CRDs into a cluster.
 .PHONY: run
 run: generate ## Run the controller.
 	go run *.go
+
+##@ Testing
+
+.PHONY: install-envoy-gateway
+install-envoy-gateway: helm ## Install Envoy Gateway.
+	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version v1.0.2 -n envoy-gateway-system --create-namespace
+	kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
+
+.PHONY: install-kuadrant
+install-kuadrant: ## Install Kuadrant CRDs.
+	kubectl apply -f config/crds
