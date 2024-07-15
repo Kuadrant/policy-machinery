@@ -1,10 +1,10 @@
 # Kuadrant Controller
 
-Practical example of using the [Policy Machinery](https://github.com/kuadrant/policy-machinery) to implment a custom controller.
+Practical example of using the [Policy Machinery](https://github.com/kuadrant/policy-machinery) to implement a custom controller.
 
 <br/>
 
-The examples defines 4 kinds of policies:
+The example defines 4 kinds of policies:
 - **DNSPolicy:** can target Gateways and Listeners
 - **TLSPolicy:** can target Gateways and Listeners
 - **AuthPolicy:** can target Gateways, Listeners, HTTPRoutes, and HTTPRouteRules; support for Defaults & Overrides and 2 merge strategies (`atomic` or `merge`)
@@ -35,7 +35,7 @@ Install the CRDs:
 make install
 ```
 
-Run the operator (holds the shell):
+Run the controller (holds the shell):
 
 ```sh
 make run
@@ -43,7 +43,7 @@ make run
 
 ### Create the resources
 
-> **Note:** After each step below, check out the state of the topology (`topology.dot`) and the operator logs for the new effective policies in place.
+> **Note:** After each step below, check out the state of the topology (`topology.dot`) and the controller logs for the new effective policies in place.
 
 1. Create a Gateway:
 

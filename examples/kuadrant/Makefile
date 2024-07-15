@@ -83,7 +83,11 @@ install: manifests ## Install CRDs into a cluster.
 
 .PHONY: run
 run: generate ## Run the controller.
+ifneq ($(PROVIDER),)
+	go run *.go --gateway-provider $(PROVIDER)
+else
 	go run *.go
+endif
 
 ##@ Testing
 
