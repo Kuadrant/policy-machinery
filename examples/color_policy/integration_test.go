@@ -151,11 +151,13 @@ func TestKuadrantMergeBasedOnTopology(t *testing.T) {
 
 	machinery.SaveToOutputDir(t, topology.ToDot(), "../../tests/out", ".dot")
 
-	gateways := topology.Targetables(func(o machinery.Object) bool {
+	targetables := topology.Targetables()
+
+	gateways := targetables.Items(func(o machinery.Object) bool {
 		_, ok := o.(*machinery.Gateway)
 		return ok
 	})
-	httpRouteRules := topology.Targetables(func(o machinery.Object) bool {
+	httpRouteRules := targetables.Items(func(o machinery.Object) bool {
 		_, ok := o.(*machinery.HTTPRouteRule)
 		return ok
 	})
@@ -163,7 +165,7 @@ func TestKuadrantMergeBasedOnTopology(t *testing.T) {
 	effectivePoliciesByPath := make(map[string]ColorPolicy)
 
 	for _, httpRouteRule := range httpRouteRules {
-		for _, path := range topology.Paths(gateways[0], httpRouteRule) {
+		for _, path := range targetables.Paths(gateways[0], httpRouteRule) {
 			// Gather all policies in the path sorted from the least specific (gateway) to the most specific (httprouterule)
 			// Since in this example there are no targetables with more than one policy attached to it, we can safely just
 			// flat the slices of policies; otherwise we would need to ensure that the policies at the same level are sorted

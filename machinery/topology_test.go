@@ -38,7 +38,7 @@ func TestTopologyRoots(t *testing.T) {
 			}),
 		),
 	)
-	roots := topology.Roots()
+	roots := topology.Targetables().Roots()
 	if expected := len(apples); len(roots) != expected {
 		t.Errorf("expected %d roots, got %d", expected, len(roots))
 	}
@@ -71,7 +71,7 @@ func TestTopologyParents(t *testing.T) {
 		),
 	)
 	// orange-1
-	parents := topology.Parents(orange1)
+	parents := topology.Targetables().Parents(orange1)
 	if expected := 2; len(parents) != expected {
 		t.Errorf("expected %d parent, got %d", expected, len(parents))
 	}
@@ -83,7 +83,7 @@ func TestTopologyParents(t *testing.T) {
 		t.Errorf("expected parent %s not found", apple2.GetURL())
 	}
 	// orange-2
-	parents = topology.Parents(orange2)
+	parents = topology.Targetables().Parents(orange2)
 	if expected := 1; len(parents) != expected {
 		t.Errorf("expected %d parent, got %d", expected, len(parents))
 	}
@@ -114,7 +114,7 @@ func TestTopologyChildren(t *testing.T) {
 		),
 	)
 	// apple-1
-	children := topology.Children(apple1)
+	children := topology.Targetables().Children(apple1)
 	if expected := 1; len(children) != expected {
 		t.Errorf("expected %d child, got %d", expected, len(children))
 	}
@@ -123,7 +123,7 @@ func TestTopologyChildren(t *testing.T) {
 		t.Errorf("expected child %s not found", orange1.GetURL())
 	}
 	// apple-2
-	children = topology.Children(apple2)
+	children = topology.Targetables().Children(apple2)
 	if expected := 2; len(children) != expected {
 		t.Errorf("expected %d child, got %d", expected, len(children))
 	}
@@ -203,7 +203,7 @@ func TestTopologyPaths(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			paths := topology.Paths(tc.from, tc.to)
+			paths := topology.Targetables().Paths(tc.from, tc.to)
 			if len(paths) != len(tc.expectedPaths) {
 				t.Errorf("expected %d paths, got %d", len(tc.expectedPaths), len(paths))
 			}
@@ -297,8 +297,8 @@ func TestFruitTopology(t *testing.T) {
 			)
 
 			links := make(map[string][]string)
-			for _, root := range topology.Roots() {
-				linksFromNode(topology, root, links)
+			for _, root := range topology.Targetables().Roots() {
+				linksFromTargetable(topology, root, links)
 			}
 			for from, tos := range links {
 				expectedTos := tc.expectedLinks[from]
@@ -355,8 +355,8 @@ func TestTopologyWithGenericObjects(t *testing.T) {
 	}
 
 	links := make(map[string][]string)
-	for _, root := range topology.Roots() {
-		linksFromNode(topology, root, links)
+	for _, root := range topology.Targetables().Roots() {
+		linksFromTargetable(topology, root, links)
 	}
 	for from, tos := range links {
 		expectedTos := expectedLinks[from]

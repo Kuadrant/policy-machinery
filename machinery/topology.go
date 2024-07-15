@@ -13,10 +13,10 @@ import (
 )
 
 type TopologyOptions struct {
-	Objects     []Object
 	Targetables []Targetable
-	Links       []LinkFunc
 	Policies    []Policy
+	Objects     []Object
+	Links       []LinkFunc
 }
 
 type LinkFunc struct {
@@ -26,6 +26,24 @@ type LinkFunc struct {
 }
 
 type TopologyOptionsFunc func(*TopologyOptions)
+
+// WithTargetables adds targetables to the options to initialize a new topology.
+func WithTargetables[T Targetable](targetables ...T) TopologyOptionsFunc {
+	return func(o *TopologyOptions) {
+		o.Targetables = append(o.Targetables, lo.Map(targetables, func(targetable T, _ int) Targetable {
+			return targetable
+		})...)
+	}
+}
+
+// WithPolicies adds policies to the options to initialize a new topology.
+func WithPolicies[T Policy](policies ...T) TopologyOptionsFunc {
+	return func(o *TopologyOptions) {
+		o.Policies = append(o.Policies, lo.Map(policies, func(policy T, _ int) Policy {
+			return policy
+		})...)
+	}
+}
 
 // WithObjects adds generic objects to the options to initialize a new topology.
 // Do not use this function to add targetables or policies.
@@ -38,15 +56,6 @@ func WithObjects[T Object](objects ...T) TopologyOptionsFunc {
 	}
 }
 
-// WithTargetables adds targetables to the options to initialize a new topology.
-func WithTargetables[T Targetable](targetables ...T) TopologyOptionsFunc {
-	return func(o *TopologyOptions) {
-		o.Targetables = append(o.Targetables, lo.Map(targetables, func(targetable T, _ int) Targetable {
-			return targetable
-		})...)
-	}
-}
-
 // WithLinks adds link functions to the options to initialize a new topology.
 func WithLinks(links ...LinkFunc) TopologyOptionsFunc {
 	return func(o *TopologyOptions) {
@@ -54,16 +63,10 @@ func WithLinks(links ...LinkFunc) TopologyOptionsFunc {
 	}
 }
 
-// WithPolicies adds policies to the options to initialize a new topology.
-func WithPolicies(policies ...Policy) TopologyOptionsFunc {
-	return func(o *TopologyOptions) {
-		o.Policies = append(o.Policies, policies...)
-	}
-}
-
-// NewTopology returns a network of targetable resources and attached policies.
+// NewTopology returns a network of targetable resources, attached policies, and other kinds of objects.
 // The topology is represented as a directed acyclic graph (DAG) with the structure given by link functions.
-// The targetables, policies and link functions are provided as options.
+// The links between policies to targteables are inferred from the policies' target references.
+// The targetables, policies, objects and link functions are provided as options.
 func NewTopology(options ...TopologyOptionsFunc) *Topology {
 	o := &TopologyOptions{}
 	for _, f := range options {
@@ -94,6 +97,7 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 	addTargetablesToGraph(graph, targetables)
 
 	linkables := append(o.Objects, lo.Map(targetables, AsObject[Targetable])...)
+	linkables = append(linkables, lo.Map(policies, AsObject[Policy])...)
 
 	for _, link := range o.Links {
 		children := lo.Filter(linkables, func(l Object, _ int) bool {
@@ -112,6 +116,7 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 
 	return &Topology{
 		graph:       graph,
+		objects:     lo.SliceToMap(o.Objects, associateURL[Object]),
 		targetables: lo.SliceToMap(targetables, associateURL[Targetable]),
 		policies:    lo.SliceToMap(policies, associateURL[Policy]),
 	}
@@ -122,96 +127,34 @@ type Topology struct {
 	graph       *cgraph.Graph
 	targetables map[string]Targetable
 	policies    map[string]Policy
+	objects     map[string]Object
 }
 
-type FilterFunc func(Object) bool
-
-// Targetables returns all targetable nodes of a given kind in the topology.
-func (t *Topology) Targetables(filters ...FilterFunc) []Targetable {
-	return lo.Filter(lo.Values(t.targetables), func(targetable Targetable, _ int) bool {
-		o := targetable.(Object)
-		for _, f := range filters {
-			if !f(o) {
-				return false
-			}
-		}
-		return true
-	})
-}
-
-// Policies returns all policies of a given kind in the topology.
-func (t *Topology) Policies(filters ...FilterFunc) []Policy {
-	return lo.Filter(lo.Values(t.policies), func(policy Policy, _ int) bool {
-		o := policy.(Object)
-		for _, f := range filters {
-			if !f(o) {
-				return false
-			}
-		}
-		return true
-	})
-}
-
-// Roots returns all targetables that have no parents in the topology.
-func (t *Topology) Roots() []Targetable {
-	return lo.Filter(lo.Values(t.targetables), func(targetable Targetable, _ int) bool {
-		return len(t.Parents(targetable)) == 0
-	})
-}
-
-// Parents returns all parents of a given targetable in the topology.
-func (t *Topology) Parents(targetable Targetable) []Targetable {
-	var parents []Targetable
-	n, err := t.graph.Node(targetable.GetURL())
-	if err != nil {
-		return nil
+// Targetables returns all targetable nodes in the topology.
+// The list can be filtered by providing one or more filter functions.
+func (t *Topology) Targetables() *collection[Targetable] {
+	return &collection[Targetable]{
+		topology: t,
+		items:    t.targetables,
 	}
-	edge := t.graph.FirstIn(n)
-	for {
-		if edge == nil {
-			break
-		}
-		_, ok := t.targetables[edge.Node().Name()]
-		if ok {
-			parents = append(parents, t.targetables[edge.Node().Name()])
-		}
-		edge = t.graph.NextIn(edge)
-	}
-	return parents
 }
 
-// Children returns all children of a given targetable in the topology.
-func (t *Topology) Children(targetable Targetable) []Targetable {
-	var children []Targetable
-	n, err := t.graph.Node(targetable.GetURL())
-	if err != nil {
-		return nil
+// Policies returns all policies in the topology.
+// The list can be filtered by providing one or more filter functions.
+func (t *Topology) Policies() *collection[Policy] {
+	return &collection[Policy]{
+		topology: t,
+		items:    t.policies,
 	}
-	edge := t.graph.FirstOut(n)
-	for {
-		if edge == nil {
-			break
-		}
-		_, ok := t.targetables[edge.Node().Name()]
-		if ok {
-			children = append(children, t.targetables[edge.Node().Name()])
-		}
-		edge = t.graph.NextOut(edge)
-	}
-	return children
 }
 
-// Paths returns all paths from a source targetable to a destination targetable in the topology.
-// The order of the elements in the inner slices represents a path from the source to the destination.
-func (t *Topology) Paths(from, to Targetable) [][]Targetable {
-	if from == nil || to == nil {
-		return nil
+// Objects returns all non-targetable, non-policy object nodes in the topology.
+// The list can be filtered by providing one or more filter functions.
+func (t *Topology) Objects() *collection[Object] {
+	return &collection[Object]{
+		topology: t,
+		items:    t.objects,
 	}
-	var paths [][]Targetable
-	var path []Targetable
-	visited := make(map[string]bool)
-	t.dfs(from, to, path, &paths, visited)
-	return paths
 }
 
 func (t *Topology) ToDot() *bytes.Buffer {
@@ -219,30 +162,6 @@ func (t *Topology) ToDot() *bytes.Buffer {
 	var buf bytes.Buffer
 	gz.Render(t.graph, "dot", &buf)
 	return &buf
-}
-
-func (t *Topology) dfs(current, to Targetable, path []Targetable, paths *[][]Targetable, visited map[string]bool) {
-	currentURL := current.GetURL()
-	if visited[currentURL] {
-		return
-	}
-	path = append(path, t.targetables[currentURL])
-	visited[currentURL] = true
-	if currentURL == to.GetURL() {
-		pathCopy := make([]Targetable, len(path))
-		copy(pathCopy, path)
-		*paths = append(*paths, pathCopy)
-	} else {
-		for _, child := range t.Children(current) {
-			t.dfs(child, to, path, paths, visited)
-		}
-	}
-	path = path[:len(path)-1]
-	visited[currentURL] = false
-}
-
-func associateURL[T Object](obj T) (string, T) {
-	return obj.GetURL(), obj
 }
 
 func addObjectsToGraph[T Object](graph *cgraph.Graph, objects []T) []*cgraph.Node {
@@ -284,4 +203,138 @@ func addEdgeToGraph(graph *cgraph.Graph, name string, parent, child Object) {
 	if p != nil && c != nil {
 		graph.CreateEdge(name, p, c)
 	}
+}
+
+func associateURL[T Object](obj T) (string, T) {
+	return obj.GetURL(), obj
+}
+
+type collection[T Object] struct {
+	topology *Topology
+	items    map[string]T
+}
+
+type FilterFunc func(Object) bool
+
+// Targetables returns all targetable nodes in the collection.
+// The list can be filtered by providing one or more filter functions.
+func (c *collection[T]) Targetables() *collection[Targetable] {
+	return &collection[Targetable]{
+		topology: c.topology,
+		items:    c.topology.targetables,
+	}
+}
+
+// Policies returns all policies in the collection.
+// The list can be filtered by providing one or more filter functions.
+func (c *collection[T]) Policies() *collection[Policy] {
+	return &collection[Policy]{
+		topology: c.topology,
+		items:    c.topology.policies,
+	}
+}
+
+// Objects returns all non-targetable, non-policy object nodes in the collection.
+// The list can be filtered by providing one or more filter functions.
+func (c *collection[T]) Objects() *collection[Object] {
+	return &collection[Object]{
+		topology: c.topology,
+		items:    c.topology.objects,
+	}
+}
+
+// List returns all items nodes in the collection.
+// The list can be filtered by providing one or more filter functions.
+func (c *collection[T]) Items(filters ...FilterFunc) []T {
+	return lo.Filter(lo.Values(c.items), func(item T, _ int) bool {
+		for _, f := range filters {
+			if !f(item) {
+				return false
+			}
+		}
+		return true
+	})
+}
+
+// Roots returns all items that have no parents in the collection.
+func (c *collection[T]) Roots() []T {
+	return lo.Filter(lo.Values(c.items), func(item T, _ int) bool {
+		return len(c.Parents(item)) == 0
+	})
+}
+
+// Parents returns all parents of a given item in the collection.
+func (c *collection[T]) Parents(item T) []T {
+	var parents []T
+	n, err := c.topology.graph.Node(item.GetURL())
+	if err != nil {
+		return nil
+	}
+	edge := c.topology.graph.FirstIn(n)
+	for {
+		if edge == nil {
+			break
+		}
+		_, ok := c.items[edge.Node().Name()]
+		if ok {
+			parents = append(parents, c.items[edge.Node().Name()])
+		}
+		edge = c.topology.graph.NextIn(edge)
+	}
+	return parents
+}
+
+// Children returns all children of a given item in the collection.
+func (c *collection[T]) Children(item T) []T {
+	var children []T
+	n, err := c.topology.graph.Node(item.GetURL())
+	if err != nil {
+		return nil
+	}
+	edge := c.topology.graph.FirstOut(n)
+	for {
+		if edge == nil {
+			break
+		}
+		_, ok := c.items[edge.Node().Name()]
+		if ok {
+			children = append(children, c.items[edge.Node().Name()])
+		}
+		edge = c.topology.graph.NextOut(edge)
+	}
+	return children
+}
+
+// Paths returns all paths from a source item to a destination item in the collection.
+// The order of the elements in the inner slices represents a path from the source to the destination.
+func (c *collection[T]) Paths(from, to T) [][]T {
+	if &from == nil || &to == nil {
+		return nil
+	}
+	var paths [][]T
+	var path []T
+	visited := make(map[string]bool)
+	c.dfs(from, to, path, &paths, visited)
+	return paths
+}
+
+// dfs performs a depth-first search to find all paths from a source item to a destination item in the collection.
+func (c *collection[T]) dfs(current, to T, path []T, paths *[][]T, visited map[string]bool) {
+	currentURL := current.GetURL()
+	if visited[currentURL] {
+		return
+	}
+	path = append(path, c.items[currentURL])
+	visited[currentURL] = true
+	if currentURL == to.GetURL() {
+		pathCopy := make([]T, len(path))
+		copy(pathCopy, path)
+		*paths = append(*paths, pathCopy)
+	} else {
+		for _, child := range c.Children(current) {
+			c.dfs(child, to, path, paths, visited)
+		}
+	}
+	path = path[:len(path)-1]
+	visited[currentURL] = false
 }

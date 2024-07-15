@@ -28,14 +28,14 @@ func SaveToOutputDir(t *testing.T, out *bytes.Buffer, outDir, ext string) {
 	}
 }
 
-func linksFromNode(topology *Topology, node Targetable, edges map[string][]string) {
-	if _, ok := edges[node.GetName()]; ok {
+func linksFromTargetable(topology *Topology, targetable Targetable, edges map[string][]string) {
+	if _, ok := edges[targetable.GetName()]; ok {
 		return
 	}
-	children := topology.Children(node)
-	edges[node.GetName()] = lo.Map(children, func(child Targetable, _ int) string { return child.GetName() })
+	children := topology.Targetables().Children(targetable)
+	edges[targetable.GetName()] = lo.Map(children, func(child Targetable, _ int) string { return child.GetName() })
 	for _, child := range children {
-		linksFromNode(topology, child, edges)
+		linksFromTargetable(topology, child, edges)
 	}
 }
 

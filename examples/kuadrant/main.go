@@ -80,18 +80,20 @@ func reconcile(eventType controller.EventType, oldObj, newObj controller.Runtime
 	// update the topology file
 	saveTopologyToFile(topology)
 
+	targetables := topology.Targetables()
+
 	// reconcile policies
-	gateways := topology.Targetables(func(o machinery.Object) bool {
+	gateways := targetables.Items(func(o machinery.Object) bool {
 		_, ok := o.(*machinery.Gateway)
 		return ok
 	})
 
-	listeners := topology.Targetables(func(o machinery.Object) bool {
+	listeners := targetables.Items(func(o machinery.Object) bool {
 		_, ok := o.(*machinery.Listener)
 		return ok
 	})
 
-	httpRouteRules := topology.Targetables(func(o machinery.Object) bool {
+	httpRouteRules := targetables.Items(func(o machinery.Object) bool {
 		_, ok := o.(*machinery.HTTPRouteRule)
 		return ok
 	})
@@ -99,7 +101,7 @@ func reconcile(eventType controller.EventType, oldObj, newObj controller.Runtime
 	for _, gateway := range gateways {
 		// reconcile Gateway -> Listener policies
 		for _, listener := range listeners {
-			paths := topology.Paths(gateway, listener)
+			paths := targetables.Paths(gateway, listener)
 			for i := range paths {
 				effectivePolicyForPath[*kuadrantv1alpha2.DNSPolicy](paths[i])
 				effectivePolicyForPath[*kuadrantv1alpha2.TLSPolicy](paths[i])
@@ -108,7 +110,7 @@ func reconcile(eventType controller.EventType, oldObj, newObj controller.Runtime
 
 		// reconcile Gateway -> HTTPRouteRule policies
 		for _, httpRouteRule := range httpRouteRules {
-			paths := topology.Paths(gateway, httpRouteRule)
+			paths := targetables.Paths(gateway, httpRouteRule)
 			for i := range paths {
 				effectivePolicyForPath[*kuadrantv1beta3.AuthPolicy](paths[i])
 				effectivePolicyForPath[*kuadrantv1beta3.RateLimitPolicy](paths[i])
