@@ -46,19 +46,19 @@ func WithCallback(callback CallbackFunc) ControllerOptionFunc {
 
 func WithPolicyKinds(policyKinds ...schema.GroupKind) ControllerOptionFunc {
 	return func(o *ControllerOptions) {
-		o.policyKinds = policyKinds
+		o.policyKinds = append(o.policyKinds, policyKinds...)
 	}
 }
 
 func WithObjectKinds(objectKinds ...schema.GroupKind) ControllerOptionFunc {
 	return func(o *ControllerOptions) {
-		o.objectKinds = objectKinds
+		o.objectKinds = append(o.objectKinds, objectKinds...)
 	}
 }
 
 func WithObjectLinks(objectLinks ...RuntimeLinkFunc) ControllerOptionFunc {
 	return func(o *ControllerOptions) {
-		o.objectLinks = objectLinks
+		o.objectLinks = append(o.objectLinks, objectLinks...)
 	}
 }
 
