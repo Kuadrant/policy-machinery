@@ -96,7 +96,7 @@ func (t *GatewayAPITopology) Refresh(objs Store) {
 			if ok {
 				return object, ok
 			}
-			return &genericObject{obj}, true
+			return &Object{obj}, true
 		})
 
 		opts = append(opts, machinery.WithGatewayAPITopologyObjects(objects...))
@@ -115,24 +115,24 @@ func (t *GatewayAPITopology) Get() *machinery.Topology {
 	return &topology
 }
 
-type genericObject struct {
-	obj RuntimeObject
+type Object struct {
+	RuntimeObject RuntimeObject
 }
 
-func (g *genericObject) GroupVersionKind() schema.GroupVersionKind {
-	return g.obj.GetObjectKind().GroupVersionKind()
+func (g *Object) GroupVersionKind() schema.GroupVersionKind {
+	return g.RuntimeObject.GetObjectKind().GroupVersionKind()
 }
 
-func (g *genericObject) SetGroupVersionKind(schema.GroupVersionKind) {}
+func (g *Object) SetGroupVersionKind(schema.GroupVersionKind) {}
 
-func (g *genericObject) GetNamespace() string {
-	return g.obj.GetNamespace()
+func (g *Object) GetNamespace() string {
+	return g.RuntimeObject.GetNamespace()
 }
 
-func (g *genericObject) GetName() string {
-	return g.obj.GetName()
+func (g *Object) GetName() string {
+	return g.RuntimeObject.GetName()
 }
 
-func (g *genericObject) GetURL() string {
+func (g *Object) GetURL() string {
 	return machinery.UrlFromObject(g)
 }
