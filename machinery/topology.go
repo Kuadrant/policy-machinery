@@ -264,7 +264,7 @@ func (c *collection[T]) Roots() []T {
 }
 
 // Parents returns all parents of a given item in the collection.
-func (c *collection[T]) Parents(item T) []T {
+func (c *collection[T]) Parents(item Object) []T {
 	var parents []T
 	n, err := c.topology.graph.Node(item.GetURL())
 	if err != nil {
@@ -285,7 +285,7 @@ func (c *collection[T]) Parents(item T) []T {
 }
 
 // Children returns all children of a given item in the collection.
-func (c *collection[T]) Children(item T) []T {
+func (c *collection[T]) Children(item Object) []T {
 	var children []T
 	n, err := c.topology.graph.Node(item.GetURL())
 	if err != nil {
@@ -307,7 +307,7 @@ func (c *collection[T]) Children(item T) []T {
 
 // Paths returns all paths from a source item to a destination item in the collection.
 // The order of the elements in the inner slices represents a path from the source to the destination.
-func (c *collection[T]) Paths(from, to T) [][]T {
+func (c *collection[T]) Paths(from, to Object) [][]T {
 	if &from == nil || &to == nil {
 		return nil
 	}
@@ -319,7 +319,7 @@ func (c *collection[T]) Paths(from, to T) [][]T {
 }
 
 // dfs performs a depth-first search to find all paths from a source item to a destination item in the collection.
-func (c *collection[T]) dfs(current, to T, path []T, paths *[][]T, visited map[string]bool) {
+func (c *collection[T]) dfs(current, to Object, path []T, paths *[][]T, visited map[string]bool) {
 	currentURL := current.GetURL()
 	if visited[currentURL] {
 		return
