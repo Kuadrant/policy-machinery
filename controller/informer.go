@@ -91,12 +91,12 @@ func For[T RuntimeObject](resource schema.GroupVersionResource, namespace string
 				controller.delete(obj)
 			},
 		})
-		informer.SetTransform(restructure[T])
+		informer.SetTransform(Restructure[T])
 		return informer
 	}
 }
 
-func restructure[T any](obj any) (any, error) {
+func Restructure[T any](obj any) (any, error) {
 	unstructuredObj, ok := obj.(*unstructured.Unstructured)
 	if !ok {
 		return nil, fmt.Errorf("unexpected object type: %T", obj)
@@ -106,4 +106,12 @@ func restructure[T any](obj any) (any, error) {
 		return nil, err
 	}
 	return o, nil
+}
+
+func Destruct[T any](obj T) (*unstructured.Unstructured, error) {
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&obj)
+	if err != nil {
+		return nil, err
+	}
+	return &unstructured.Unstructured{Object: u}, nil
 }
