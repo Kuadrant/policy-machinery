@@ -1,6 +1,6 @@
-# Kuadrant Controller with Envoy Gateway
+# Kuadrant Controller with multiple gateway providers
 
-The example [custom controller](./README.md) working alongside with [Envoy Gateway](https://gateway.envoyproxy.io/).
+The example [custom controller](./README.md) working alongside with [Envoy Gateway](https://gateway.envoyproxy.io/) and [Istio](https://istio.io) gateway controllers.
 
 This example demonstrates how a controller can use the topology for reconciling other generic objects as well, along with targetables and policies.
 
@@ -10,8 +10,9 @@ The controller watches for events related to:
 - the 4 kinds of custom policies: DNSPolicy, TLSPolicy, AuthPolicy, and RateLimitPolicy;
 - Gateway API resources: GatewayClass, Gateway, and HTTPRoute;
 - Envoy Gateway resources: SecurityPolicy.
+- Istio resources: AuthorizationPolicy.
 
-Apart from computing effective policies, the callback reconcile function also manages Envoy Gateway SecurityPolicy custom resources (create/update/delete) (used internally to implement the AuthPolicies.)
+Apart from computing effective policies, the callback reconcile function also manages Envoy Gateway SecurityPolicy and Istio AuthorizationPolicy custom resources (create/update/delete) (used internally to implement the AuthPolicies.)
 
 ## Demo
 
@@ -28,10 +29,16 @@ Create the cluster:
 kind create cluster
 ```
 
-Install Envoy Gateway:
+Install Envoy Gateway (installs Gateway API CRDs as well):
 
 ```sh
 make install-envoy-gateway
+```
+
+Install Istio:
+
+```sh
+make install-istio
 ```
 
 Install the CRDs:
@@ -43,7 +50,7 @@ make install-kuadrant
 Run the controller (holds the shell):
 
 ```sh
-make run PROVIDERS=envoygateway
+make run PROVIDERS=envoygateway,istio
 ```
 
 ### Create the resources
@@ -68,7 +75,7 @@ kubectl apply -f -<<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: prod-web
+  name: eg-gateway
 spec:
   gatewayClassName: eg
   listeners:
@@ -91,7 +98,7 @@ metadata:
   name: my-app
 spec:
   parentRefs:
-  - name: prod-web
+  - name: eg-gateway
   hostnames:
   - example.com
   rules:
@@ -116,7 +123,7 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: prod-web
+    name: eg-gateway
   loadBalancing:
     weighted:
       defaultWeight: 100
@@ -138,7 +145,7 @@ spec:
   targetRef:
     group: gateway.networking.k8s.io
     kind: Gateway
-    name: prod-web
+    name: eg-gateway
   overrides:
     rules:
       authorization:
@@ -153,7 +160,7 @@ EOF
 5. Try to delete the Envoy Gateway SecurityPolicy:
 
 ```sh
-kubectl delete securitypolicy/prod-web
+kubectl delete securitypolicy/eg-gateway
 ```
 
 6. Create a HTTPRoute-wide AuthPolicy to enforce API key authentication and affiliation to the 'admin' group:
@@ -186,25 +193,14 @@ spec:
 EOF
 ```
 
-7. Create another Gateway that is not managed by Envoy Gateway:
-
-```sh
-kubectl apply -f -<<EOF
-apiVersion: gateway.networking.k8s.io/v1
-kind: GatewayClass
-metadata:
-  name: istio
-spec:
-  controllerName: istio.io/gateway-controller
-EOF
-```
+7. Create Gateway managed by Istio:
 
 ```sh
 kubectl apply -f -<<EOF
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 metadata:
-  name: other-gateway
+  name: istio-gateway
 spec:
   gatewayClassName: istio
   listeners:
@@ -227,8 +223,8 @@ metadata:
   name: my-app
 spec:
   parentRefs:
-  - name: prod-web
-  - name: other-gateway
+  - name: eg-gateway
+  - name: istio-gateway
   hostnames:
   - example.com
   rules:
@@ -258,7 +254,7 @@ kubectl delete authpolicy/api-key-admins
 Delete the resources:
 
 ```sh
-kubectl get gateways,httproutes,dnspolicies,authpolicies,securitypolicies -o name | while read -r line; do kubectl delete "$line"; done
+kubectl get gateways,httproutes,dnspolicies,authpolicies,securitypolicies,authorizationpolicies -o name | while read -r line; do kubectl delete "$line"; done
 kubectl delete gatewayclass/eg
 kubectl delete gatewayclass/istio
 ```

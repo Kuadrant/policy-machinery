@@ -83,8 +83,8 @@ install: manifests ## Install CRDs into a cluster.
 
 .PHONY: run
 run: generate ## Run the controller.
-ifneq ($(PROVIDER),)
-	go run *.go --gateway-provider $(PROVIDER)
+ifneq ($(PROVIDERS),)
+	go run *.go --gateway-providers $(PROVIDERS)
 else
 	go run *.go
 endif
@@ -95,6 +95,14 @@ endif
 install-envoy-gateway: helm ## Install Envoy Gateway.
 	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version v1.0.2 -n envoy-gateway-system --create-namespace
 	kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
+
+.PHONY: install-istio
+install-istio: helm ## Install Istio.
+	$(HELM) repo add istio https://istio-release.storage.googleapis.com/charts
+	$(HELM) repo update
+	kubectl create namespace istio-system
+	$(HELM) install istio-base istio/base -n istio-system --set defaultRevision=default
+	$(HELM) install istiod istio/istiod -n istio-system --wait
 
 .PHONY: install-kuadrant
 install-kuadrant: ## Install Kuadrant CRDs.

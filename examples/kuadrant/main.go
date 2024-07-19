@@ -7,37 +7,39 @@ import (
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/samber/lo"
+	istiov1 "istio.io/client-go/pkg/apis/security/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/policy-machinery/controller"
-	"github.com/kuadrant/policy-machinery/machinery"
 
 	kuadrantv1alpha2 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1alpha2"
 	kuadrantv1beta3 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1beta3"
 )
 
-const envoyGatewayProvider = "envoygateway"
-
-var (
-	supportedGatewayProviders = []string{envoyGatewayProvider}
-
-	securityPolicyKind = schema.GroupKind{Group: egv1alpha1.GroupName, Kind: "SecurityPolicy"}
-)
+var supportedGatewayProviders = []string{envoyGatewayProvider, istioGatewayProvider}
 
 func main() {
-	var gatewayProvider string
+	var gatewayProviders []string
 	for i := range os.Args {
 		switch os.Args[i] {
-		case "--gateway-provider":
-			if i == len(os.Args)-1 || !lo.Contains(supportedGatewayProviders, os.Args[i+1]) {
-				log.Fatalf("Invalid gateway provider. Use one of: %s\n", strings.Join(supportedGatewayProviders, ","))
+		case "--gateway-providers":
+			{
+				defer func() {
+					if recover() != nil {
+						log.Fatalf("Invalid gateway provider. Supported: %s\n", strings.Join(supportedGatewayProviders, ","))
+					}
+				}()
+				gatewayProviders = lo.Map(strings.Split(os.Args[i+1], ","), func(gp string, _ int) string {
+					return strings.TrimSpace(gp)
+				})
+				if !lo.Every(supportedGatewayProviders, gatewayProviders) {
+					panic("")
+				}
 			}
-			gatewayProvider = os.Args[i+1]
 		}
 	}
 
@@ -68,80 +70,54 @@ func main() {
 			schema.GroupKind{Group: kuadrantv1beta3.SchemeGroupVersion.Group, Kind: "AuthPolicy"},
 			schema.GroupKind{Group: kuadrantv1beta3.SchemeGroupVersion.Group, Kind: "RateLimitPolicy"},
 		),
-		controller.WithCallback(buildReconcilerFor(gatewayProvider, client).Reconcile),
+		controller.WithCallback(buildReconciler(gatewayProviders, client).Reconcile),
 	}
-	controllerOpts = append(controllerOpts, controllerOptionsFor(gatewayProvider)...)
+	controllerOpts = append(controllerOpts, controllerOptionsFor(gatewayProviders)...)
 
 	controller.NewController(controllerOpts...).Start()
 }
 
-func buildReconcilerFor(gatewayProvider string, client *dynamic.DynamicClient) *Reconciler {
-	var provider GatewayProvider
+func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) *Reconciler {
+	var providers []GatewayProvider
 
-	switch gatewayProvider {
-	case envoyGatewayProvider:
-		provider = &EnvoyGatewayProvider{client}
-	default:
-		provider = &DefaultGatewayProvider{}
+	for _, gatewayProvider := range gatewayProviders {
+		switch gatewayProvider {
+		case envoyGatewayProvider:
+			providers = append(providers, &EnvoyGatewayProvider{client})
+		case istioGatewayProvider:
+			providers = append(providers, &IstioGatewayProvider{client})
+		}
+	}
+
+	if len(providers) == 0 {
+		providers = append(providers, &DefaultGatewayProvider{})
 	}
 
 	return &Reconciler{
-		GatewayProvider: provider,
+		GatewayProviders: providers,
 	}
 }
 
-func controllerOptionsFor(gatewayProvider string) []controller.ControllerOptionFunc {
-	switch gatewayProvider {
-	case envoyGatewayProvider:
-		return []controller.ControllerOptionFunc{
-			controller.WithInformer("gatewayclass", controller.For[*gwapiv1.GatewayClass](gwapiv1.SchemeGroupVersion.WithResource("gatewayclasses"), metav1.NamespaceNone)),
-			controller.WithInformer("securitypolicy", controller.For[*egv1alpha1.SecurityPolicy](egv1alpha1.SchemeBuilder.GroupVersion.WithResource("securitypolicies"), metav1.NamespaceAll)),
-			controller.WithObjectKinds(securityPolicyKind),
-			controller.WithObjectLinks(linkGatewayToSecurityPolicyFunc),
-		}
-	default:
-		return nil
-	}
-}
+func controllerOptionsFor(gatewayProviders []string) []controller.ControllerOptionFunc {
+	var opts []controller.ControllerOptionFunc
 
-func linkGatewayToSecurityPolicyFunc(objs controller.Store) machinery.LinkFunc {
-	gatewayKind := schema.GroupKind{Group: gwapiv1.GroupName, Kind: "Gateway"}
-	gateways := lo.FilterMap(lo.Values(objs[gatewayKind]), func(obj controller.RuntimeObject, _ int) (*gwapiv1.Gateway, bool) {
-		g, ok := obj.(*gwapiv1.Gateway)
-		if !ok {
-			return nil, false
-		}
-		return g, true
-	})
-
-	return machinery.LinkFunc{
-		From: gatewayKind,
-		To:   securityPolicyKind,
-		Func: func(child machinery.Object) []machinery.Object {
-			o := child.(*controller.Object)
-			sp := o.RuntimeObject.(*egv1alpha1.SecurityPolicy)
-			refs := sp.Spec.PolicyTargetReferences.TargetRefs
-			if ref := sp.Spec.PolicyTargetReferences.TargetRef; ref != nil {
-				refs = append(refs, *ref)
-			}
-			refs = lo.Filter(refs, func(ref gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName, _ int) bool {
-				return ref.Group == gwapiv1.GroupName && ref.Kind == gwapiv1.Kind(gatewayKind.Kind)
-			})
-			if len(refs) == 0 {
-				return nil
-			}
-			gateway, ok := lo.Find(gateways, func(g *gwapiv1.Gateway) bool {
-				if g.GetNamespace() != sp.GetNamespace() {
-					return false
-				}
-				return lo.ContainsBy(refs, func(ref gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) bool {
-					return ref.Name == gwapiv1.ObjectName(g.GetName())
-				})
-			})
-			if ok {
-				return []machinery.Object{&machinery.Gateway{Gateway: gateway}}
-			}
-			return nil
-		},
+	// if we care about specificities of gateway controllers, then let's add gateway classes to the topology too
+	if len(gatewayProviders) > 0 {
+		opts = append(opts, controller.WithInformer("gatewayclass", controller.For[*gwapiv1.GatewayClass](gwapiv1.SchemeGroupVersion.WithResource("gatewayclasses"), metav1.NamespaceNone)))
 	}
+
+	for _, gatewayProvider := range gatewayProviders {
+		switch gatewayProvider {
+		case envoyGatewayProvider:
+			opts = append(opts, controller.WithInformer("envoygateway/securitypolicy", controller.For[*egv1alpha1.SecurityPolicy](envoyGatewaySecurityPoliciesResource, metav1.NamespaceAll)))
+			opts = append(opts, controller.WithObjectKinds(envoyGatewaySecurityPolicyKind))
+			opts = append(opts, controller.WithObjectLinks(linkGatewayToEnvoyGatewaySecurityPolicyFunc))
+		case istioGatewayProvider:
+			opts = append(opts, controller.WithInformer("istio/authorizationpolicy", controller.For[*istiov1.AuthorizationPolicy](istioAuthorizationPoliciesResource, metav1.NamespaceAll)))
+			opts = append(opts, controller.WithObjectKinds(istioAuthorizationPolicyKind))
+			opts = append(opts, controller.WithObjectLinks(linkGatewayToIstioAuthorizationPolicyFunc))
+		}
+	}
+
+	return opts
 }
