@@ -38,7 +38,7 @@ func TestTopologyRoots(t *testing.T) {
 			}),
 		),
 	)
-	roots := topology.Roots()
+	roots := topology.Targetables().Roots()
 	if expected := len(apples); len(roots) != expected {
 		t.Errorf("expected %d roots, got %d", expected, len(roots))
 	}
@@ -71,7 +71,7 @@ func TestTopologyParents(t *testing.T) {
 		),
 	)
 	// orange-1
-	parents := topology.Parents(orange1)
+	parents := topology.Targetables().Parents(orange1)
 	if expected := 2; len(parents) != expected {
 		t.Errorf("expected %d parent, got %d", expected, len(parents))
 	}
@@ -83,7 +83,7 @@ func TestTopologyParents(t *testing.T) {
 		t.Errorf("expected parent %s not found", apple2.GetURL())
 	}
 	// orange-2
-	parents = topology.Parents(orange2)
+	parents = topology.Targetables().Parents(orange2)
 	if expected := 1; len(parents) != expected {
 		t.Errorf("expected %d parent, got %d", expected, len(parents))
 	}
@@ -114,7 +114,7 @@ func TestTopologyChildren(t *testing.T) {
 		),
 	)
 	// apple-1
-	children := topology.Children(apple1)
+	children := topology.Targetables().Children(apple1)
 	if expected := 1; len(children) != expected {
 		t.Errorf("expected %d child, got %d", expected, len(children))
 	}
@@ -123,7 +123,7 @@ func TestTopologyChildren(t *testing.T) {
 		t.Errorf("expected child %s not found", orange1.GetURL())
 	}
 	// apple-2
-	children = topology.Children(apple2)
+	children = topology.Targetables().Children(apple2)
 	if expected := 2; len(children) != expected {
 		t.Errorf("expected %d child, got %d", expected, len(children))
 	}
@@ -203,7 +203,7 @@ func TestTopologyPaths(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			paths := topology.Paths(tc.from, tc.to)
+			paths := topology.Targetables().Paths(tc.from, tc.to)
 			if len(paths) != len(tc.expectedPaths) {
 				t.Errorf("expected %d paths, got %d", len(tc.expectedPaths), len(paths))
 			}
@@ -297,8 +297,8 @@ func TestFruitTopology(t *testing.T) {
 			)
 
 			links := make(map[string][]string)
-			for _, root := range topology.Roots() {
-				linksFromNode(topology, root, links)
+			for _, root := range topology.Targetables().Roots() {
+				linksFromTargetable(topology, root, links)
 			}
 			for from, tos := range links {
 				expectedTos := tc.expectedLinks[from]
@@ -312,4 +312,60 @@ func TestFruitTopology(t *testing.T) {
 			SaveToOutputDir(t, topology.ToDot(), "../tests/out", ".dot")
 		})
 	}
+}
+
+func TestTopologyWithGenericObjects(t *testing.T) {
+	objects := []*Info{
+		{Name: "info-1", Ref: "apple.example.test:apple-1"},
+		{Name: "info-2", Ref: "orange.example.test:my-namespace/orange-1"},
+	}
+	apples := []*Apple{{Name: "apple-1"}}
+	oranges := []*Orange{
+		{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1"}},
+		{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-1"}},
+	}
+
+	topology := NewTopology(
+		WithObjects(objects...),
+		WithTargetables(apples...),
+		WithTargetables(oranges...),
+		WithPolicies(
+			buildFruitPolicy(func(policy *FruitPolicy) {
+				policy.Name = "policy-1"
+				policy.Spec.TargetRef.Kind = "Apple"
+				policy.Spec.TargetRef.Name = "apple-1"
+			}),
+			buildFruitPolicy(func(policy *FruitPolicy) {
+				policy.Name = "policy-2"
+				policy.Spec.TargetRef.Kind = "Orange"
+				policy.Spec.TargetRef.Name = "orange-1"
+			}),
+		),
+		WithLinks(
+			LinkApplesToOranges(apples),
+			LinkInfoFrom("Apple", lo.Map(apples, AsObject[*Apple])),
+			LinkInfoFrom("Orange", lo.Map(oranges, AsObject[*Orange])),
+		),
+	)
+
+	expectedLinks := map[string][]string{
+		"apple-1": {"orange-1", "orange-2"},
+		"info-1":  {"apple-1"},
+		"info-2":  {"orange-1"},
+	}
+
+	links := make(map[string][]string)
+	for _, root := range topology.Targetables().Roots() {
+		linksFromTargetable(topology, root, links)
+	}
+	for from, tos := range links {
+		expectedTos := expectedLinks[from]
+		slices.Sort(expectedTos)
+		slices.Sort(tos)
+		if !slices.Equal(expectedTos, tos) {
+			t.Errorf("expected links from %s to be %v, got %v", from, expectedTos, tos)
+		}
+	}
+
+	SaveToOutputDir(t, topology.ToDot(), "../tests/out", ".dot")
 }

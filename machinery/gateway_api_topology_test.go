@@ -95,8 +95,8 @@ func TestGatewayAPITopology(t *testing.T) {
 			)
 
 			links := make(map[string][]string)
-			for _, root := range topology.Roots() {
-				linksFromNode(topology, root, links)
+			for _, root := range topology.Targetables().Roots() {
+				linksFromTargetable(topology, root, links)
 			}
 			for from, tos := range links {
 				expectedTos := tc.expectedLinks[from]
@@ -245,8 +245,8 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 			)
 
 			links := make(map[string][]string)
-			for _, root := range topology.Roots() {
-				linksFromNode(topology, root, links)
+			for _, root := range topology.Targetables().Roots() {
+				linksFromTargetable(topology, root, links)
 			}
 			for from, tos := range links {
 				expectedTos := tc.expectedLinks[from]

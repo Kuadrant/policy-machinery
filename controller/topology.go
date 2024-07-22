@@ -11,10 +11,12 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
-func NewGatewayAPITopology(policyKinds ...schema.GroupKind) *GatewayAPITopology {
+func NewGatewayAPITopology(policyKinds, objectKinds []schema.GroupKind, objectLinks []RuntimeLinkFunc) *GatewayAPITopology {
 	return &GatewayAPITopology{
 		topology:    machinery.NewTopology(),
 		policyKinds: policyKinds,
+		objectKinds: objectKinds,
+		objectLinks: objectLinks,
 	}
 }
 
@@ -22,9 +24,11 @@ type GatewayAPITopology struct {
 	mu          sync.RWMutex
 	topology    *machinery.Topology
 	policyKinds []schema.GroupKind
+	objectKinds []schema.GroupKind
+	objectLinks []RuntimeLinkFunc
 }
 
-func (t *GatewayAPITopology) Refresh(objs cacheMap) {
+func (t *GatewayAPITopology) Refresh(objs Store) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -60,6 +64,10 @@ func (t *GatewayAPITopology) Refresh(objs cacheMap) {
 		return service, true
 	})
 
+	linkFuncs := lo.Map(t.objectLinks, func(linkFunc RuntimeLinkFunc, _ int) machinery.LinkFunc {
+		return linkFunc(objs)
+	})
+
 	opts := []machinery.GatewayAPITopologyOptionsFunc{
 		machinery.WithGatewayClasses(gatewayClasses...),
 		machinery.WithGateways(gateways...),
@@ -68,6 +76,7 @@ func (t *GatewayAPITopology) Refresh(objs cacheMap) {
 		machinery.ExpandGatewayListeners(),
 		machinery.ExpandHTTPRouteRules(),
 		machinery.ExpandServicePorts(),
+		machinery.WithGatewayAPITopologyLinks(linkFuncs...),
 	}
 
 	for i := range t.policyKinds {
@@ -78,6 +87,19 @@ func (t *GatewayAPITopology) Refresh(objs cacheMap) {
 		})
 
 		opts = append(opts, machinery.WithGatewayAPITopologyPolicies(policies...))
+	}
+
+	for i := range t.objectKinds {
+		objectKind := t.objectKinds[i]
+		objects := lo.FilterMap(lo.Values(objs[objectKind]), func(obj RuntimeObject, _ int) (machinery.Object, bool) {
+			object, ok := obj.(machinery.Object)
+			if ok {
+				return object, ok
+			}
+			return &Object{obj}, true
+		})
+
+		opts = append(opts, machinery.WithGatewayAPITopologyObjects(objects...))
 	}
 
 	t.topology = machinery.NewGatewayAPITopology(opts...)
@@ -91,4 +113,26 @@ func (t *GatewayAPITopology) Get() *machinery.Topology {
 	}
 	topology := *t.topology
 	return &topology
+}
+
+type Object struct {
+	RuntimeObject RuntimeObject
+}
+
+func (g *Object) GroupVersionKind() schema.GroupVersionKind {
+	return g.RuntimeObject.GetObjectKind().GroupVersionKind()
+}
+
+func (g *Object) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (g *Object) GetNamespace() string {
+	return g.RuntimeObject.GetNamespace()
+}
+
+func (g *Object) GetName() string {
+	return g.RuntimeObject.GetName()
+}
+
+func (g *Object) GetURL() string {
+	return machinery.UrlFromObject(g)
 }

@@ -25,16 +25,51 @@ func (t *EventType) String() string {
 	return [...]string{"create", "update", "delete"}[*t]
 }
 
+type InformerBuilderOptions struct {
+	LabelSelector string
+	FieldSelector string
+}
+
+type InformerBuilderOptionsFunc func(*InformerBuilderOptions)
+
+func FilterResourcesByLabel(selector string) InformerBuilderOptionsFunc {
+	return func(o *InformerBuilderOptions) {
+		o.LabelSelector = selector
+	}
+}
+
+func FilterResourcesByField(selector string) InformerBuilderOptionsFunc {
+	return func(o *InformerBuilderOptions) {
+		o.FieldSelector = selector
+	}
+}
+
 type InformerBuilder func(controller *Controller) cache.SharedInformer
 
-func For[T RuntimeObject](resource schema.GroupVersionResource, namespace string) InformerBuilder {
+func For[T RuntimeObject](resource schema.GroupVersionResource, namespace string, options ...InformerBuilderOptionsFunc) InformerBuilder {
+	o := &InformerBuilderOptions{}
+	for _, f := range options {
+		f(o)
+	}
 	return func(controller *Controller) cache.SharedInformer {
 		informer := cache.NewSharedInformer(
 			&cache.ListWatch{
 				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+					if o.LabelSelector != "" {
+						options.LabelSelector = o.LabelSelector
+					}
+					if o.FieldSelector != "" {
+						options.FieldSelector = o.FieldSelector
+					}
 					return controller.client.Resource(resource).Namespace(namespace).List(context.Background(), options)
 				},
 				WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+					if o.LabelSelector != "" {
+						options.LabelSelector = o.LabelSelector
+					}
+					if o.FieldSelector != "" {
+						options.FieldSelector = o.FieldSelector
+					}
 					return controller.client.Resource(resource).Namespace(namespace).Watch(context.Background(), options)
 				},
 			},
@@ -56,12 +91,12 @@ func For[T RuntimeObject](resource schema.GroupVersionResource, namespace string
 				controller.delete(obj)
 			},
 		})
-		informer.SetTransform(restructure[T])
+		informer.SetTransform(Restructure[T])
 		return informer
 	}
 }
 
-func restructure[T any](obj any) (any, error) {
+func Restructure[T any](obj any) (any, error) {
 	unstructuredObj, ok := obj.(*unstructured.Unstructured)
 	if !ok {
 		return nil, fmt.Errorf("unexpected object type: %T", obj)
@@ -71,4 +106,12 @@ func restructure[T any](obj any) (any, error) {
 		return nil, err
 	}
 	return o, nil
+}
+
+func Destruct[T any](obj T) (*unstructured.Unstructured, error) {
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&obj)
+	if err != nil {
+		return nil, err
+	}
+	return &unstructured.Unstructured{Object: u}, nil
 }

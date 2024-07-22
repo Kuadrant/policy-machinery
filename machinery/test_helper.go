@@ -28,14 +28,14 @@ func SaveToOutputDir(t *testing.T, out *bytes.Buffer, outDir, ext string) {
 	}
 }
 
-func linksFromNode(topology *Topology, node Targetable, edges map[string][]string) {
-	if _, ok := edges[node.GetName()]; ok {
+func linksFromTargetable(topology *Topology, targetable Targetable, edges map[string][]string) {
+	if _, ok := edges[targetable.GetName()]; ok {
 		return
 	}
-	children := topology.Children(node)
-	edges[node.GetName()] = lo.Map(children, func(child Targetable, _ int) string { return child.GetName() })
+	children := topology.Targetables().Children(targetable)
+	edges[targetable.GetName()] = lo.Map(children, func(child Targetable, _ int) string { return child.GetName() })
 	for _, child := range children {
-		linksFromNode(topology, child, edges)
+		linksFromTargetable(topology, child, edges)
 	}
 }
 
@@ -158,9 +158,9 @@ func LinkApplesToOranges(apples []*Apple) LinkFunc {
 	return LinkFunc{
 		From: schema.GroupKind{Group: TestGroupName, Kind: "Apple"},
 		To:   schema.GroupKind{Group: TestGroupName, Kind: "Orange"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			orange := child.(*Orange)
-			return lo.FilterMap(apples, func(apple *Apple, _ int) (Targetable, bool) {
+			return lo.FilterMap(apples, func(apple *Apple, _ int) (Object, bool) {
 				return apple, lo.Contains(orange.AppleParents, apple.Name)
 			})
 		},
@@ -171,10 +171,52 @@ func LinkOrangesToBananas(oranges []*Orange) LinkFunc {
 	return LinkFunc{
 		From: schema.GroupKind{Group: TestGroupName, Kind: "Orange"},
 		To:   schema.GroupKind{Group: TestGroupName, Kind: "Banana"},
-		Func: func(child Targetable) []Targetable {
+		Func: func(child Object) []Object {
 			banana := child.(*Banana)
-			return lo.FilterMap(oranges, func(orange *Orange, _ int) (Targetable, bool) {
+			return lo.FilterMap(oranges, func(orange *Orange, _ int) (Object, bool) {
 				return orange, lo.Contains(orange.ChildBananas, banana.Name)
+			})
+		},
+	}
+}
+
+type Info struct {
+	Name string
+	Ref  string
+}
+
+var _ Object = &Info{}
+
+func (i *Info) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   TestGroupName,
+		Version: "v1",
+		Kind:    "Info",
+	}
+}
+
+func (i *Info) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (i *Info) GetNamespace() string {
+	return ""
+}
+
+func (i *Info) GetName() string {
+	return i.Name
+}
+
+func (i *Info) GetURL() string {
+	return UrlFromObject(i)
+}
+
+func LinkInfoFrom(kind string, objects []Object) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: TestGroupName, Kind: kind},
+		To:   schema.GroupKind{Group: TestGroupName, Kind: "Info"},
+		Func: func(child Object) []Object {
+			info := child.(*Info)
+			return lo.Filter(objects, func(obj Object, _ int) bool {
+				return obj.GetURL() == info.Ref
 			})
 		},
 	}
