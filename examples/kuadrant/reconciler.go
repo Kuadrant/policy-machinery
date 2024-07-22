@@ -90,7 +90,7 @@ func (r *Reconciler) Reconcile(eventType controller.EventType, oldObj, newObj co
 				}
 				if p := effectivePolicyForPath[*kuadrantv1beta3.RateLimitPolicy](paths[i]); p != nil {
 					capabilities["ratelimit"] = append(capabilities["ratelimit"], paths[i])
-					// TODO: reconcile rate-limit effective policy (i.e. create the Authorino AuthConfig)
+					// TODO: reconcile rate-limit effective policy (i.e. create the Limitador limits config)
 				}
 			}
 		}
