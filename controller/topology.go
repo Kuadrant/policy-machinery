@@ -9,7 +9,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
-func NewGatewayAPITopologyBuilder(policyKinds, objectKinds []schema.GroupKind, objectLinks []RuntimeLinkFunc) *gatewayAPITopologyBuilder {
+func newGatewayAPITopologyBuilder(policyKinds, objectKinds []schema.GroupKind, objectLinks []RuntimeLinkFunc) *gatewayAPITopologyBuilder {
 	return &gatewayAPITopologyBuilder{
 		policyKinds: policyKinds,
 		objectKinds: objectKinds,

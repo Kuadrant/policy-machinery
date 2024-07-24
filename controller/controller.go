@@ -84,7 +84,7 @@ func NewController(f ...ControllerOptionFunc) *Controller {
 	controller := &Controller{
 		client:    opts.client,
 		cache:     newCacheStore(),
-		topology:  NewGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks),
+		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks),
 		informers: map[string]cache.SharedInformer{},
 		callback:  opts.callback,
 	}
