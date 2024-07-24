@@ -145,11 +145,9 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 			}
 		},
 		Tasks: []controller.CallbackFunc{
-			(&controller.Workflow{
-				Precondition: (&reconcilers.TopologyFileReconciler{}).Reconcile, // Graphiz frees the memory that might be simutanously used by the reconcilers, so this needs to run in a precondition
-				Tasks:        []controller.CallbackFunc{effectivePolicyReconciler.Reconcile},
-			}).Run,
+			effectivePolicyReconciler.Reconcile,
 		},
+		Postcondition: (&reconcilers.TopologyFileReconciler{}).Reconcile, // Graphiz frees the memory that might be simutanously used by the reconcilers, so this needs to run in a precondition
 	}
 
 	return reconciler.Run

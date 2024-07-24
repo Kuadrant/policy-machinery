@@ -24,7 +24,6 @@ func (d *Workflow) Run(ctx context.Context, resourceEvent ResourceEvent, topolog
 	// dispatch the event to concurrent tasks
 	funcs := d.Tasks
 	waitGroup := &sync.WaitGroup{}
-	defer waitGroup.Wait()
 	waitGroup.Add(len(funcs))
 	for _, f := range funcs {
 		go func() {
@@ -32,6 +31,7 @@ func (d *Workflow) Run(ctx context.Context, resourceEvent ResourceEvent, topolog
 			f(ctx, resourceEvent, topology)
 		}()
 	}
+	waitGroup.Wait()
 
 	// run precondition reconcile function
 	if d.Postcondition != nil {
