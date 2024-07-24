@@ -132,8 +132,8 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 		}
 	}
 
-	reconciler := &controller.Dispatcher{
-		PreconditionReconcileFunc: func(_ context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
+	reconciler := &controller.Workflow{
+		Precondition: func(_ context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
 			// log the event
 			obj := resourceEvent.OldObject
 			if obj == nil {
@@ -144,15 +144,15 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 				log.Println(cmp.Diff(resourceEvent.OldObject, resourceEvent.NewObject))
 			}
 		},
-		ReconcileFuncs: []controller.CallbackFunc{
-			(&controller.Dispatcher{
-				PreconditionReconcileFunc: (&reconcilers.TopologyFileReconciler{}).Reconcile, // Graphiz frees the memory that might be simutanously used by the reconcilers, so this needs to run in a precondition
-				ReconcileFuncs:            []controller.CallbackFunc{effectivePolicyReconciler.Reconcile},
-			}).Dispatch,
+		Tasks: []controller.CallbackFunc{
+			(&controller.Workflow{
+				Precondition: (&reconcilers.TopologyFileReconciler{}).Reconcile, // Graphiz frees the memory that might be simutanously used by the reconcilers, so this needs to run in a precondition
+				Tasks:        []controller.CallbackFunc{effectivePolicyReconciler.Reconcile},
+			}).Run,
 		},
 	}
 
-	return reconciler.Dispatch
+	return reconciler.Run
 }
 
 func controllerOptionsFor(gatewayProviders []string) []controller.ControllerOptionFunc {

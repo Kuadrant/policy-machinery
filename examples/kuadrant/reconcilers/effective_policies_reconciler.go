@@ -22,9 +22,9 @@ import (
 
 const authPathsKey = "authPaths"
 
-// EffectivePoliciesReconciler works exactly like a controller.Dispatcher where the precondition reconcile function
+// EffectivePoliciesReconciler works exactly like a controller.Workflow where the precondition reconcile function
 // reconciles the effective policies for the given topology paths, occasionally modifying the context that is passed
-// as argument to the subsequent reconcilers.
+// as argument to the subsequent concurrent reconcilers.
 type EffectivePoliciesReconciler struct {
 	Client         *dynamic.DynamicClient
 	ReconcileFuncs []controller.CallbackFunc
