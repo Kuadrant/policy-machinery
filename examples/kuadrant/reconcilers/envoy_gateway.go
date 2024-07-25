@@ -47,19 +47,19 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, re
 			})
 		})
 		if len(paths) > 0 {
-			p.createSecurityPolicy(topology, gateway)
+			p.createSecurityPolicy(ctx, topology, gateway)
 			continue
 		}
-		p.deleteSecurityPolicy(topology, gateway.GetNamespace(), gateway.GetName(), gateway)
+		p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), gateway)
 	}
 }
 
 func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
 	gateway := resourceEvent.OldObject
-	p.deleteSecurityPolicy(topology, gateway.GetNamespace(), gateway.GetName(), nil)
+	p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
 }
 
-func (p *EnvoyGatewayProvider) createSecurityPolicy(topology *machinery.Topology, gateway machinery.Targetable) {
+func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topology *machinery.Topology, gateway machinery.Targetable) {
 	desiredSecurityPolicy := &egv1alpha1.SecurityPolicy{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: egv1alpha1.GroupVersion.String(),
@@ -99,7 +99,7 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(topology *machinery.Topology
 
 	if !found {
 		o, _ := controller.Destruct(desiredSecurityPolicy)
-		_, err := resource.Create(context.TODO(), o, metav1.CreateOptions{})
+		_, err := resource.Create(ctx, o, metav1.CreateOptions{})
 		if err != nil {
 			log.Println("failed to create SecurityPolicy", err)
 		}
@@ -121,13 +121,13 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(topology *machinery.Topology
 
 	securityPolicy.Spec = desiredSecurityPolicy.Spec
 	o, _ := controller.Destruct(securityPolicy)
-	_, err := resource.Update(context.TODO(), o, metav1.UpdateOptions{})
+	_, err := resource.Update(ctx, o, metav1.UpdateOptions{})
 	if err != nil {
 		log.Println("failed to update SecurityPolicy", err)
 	}
 }
 
-func (p *EnvoyGatewayProvider) deleteSecurityPolicy(topology *machinery.Topology, namespace, name string, parent machinery.Targetable) {
+func (p *EnvoyGatewayProvider) deleteSecurityPolicy(ctx context.Context, topology *machinery.Topology, namespace, name string, parent machinery.Targetable) {
 	var objs []machinery.Object
 	if parent != nil {
 		objs = topology.Objects().Children(parent)
@@ -141,7 +141,7 @@ func (p *EnvoyGatewayProvider) deleteSecurityPolicy(topology *machinery.Topology
 		return
 	}
 	resource := p.Client.Resource(EnvoyGatewaySecurityPoliciesResource).Namespace(namespace)
-	err := resource.Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err := resource.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		log.Println("failed to delete SecurityPolicy", err)
 	}

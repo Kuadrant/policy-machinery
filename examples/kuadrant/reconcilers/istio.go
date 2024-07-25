@@ -50,19 +50,19 @@ func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Contex
 			})
 		})
 		if len(paths) > 0 {
-			p.createAuthorizationPolicy(topology, gateway, paths)
+			p.createAuthorizationPolicy(ctx, topology, gateway, paths)
 			continue
 		}
-		p.deleteAuthorizationPolicy(topology, gateway.GetNamespace(), gateway.GetName(), gateway)
+		p.deleteAuthorizationPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), gateway)
 	}
 }
 
 func (p *IstioGatewayProvider) DeleteAuthorizationPolicy(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
 	gateway := resourceEvent.OldObject
-	p.deleteAuthorizationPolicy(topology, gateway.GetNamespace(), gateway.GetName(), nil)
+	p.deleteAuthorizationPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
 }
 
-func (p *IstioGatewayProvider) createAuthorizationPolicy(topology *machinery.Topology, gateway machinery.Targetable, paths [][]machinery.Targetable) {
+func (p *IstioGatewayProvider) createAuthorizationPolicy(ctx context.Context, topology *machinery.Topology, gateway machinery.Targetable, paths [][]machinery.Targetable) {
 	desiredAuthorizationPolicy := &istiov1.AuthorizationPolicy{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: istiov1.SchemeGroupVersion.String(),
@@ -108,7 +108,7 @@ func (p *IstioGatewayProvider) createAuthorizationPolicy(topology *machinery.Top
 
 	if !found {
 		o, _ := controller.Destruct(desiredAuthorizationPolicy)
-		_, err := resource.Create(context.TODO(), o, metav1.CreateOptions{})
+		_, err := resource.Create(ctx, o, metav1.CreateOptions{})
 		if err != nil {
 			log.Println("failed to create AuthorizationPolicy", err)
 		}
@@ -129,13 +129,13 @@ func (p *IstioGatewayProvider) createAuthorizationPolicy(topology *machinery.Top
 	authorizationPolicy.Spec.ActionDetail = desiredAuthorizationPolicy.Spec.ActionDetail
 	authorizationPolicy.Spec.Rules = desiredAuthorizationPolicy.Spec.Rules
 	o, _ := controller.Destruct(authorizationPolicy)
-	_, err := resource.Update(context.TODO(), o, metav1.UpdateOptions{})
+	_, err := resource.Update(ctx, o, metav1.UpdateOptions{})
 	if err != nil {
 		log.Println("failed to update AuthorizationPolicy", err)
 	}
 }
 
-func (p *IstioGatewayProvider) deleteAuthorizationPolicy(topology *machinery.Topology, namespace, name string, parent machinery.Targetable) {
+func (p *IstioGatewayProvider) deleteAuthorizationPolicy(ctx context.Context, topology *machinery.Topology, namespace, name string, parent machinery.Targetable) {
 	var objs []machinery.Object
 	if parent != nil {
 		objs = topology.Objects().Children(parent)
@@ -149,7 +149,7 @@ func (p *IstioGatewayProvider) deleteAuthorizationPolicy(topology *machinery.Top
 		return
 	}
 	resource := p.Client.Resource(IstioAuthorizationPoliciesResource).Namespace(namespace)
-	err := resource.Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err := resource.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		log.Println("failed to delete AuthorizationPolicy", err)
 	}
