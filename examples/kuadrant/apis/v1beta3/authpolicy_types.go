@@ -7,11 +7,17 @@ import (
 
 	authorinov1beta2 "github.com/kuadrant/authorino/api/v1beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 
 	kuadrantapis "github.com/kuadrant/policy-machinery/examples/kuadrant/apis"
+)
+
+var (
+	AuthPolicyKind       = schema.GroupKind{Group: SchemeGroupVersion.Group, Kind: "AuthPolicy"}
+	AuthPoliciesResource = SchemeGroupVersion.WithResource("authpolicies")
 )
 
 // +kubebuilder:object:root=true
