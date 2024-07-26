@@ -67,6 +67,7 @@ func main() {
 		controller.WithInformer("dnspolicy", controller.For[*kuadrantv1alpha2.DNSPolicy](kuadrantv1alpha2.DNSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithInformer("tlspolicy", controller.For[*kuadrantv1alpha2.TLSPolicy](kuadrantv1alpha2.TLSPoliciesResource, metav1.NamespaceAll)),
 		controller.WithInformer("authpolicy", controller.For[*kuadrantv1beta3.AuthPolicy](kuadrantv1beta3.AuthPoliciesResource, metav1.NamespaceAll)),
+		controller.WithInformer("ratelimitpolicy", controller.For[*kuadrantv1beta3.RateLimitPolicy](kuadrantv1beta3.RateLimitPoliciesResource, metav1.NamespaceAll)),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha2.DNSPolicyKind,
 			kuadrantv1alpha2.TLSPolicyKind,
