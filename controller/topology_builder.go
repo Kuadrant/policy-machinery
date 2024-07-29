@@ -1,8 +1,6 @@
 package controller
 
 import (
-	"sync"
-
 	"github.com/samber/lo"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -11,27 +9,21 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
-func NewGatewayAPITopology(policyKinds, objectKinds []schema.GroupKind, objectLinks []RuntimeLinkFunc) *GatewayAPITopology {
-	return &GatewayAPITopology{
-		topology:    machinery.NewTopology(),
+func newGatewayAPITopologyBuilder(policyKinds, objectKinds []schema.GroupKind, objectLinks []RuntimeLinkFunc) *gatewayAPITopologyBuilder {
+	return &gatewayAPITopologyBuilder{
 		policyKinds: policyKinds,
 		objectKinds: objectKinds,
 		objectLinks: objectLinks,
 	}
 }
 
-type GatewayAPITopology struct {
-	mu          sync.RWMutex
-	topology    *machinery.Topology
+type gatewayAPITopologyBuilder struct {
 	policyKinds []schema.GroupKind
 	objectKinds []schema.GroupKind
 	objectLinks []RuntimeLinkFunc
 }
 
-func (t *GatewayAPITopology) Refresh(objs Store) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
+func (t *gatewayAPITopologyBuilder) Build(objs Store) *machinery.Topology {
 	gatewayClasses := lo.FilterMap(lo.Values(objs[schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"}]), func(obj RuntimeObject, _ int) (*gwapiv1.GatewayClass, bool) {
 		gc, ok := obj.(*gwapiv1.GatewayClass)
 		if !ok {
@@ -102,17 +94,7 @@ func (t *GatewayAPITopology) Refresh(objs Store) {
 		opts = append(opts, machinery.WithGatewayAPITopologyObjects(objects...))
 	}
 
-	t.topology = machinery.NewGatewayAPITopology(opts...)
-}
-
-func (t *GatewayAPITopology) Get() *machinery.Topology {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	if t.topology == nil {
-		return nil
-	}
-	topology := *t.topology
-	return &topology
+	return machinery.NewGatewayAPITopology(opts...)
 }
 
 type Object struct {

@@ -79,16 +79,16 @@ func For[T RuntimeObject](resource schema.GroupVersionResource, namespace string
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(o any) {
 				obj := o.(T)
-				controller.add(obj)
+				controller.add(resource, obj)
 			},
 			UpdateFunc: func(o, newO any) {
 				oldObj := o.(T)
 				newObj := newO.(T)
-				controller.update(oldObj, newObj)
+				controller.update(resource, oldObj, newObj)
 			},
 			DeleteFunc: func(o any) {
 				obj := o.(T)
-				controller.delete(obj)
+				controller.delete(resource, obj)
 			},
 		})
 		informer.SetTransform(Restructure[T])

@@ -1,4 +1,4 @@
-package main
+package reconcilers
 
 import (
 	"context"
@@ -21,44 +21,52 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
-const istioGatewayProvider = "istio"
+const IstioGatewayProviderName = "istio"
 
 var (
-	_ GatewayProvider = &IstioGatewayProvider{}
-
-	istioAuthorizationPolicyKind       = schema.GroupKind{Group: istiov1.GroupName, Kind: "AuthorizationPolicy"}
-	istioAuthorizationPoliciesResource = istiov1.SchemeGroupVersion.WithResource("authorizationpolicies")
+	IstioAuthorizationPolicyKind       = schema.GroupKind{Group: istiov1.GroupName, Kind: "AuthorizationPolicy"}
+	IstioAuthorizationPoliciesResource = istiov1.SchemeGroupVersion.WithResource("authorizationpolicies")
 )
 
 type IstioGatewayProvider struct {
-	*dynamic.DynamicClient
+	Client *dynamic.DynamicClient
 }
 
-func (p *IstioGatewayProvider) ReconcileGateway(topology *machinery.Topology, gateway machinery.Targetable, capabilities map[string][][]machinery.Targetable) {
-	// check if the gateway is managed by the istio gateway controller
-	if !lo.ContainsBy(topology.Targetables().Parents(gateway), func(p machinery.Targetable) bool {
-		gc, ok := p.(*machinery.GatewayClass)
-		return ok && gc.Spec.ControllerName == "istio.io/gateway-controller"
-	}) {
-		return
-	}
-
-	// reconcile istio authorizationpolicy resources
-	paths := lo.Filter(capabilities["auth"], func(path []machinery.Targetable, _ int) bool {
-		return lo.Contains(lo.Map(path, machinery.MapTargetableToURLFunc), gateway.GetURL())
+func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
+	authPaths := pathsFromContext(ctx, authPathsKey)
+	targetables := topology.Targetables()
+	gateways := targetables.Items(func(o machinery.Object) bool {
+		_, ok := o.(*machinery.Gateway)
+		return ok
 	})
-	if len(paths) > 0 {
-		p.createAuthorizationPolicy(topology, gateway, paths)
-		return
+	for _, gateway := range gateways {
+		paths := lo.Filter(authPaths, func(path []machinery.Targetable, _ int) bool {
+			if len(path) < 4 { // should never happen
+				log.Fatalf("Unexpected topology path length to build Istio AuthorizationPolicy: %s\n", strings.Join(lo.Map(path, machinery.MapTargetableToURLFunc), " → "))
+			}
+			return path[0].GetURL() == gateway.GetURL() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
+				gc, ok := parent.(*machinery.GatewayClass)
+				return ok && gc.Spec.ControllerName == "istio.io/gateway-controller"
+			})
+		})
+		if len(paths) > 0 {
+			p.createAuthorizationPolicy(ctx, topology, gateway, paths)
+			continue
+		}
+		p.deleteAuthorizationPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), gateway)
 	}
-	p.deleteAuthorizationPolicy(topology, gateway)
 }
 
-func (p *IstioGatewayProvider) createAuthorizationPolicy(topology *machinery.Topology, gateway machinery.Targetable, paths [][]machinery.Targetable) {
+func (p *IstioGatewayProvider) DeleteAuthorizationPolicy(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
+	gateway := resourceEvent.OldObject
+	p.deleteAuthorizationPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
+}
+
+func (p *IstioGatewayProvider) createAuthorizationPolicy(ctx context.Context, topology *machinery.Topology, gateway machinery.Targetable, paths [][]machinery.Targetable) {
 	desiredAuthorizationPolicy := &istiov1.AuthorizationPolicy{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: istiov1.SchemeGroupVersion.String(),
-			Kind:       istioAuthorizationPolicyKind.Kind,
+			Kind:       IstioAuthorizationPolicyKind.Kind,
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      gateway.GetName(),
@@ -80,26 +88,27 @@ func (p *IstioGatewayProvider) createAuthorizationPolicy(topology *machinery.Top
 	}
 
 	for _, path := range paths {
-		if len(path) < 4 {
-			log.Printf("Unexpected topology path length to build Istio AuthorizationPolicy: %s\n", strings.Join(lo.Map(path, machinery.MapTargetableToURLFunc), " → "))
-			continue
-		}
 		listener := path[1].(*machinery.Listener)
+		httpRoute := path[2].(*machinery.HTTPRoute)
 		routeRule := path[3].(*machinery.HTTPRouteRule)
 		hostname := ptr.Deref(listener.Hostname, gwapiv1.Hostname("*"))
-		rules := istioAuthorizationPolicyRulesFromHTTPRouteRule(routeRule.HTTPRouteRule, []gwapiv1.Hostname{hostname})
+		hostnames := []gwapiv1.Hostname{hostname}
+		if len(httpRoute.Spec.Hostnames) > 0 {
+			hostnames = lo.Filter(httpRoute.Spec.Hostnames, hostSubsetOf(hostname))
+		}
+		rules := istioAuthorizationPolicyRulesFromHTTPRouteRule(routeRule.HTTPRouteRule, hostnames)
 		desiredAuthorizationPolicy.Spec.Rules = append(desiredAuthorizationPolicy.Spec.Rules, rules...)
 	}
 
-	resource := p.Resource(istioAuthorizationPoliciesResource).Namespace(gateway.GetNamespace())
+	resource := p.Client.Resource(IstioAuthorizationPoliciesResource).Namespace(gateway.GetNamespace())
 
 	obj, found := lo.Find(topology.Objects().Children(gateway), func(o machinery.Object) bool {
-		return o.GroupVersionKind().GroupKind() == istioAuthorizationPolicyKind && o.GetNamespace() == gateway.GetNamespace() && o.GetName() == gateway.GetName()
+		return o.GroupVersionKind().GroupKind() == IstioAuthorizationPolicyKind && o.GetNamespace() == gateway.GetNamespace() && o.GetName() == gateway.GetName()
 	})
 
 	if !found {
 		o, _ := controller.Destruct(desiredAuthorizationPolicy)
-		_, err := resource.Create(context.TODO(), o, metav1.CreateOptions{})
+		_, err := resource.Create(ctx, o, metav1.CreateOptions{})
 		if err != nil {
 			log.Println("failed to create AuthorizationPolicy", err)
 		}
@@ -120,23 +129,27 @@ func (p *IstioGatewayProvider) createAuthorizationPolicy(topology *machinery.Top
 	authorizationPolicy.Spec.ActionDetail = desiredAuthorizationPolicy.Spec.ActionDetail
 	authorizationPolicy.Spec.Rules = desiredAuthorizationPolicy.Spec.Rules
 	o, _ := controller.Destruct(authorizationPolicy)
-	_, err := resource.Update(context.TODO(), o, metav1.UpdateOptions{})
+	_, err := resource.Update(ctx, o, metav1.UpdateOptions{})
 	if err != nil {
 		log.Println("failed to update AuthorizationPolicy", err)
 	}
 }
 
-func (p *IstioGatewayProvider) deleteAuthorizationPolicy(topology *machinery.Topology, gateway machinery.Targetable) {
-	_, found := lo.Find(topology.Objects().Children(gateway), func(o machinery.Object) bool {
-		return o.GroupVersionKind().GroupKind() == istioAuthorizationPolicyKind && o.GetNamespace() == gateway.GetNamespace() && o.GetName() == gateway.GetName()
+func (p *IstioGatewayProvider) deleteAuthorizationPolicy(ctx context.Context, topology *machinery.Topology, namespace, name string, parent machinery.Targetable) {
+	var objs []machinery.Object
+	if parent != nil {
+		objs = topology.Objects().Children(parent)
+	} else {
+		objs = topology.Objects().Items()
+	}
+	_, found := lo.Find(objs, func(o machinery.Object) bool {
+		return o.GroupVersionKind().GroupKind() == IstioAuthorizationPolicyKind && o.GetNamespace() == namespace && o.GetName() == name
 	})
-
 	if !found {
 		return
 	}
-
-	resource := p.Resource(istioAuthorizationPoliciesResource).Namespace(gateway.GetNamespace())
-	err := resource.Delete(context.TODO(), gateway.GetName(), metav1.DeleteOptions{})
+	resource := p.Client.Resource(IstioAuthorizationPoliciesResource).Namespace(namespace)
+	err := resource.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
 		log.Println("failed to delete AuthorizationPolicy", err)
 	}
@@ -244,7 +257,36 @@ func istioAuthorizationPolicyRulesFromHTTPRouteRule(rule *gwapiv1.HTTPRouteRule,
 	return
 }
 
-func linkGatewayToIstioAuthorizationPolicyFunc(objs controller.Store) machinery.LinkFunc {
+// TODO: move this to a shared package
+func hostSubsetOf(superset gwapiv1.Hostname) func(gwapiv1.Hostname, int) bool {
+	wildcarded := func(hostname gwapiv1.Hostname) bool {
+		return len(hostname) > 0 && hostname[0] == '*'
+	}
+
+	return func(hostname gwapiv1.Hostname, _ int) bool {
+		if wildcarded(hostname) {
+			if wildcarded(superset) {
+				// both hostname and superset contain wildcard
+				if len(hostname) < len(superset) {
+					return false
+				}
+				return strings.HasSuffix(string(hostname[1:]), string(superset[1:]))
+			}
+			// only hostname contains wildcard
+			return false
+		}
+
+		if wildcarded(superset) {
+			// only superset contains wildcard
+			return strings.HasSuffix(string(hostname), string(superset[1:]))
+		}
+
+		// neither contains wildcard, so do normal string comparison
+		return hostname == superset
+	}
+}
+
+func LinkGatewayToIstioAuthorizationPolicyFunc(objs controller.Store) machinery.LinkFunc {
 	gatewayKind := schema.GroupKind{Group: gwapiv1.GroupName, Kind: "Gateway"}
 	gateways := lo.FilterMap(lo.Values(objs[gatewayKind]), func(obj controller.RuntimeObject, _ int) (*gwapiv1.Gateway, bool) {
 		g, ok := obj.(*gwapiv1.Gateway)
@@ -256,7 +298,7 @@ func linkGatewayToIstioAuthorizationPolicyFunc(objs controller.Store) machinery.
 
 	return machinery.LinkFunc{
 		From: gatewayKind,
-		To:   istioAuthorizationPolicyKind,
+		To:   IstioAuthorizationPolicyKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			o := child.(*controller.Object)
 			ap := o.RuntimeObject.(*istiov1.AuthorizationPolicy)

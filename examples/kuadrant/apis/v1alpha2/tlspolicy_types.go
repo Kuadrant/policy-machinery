@@ -4,11 +4,17 @@ import (
 	certmanv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	certmanmetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 
 	kuadrantapis "github.com/kuadrant/policy-machinery/examples/kuadrant/apis"
+)
+
+var (
+	TLSPolicyKind       = schema.GroupKind{Group: SchemeGroupVersion.Group, Kind: "TLSPolicy"}
+	TLSPoliciesResource = SchemeGroupVersion.WithResource("tlspolicies")
 )
 
 // +kubebuilder:object:root=true

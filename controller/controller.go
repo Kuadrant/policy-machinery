@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"log"
 	"sync"
 	"time"
@@ -11,6 +12,13 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
 )
+
+type ResourceEvent struct {
+	Resource  schema.GroupVersionResource
+	EventType EventType
+	OldObject RuntimeObject
+	NewObject RuntimeObject
+}
 
 type RuntimeLinkFunc func(objs Store) machinery.LinkFunc
 
@@ -24,7 +32,7 @@ type ControllerOptions struct {
 }
 
 type ControllerOptionFunc func(*ControllerOptions)
-type CallbackFunc func(EventType, RuntimeObject, RuntimeObject, *machinery.Topology)
+type CallbackFunc func(context.Context, ResourceEvent, *machinery.Topology)
 
 func WithClient(client *dynamic.DynamicClient) ControllerOptionFunc {
 	return func(o *ControllerOptions) {
@@ -65,7 +73,8 @@ func WithObjectLinks(objectLinks ...RuntimeLinkFunc) ControllerOptionFunc {
 func NewController(f ...ControllerOptionFunc) *Controller {
 	opts := &ControllerOptions{
 		informers: map[string]InformerBuilder{},
-		callback:  func(EventType, RuntimeObject, RuntimeObject, *machinery.Topology) {},
+		callback: func(context.Context, ResourceEvent, *machinery.Topology) {
+		},
 	}
 
 	for _, fn := range f {
@@ -75,7 +84,7 @@ func NewController(f ...ControllerOptionFunc) *Controller {
 	controller := &Controller{
 		client:    opts.client,
 		cache:     newCacheStore(),
-		topology:  NewGatewayAPITopology(opts.policyKinds, opts.objectKinds, opts.objectLinks),
+		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks),
 		informers: map[string]cache.SharedInformer{},
 		callback:  opts.callback,
 	}
@@ -88,10 +97,10 @@ func NewController(f ...ControllerOptionFunc) *Controller {
 }
 
 type Controller struct {
-	mu        sync.Mutex
+	mu        sync.RWMutex
 	client    *dynamic.DynamicClient
 	cache     *cacheStore
-	topology  *GatewayAPITopology
+	topology  *gatewayAPITopologyBuilder
 	informers map[string]cache.SharedInformer
 	callback  CallbackFunc
 }
@@ -117,16 +126,15 @@ func (c *Controller) Start() {
 	wait.Until(func() {}, time.Second, stopCh)
 }
 
-func (c *Controller) add(obj RuntimeObject) {
+func (c *Controller) add(resource schema.GroupVersionResource, obj RuntimeObject) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.cache.Add(obj)
-	c.topology.Refresh(c.cache.List())
-	c.propagate(CreateEvent, nil, obj)
+	c.propagate(ResourceEvent{resource, CreateEvent, nil, obj})
 }
 
-func (c *Controller) update(oldObj, newObj RuntimeObject) {
+func (c *Controller) update(resource schema.GroupVersionResource, oldObj, newObj RuntimeObject) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -135,19 +143,18 @@ func (c *Controller) update(oldObj, newObj RuntimeObject) {
 	}
 
 	c.cache.Add(newObj)
-	c.topology.Refresh(c.cache.List())
-	c.propagate(UpdateEvent, oldObj, newObj)
+	c.propagate(ResourceEvent{resource, UpdateEvent, oldObj, newObj})
 }
 
-func (c *Controller) delete(obj RuntimeObject) {
+func (c *Controller) delete(resource schema.GroupVersionResource, obj RuntimeObject) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.cache.Delete(obj)
-	c.topology.Refresh(c.cache.List())
-	c.propagate(DeleteEvent, obj, nil)
+	c.propagate(ResourceEvent{resource, DeleteEvent, obj, nil})
 }
 
-func (c *Controller) propagate(eventType EventType, oldObj, newObj RuntimeObject) {
-	c.callback(eventType, oldObj, newObj, c.topology.Get())
+func (c *Controller) propagate(resourceEvent ResourceEvent) {
+	topology := c.topology.Build(c.cache.List())
+	c.callback(context.TODO(), resourceEvent, topology)
 }

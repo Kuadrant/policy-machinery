@@ -1,15 +1,16 @@
-package main
+package reconcilers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"sort"
 	"strings"
+	"sync"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/samber/lo"
+	"k8s.io/client-go/dynamic"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -19,30 +20,17 @@ import (
 	kuadrantv1beta3 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1beta3"
 )
 
-const topologyFile = "topology.dot"
+const authPathsKey = "authPaths"
 
-type GatewayProvider interface {
-	ReconcileGateway(topology *machinery.Topology, gateway machinery.Targetable, capabilities map[string][][]machinery.Targetable)
+// EffectivePoliciesReconciler works exactly like a controller.Workflow where the precondition reconcile function
+// reconciles the effective policies for the given topology paths, occasionally modifying the context that is passed
+// as argument to the subsequent concurrent reconcilers.
+type EffectivePoliciesReconciler struct {
+	Client         *dynamic.DynamicClient
+	ReconcileFuncs []controller.CallbackFunc
 }
 
-type Reconciler struct {
-	GatewayProviders []GatewayProvider
-}
-
-func (r *Reconciler) Reconcile(eventType controller.EventType, oldObj, newObj controller.RuntimeObject, topology *machinery.Topology) {
-	// print the event
-	obj := oldObj
-	if obj == nil {
-		obj = newObj
-	}
-	log.Printf("%s %sd: %s/%s\n", obj.GetObjectKind().GroupVersionKind().Kind, eventType.String(), obj.GetNamespace(), obj.GetName())
-	if eventType == controller.UpdateEvent {
-		log.Println(cmp.Diff(oldObj, newObj))
-	}
-
-	// update the topology file
-	saveTopologyToFile(topology)
-
+func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
 	targetables := topology.Targetables()
 
 	// reconcile policies
@@ -60,11 +48,6 @@ func (r *Reconciler) Reconcile(eventType controller.EventType, oldObj, newObj co
 		_, ok := o.(*machinery.HTTPRouteRule)
 		return ok
 	})
-
-	capabilities := map[string][][]machinery.Targetable{
-		"auth":      {},
-		"ratelimit": {},
-	}
 
 	for _, gateway := range gateways {
 		// reconcile Gateway -> Listener policies
@@ -85,31 +68,26 @@ func (r *Reconciler) Reconcile(eventType controller.EventType, oldObj, newObj co
 			paths := targetables.Paths(gateway, httpRouteRule)
 			for i := range paths {
 				if p := effectivePolicyForPath[*kuadrantv1beta3.AuthPolicy](paths[i]); p != nil {
-					capabilities["auth"] = append(capabilities["auth"], paths[i])
+					ctx = pathIntoContext(ctx, authPathsKey, paths[i])
 					// TODO: reconcile auth effective policy (i.e. create the Authorino AuthConfig)
 				}
 				if p := effectivePolicyForPath[*kuadrantv1beta3.RateLimitPolicy](paths[i]); p != nil {
-					capabilities["ratelimit"] = append(capabilities["ratelimit"], paths[i])
 					// TODO: reconcile rate-limit effective policy (i.e. create the Limitador limits config)
 				}
 			}
 		}
-
-		for _, gatewayProvider := range r.GatewayProviders {
-			gatewayProvider.ReconcileGateway(topology, gateway, capabilities)
-		}
 	}
-}
 
-func saveTopologyToFile(topology *machinery.Topology) {
-	file, err := os.Create(topologyFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-	_, err = file.Write(topology.ToDot().Bytes())
-	if err != nil {
-		log.Fatal(err)
+	// dispatch the event to subsequent reconcilers
+	funcs := r.ReconcileFuncs
+	waitGroup := &sync.WaitGroup{}
+	defer waitGroup.Wait()
+	waitGroup.Add(len(funcs))
+	for _, f := range funcs {
+		go func() {
+			defer waitGroup.Done()
+			f(ctx, resourceEvent, topology)
+		}()
 	}
 }
 
@@ -146,9 +124,17 @@ func effectivePolicyForPath[T machinery.Policy](path []machinery.Targetable) *T 
 	return &concreteEffectivePolicy
 }
 
-var _ GatewayProvider = &DefaultGatewayProvider{}
+func pathIntoContext(ctx context.Context, key string, path []machinery.Targetable) context.Context {
+	if p := ctx.Value(key); p != nil {
+		return context.WithValue(ctx, key, append(p.([][]machinery.Targetable), path))
+	}
+	return context.WithValue(ctx, key, [][]machinery.Targetable{path})
+}
 
-type DefaultGatewayProvider struct{}
-
-func (p *DefaultGatewayProvider) ReconcileGateway(_ *machinery.Topology, _ machinery.Targetable, _ map[string][][]machinery.Targetable) {
+func pathsFromContext(ctx context.Context, key string) [][]machinery.Targetable {
+	var paths [][]machinery.Targetable
+	if p := ctx.Value(key); p != nil {
+		paths = p.([][]machinery.Targetable)
+	}
+	return paths
 }
