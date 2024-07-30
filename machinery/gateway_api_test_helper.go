@@ -129,10 +129,57 @@ func BuildService(f ...func(*core.Service)) *core.Service {
 	return s
 }
 
+func BuildGRPCRoute(f ...func(*gwapiv1.GRPCRoute)) *gwapiv1.GRPCRoute {
+	r := &gwapiv1.GRPCRoute{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: gwapiv1.GroupVersion.String(),
+			Kind:       "GRPCRoute",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-grpc-route",
+			Namespace: "my-namespace",
+		},
+		Spec: gwapiv1.GRPCRouteSpec{
+			CommonRouteSpec: gwapiv1.CommonRouteSpec{
+				ParentRefs: []gwapiv1.ParentReference{
+					{
+						Name: "my-gateway",
+					},
+				},
+			},
+			Rules: []gwapiv1.GRPCRouteRule{
+				{
+					BackendRefs: []gwapiv1.GRPCBackendRef{BuildGRPCBackendRef()},
+				},
+			},
+		},
+	}
+	for _, fn := range f {
+		fn(r)
+	}
+
+	return r
+}
+
+func BuildGRPCBackendRef(f ...func(*gwapiv1.BackendObjectReference)) gwapiv1.GRPCBackendRef {
+	bor := &gwapiv1.BackendObjectReference{
+		Name: "my-service",
+	}
+	for _, fn := range f {
+		fn(bor)
+	}
+	return gwapiv1.GRPCBackendRef{
+		BackendRef: gwapiv1.BackendRef{
+			BackendObjectReference: *bor,
+		},
+	}
+}
+
 type GatewayAPIResources struct {
 	GatewayClasses []*gwapiv1.GatewayClass
 	Gateways       []*gwapiv1.Gateway
 	HTTPRoutes     []*gwapiv1.HTTPRoute
+	GRPCRoutes     []*gwapiv1.GRPCRoute
 	Services       []*core.Service
 }
 
@@ -323,13 +370,6 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 					},
 				}
 			}),
-			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-7"
-				r.Spec.ParentRefs[0].Name = "gateway-5"
-				r.Spec.Rules[0].BackendRefs[0] = BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-					backendRef.Name = "service-7"
-				})
-			}),
 		},
 		Services: []*core.Service{
 			BuildService(func(s *core.Service) {
@@ -367,6 +407,15 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 			BuildService(func(s *core.Service) {
 				s.Name = "service-7"
 				s.Spec.Ports[0].Name = "port-1"
+			}),
+		},
+		GRPCRoutes: []*gwapiv1.GRPCRoute{
+			BuildGRPCRoute(func(r *gwapiv1.GRPCRoute) {
+				r.Name = "route-7"
+				r.Spec.ParentRefs[0].Name = "gateway-5"
+				r.Spec.Rules[0].BackendRefs[0] = BuildGRPCBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+					backendRef.Name = "service-7"
+				})
 			}),
 		},
 	}

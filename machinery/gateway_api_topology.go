@@ -14,6 +14,7 @@ type GatewayAPITopologyOptions struct {
 	GatewayClasses []*GatewayClass
 	Gateways       []*Gateway
 	HTTPRoutes     []*HTTPRoute
+	GRPCRoutes     []*GRPCRoute
 	Services       []*Service
 	Policies       []Policy
 	Objects        []Object
@@ -21,6 +22,7 @@ type GatewayAPITopologyOptions struct {
 
 	ExpandGatewayListeners bool
 	ExpandHTTPRouteRules   bool
+	ExpandGRPCRouteRules   bool
 	ExpandServicePorts     bool
 }
 
@@ -53,6 +55,15 @@ func WithHTTPRoutes(httpRoutes ...*gwapiv1.HTTPRoute) GatewayAPITopologyOptionsF
 	}
 }
 
+// WithGRPCRoutes adds GRPC routes to the options to initialize a new Gateway API topology.
+func WithGRPCRoutes(grpcRoutes ...*gwapiv1.GRPCRoute) GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.GRPCRoutes = append(o.GRPCRoutes, lo.Map(grpcRoutes, func(grpcRoute *gwapiv1.GRPCRoute, _ int) *GRPCRoute {
+			return &GRPCRoute{GRPCRoute: grpcRoute}
+		})...)
+	}
+}
+
 // WithServices adds services to the options to initialize a new Gateway API topology.
 func WithServices(services ...*core.Service) GatewayAPITopologyOptionsFunc {
 	return func(o *GatewayAPITopologyOptions) {
@@ -78,7 +89,7 @@ func WithGatewayAPITopologyObjects(objects ...Object) GatewayAPITopologyOptionsF
 	}
 }
 
-// WithLinks adds link functions to the options to initialize a new Gateway API topology.
+// WithGatewayAPITopologyLinks adds link functions to the options to initialize a new Gateway API topology.
 func WithGatewayAPITopologyLinks(links ...LinkFunc) GatewayAPITopologyOptionsFunc {
 	return func(o *GatewayAPITopologyOptions) {
 		o.Links = append(o.Links, links...)
@@ -96,6 +107,13 @@ func ExpandGatewayListeners() GatewayAPITopologyOptionsFunc {
 func ExpandHTTPRouteRules() GatewayAPITopologyOptionsFunc {
 	return func(o *GatewayAPITopologyOptions) {
 		o.ExpandHTTPRouteRules = true
+	}
+}
+
+// ExpandGRPCRouteRules adds targetable GRPC route rules to the options to initialize a new Gateway API topology.
+func ExpandGRPCRouteRules() GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.ExpandGRPCRouteRules = true
 	}
 }
 
@@ -128,6 +146,7 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		WithTargetables(o.GatewayClasses...),
 		WithTargetables(o.Gateways...),
 		WithTargetables(o.HTTPRoutes...),
+		WithTargetables(o.GRPCRoutes...),
 		WithTargetables(o.Services...),
 		WithLinks(o.Links...),
 		WithLinks(LinkGatewayClassToGatewayFunc(o.GatewayClasses)), // GatewayClass -> Gateway
@@ -139,9 +158,11 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		opts = append(opts, WithLinks(
 			LinkGatewayToListenerFunc(),                        // Gateway -> Listener
 			LinkListenerToHTTPRouteFunc(o.Gateways, listeners), // Listener -> HTTPRoute
+			LinkListenerToGRPCRouteFunc(o.Gateways, listeners), // Listener -> GRPCRoute
 		))
 	} else {
 		opts = append(opts, WithLinks(LinkGatewayToHTTPRouteFunc(o.Gateways))) // Gateway -> HTTPRoute
+		opts = append(opts, WithLinks(LinkGatewayToGRPCRouteFunc(o.Gateways))) // Gateway -> GRPCRoute
 	}
 
 	if o.ExpandHTTPRouteRules {
@@ -170,6 +191,32 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		}
 	}
 
+	if o.ExpandGRPCRouteRules {
+		grpcRouteRules := lo.FlatMap(o.GRPCRoutes, GRPCRouteRulesFromGRPCRouteRule)
+		opts = append(opts, WithTargetables(grpcRouteRules...))
+		opts = append(opts, WithLinks(LinkGRPCRouteToGRPCRouteRuleFunc())) // GRPCRoute -> GRPCRouteRule
+
+		if o.ExpandServicePorts {
+			servicePorts := lo.FlatMap(o.Services, ServicePortsFromBackendFunc)
+			opts = append(opts, WithTargetables(servicePorts...))
+			opts = append(opts, WithLinks(
+				LinkGRPCRouteRuleToServicePortFunc(grpcRouteRules),   // GRPCRouteRule -> ServicePort
+				LinkGRPCRouteRuleToServiceFunc(grpcRouteRules, true), // GRPCRouteRule -> Service
+			))
+		} else {
+			opts = append(opts, WithLinks(LinkGRPCRouteRuleToServiceFunc(grpcRouteRules, false))) // GRPCRouteRule -> Service
+		}
+	} else {
+		if o.ExpandServicePorts {
+			opts = append(opts, WithLinks(
+				LinkGRPCRouteToServicePortFunc(o.GRPCRoutes),   // GRPCRoute -> ServicePort
+				LinkGRPCRouteToServiceFunc(o.GRPCRoutes, true), // GRPCRoute -> Service
+			))
+		} else {
+			opts = append(opts, WithLinks(LinkGRPCRouteToServiceFunc(o.GRPCRoutes, false))) // GRPCRoute -> Service
+		}
+	}
+
 	if o.ExpandServicePorts {
 		opts = append(opts, WithLinks(LinkServiceToServicePortFunc())) // Service -> ServicePort
 	}
@@ -193,6 +240,17 @@ func HTTPRouteRulesFromHTTPRouteFunc(httpRoute *HTTPRoute, _ int) []*HTTPRouteRu
 		return &HTTPRouteRule{
 			HTTPRouteRule: &rule,
 			HTTPRoute:     httpRoute,
+			Name:          gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
+		}
+	})
+}
+
+// GRPCRouteRulesFromGRPCRouteRule returns a list of targetable GRPCRouteRules from a targetable GRPCRoute.
+func GRPCRouteRulesFromGRPCRouteRule(grpcRoute *GRPCRoute, _ int) []*GRPCRouteRule {
+	return lo.Map(grpcRoute.Spec.Rules, func(rule gwapiv1.GRPCRouteRule, i int) *GRPCRouteRule {
+		return &GRPCRouteRule{
+			GRPCRouteRule: &rule,
+			GRPCRoute:     grpcRoute,
 			Name:          gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
 		}
 	})
@@ -235,18 +293,36 @@ func LinkGatewayToHTTPRouteFunc(gateways []*Gateway) LinkFunc {
 		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
 		Func: func(child Object) []Object {
 			httpRoute := child.(*HTTPRoute)
-			return lo.FilterMap(httpRoute.Spec.ParentRefs, func(parentRef gwapiv1.ParentReference, _ int) (Object, bool) {
-				parentRefGroup := ptr.Deref(parentRef.Group, gwapiv1.Group(gwapiv1.GroupName))
-				parentRefKind := ptr.Deref(parentRef.Kind, gwapiv1.Kind("Gateway"))
-				if parentRefGroup != gwapiv1.GroupName || parentRefKind != "Gateway" {
-					return nil, false
-				}
-				gatewayNamespace := string(ptr.Deref(parentRef.Namespace, gwapiv1.Namespace(httpRoute.Namespace)))
-				return lo.Find(gateways, func(g *Gateway) bool {
-					return g.Namespace == gatewayNamespace && g.Name == string(parentRef.Name)
-				})
-			})
+			return lo.FilterMap(httpRoute.Spec.ParentRefs, findGatewayFromParentRefFunc(gateways, httpRoute.Namespace))
 		},
+	}
+}
+
+// LinkGatewayToGRPCRouteFunc returns a link function that teaches a topology how to link GRPCRoute's from known
+// Gateway's, based on the GRPCRoute's `parentRefs` field.
+func LinkGatewayToGRPCRouteFunc(gateways []*Gateway) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
+		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"},
+		Func: func(child Object) []Object {
+			grpcRoute := child.(*GRPCRoute)
+			return lo.FilterMap(grpcRoute.Spec.ParentRefs, findGatewayFromParentRefFunc(gateways, grpcRoute.Namespace))
+		},
+	}
+}
+
+// findGatewayFromParentRefFunc is a common function to find a Gateway from a xRoute's `parentRef` field
+func findGatewayFromParentRefFunc(gateways []*Gateway, routeNamespace string) func(parentRef gwapiv1.ParentReference, _ int) (Object, bool) {
+	return func(parentRef gwapiv1.ParentReference, _ int) (Object, bool) {
+		parentRefGroup := ptr.Deref(parentRef.Group, gwapiv1.GroupName)
+		parentRefKind := ptr.Deref(parentRef.Kind, "Gateway")
+		if parentRefGroup != gwapiv1.GroupName || parentRefKind != "Gateway" {
+			return nil, false
+		}
+		gatewayNamespace := string(ptr.Deref(parentRef.Namespace, gwapiv1.Namespace(routeNamespace)))
+		return lo.Find(gateways, func(g *Gateway) bool {
+			return g.Namespace == gatewayNamespace && g.Name == string(parentRef.Name)
+		})
 	}
 }
 
@@ -273,33 +349,53 @@ func LinkListenerToHTTPRouteFunc(gateways []*Gateway, listeners []*Listener) Lin
 		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
 		Func: func(child Object) []Object {
 			httpRoute := child.(*HTTPRoute)
-			return lo.FlatMap(httpRoute.Spec.ParentRefs, func(parentRef gwapiv1.ParentReference, _ int) []Object {
-				parentRefGroup := ptr.Deref(parentRef.Group, gwapiv1.Group(gwapiv1.GroupName))
-				parentRefKind := ptr.Deref(parentRef.Kind, gwapiv1.Kind("Gateway"))
-				if parentRefGroup != gwapiv1.GroupName || parentRefKind != "Gateway" {
-					return nil
-				}
-				gatewayNamespace := string(ptr.Deref(parentRef.Namespace, gwapiv1.Namespace(httpRoute.Namespace)))
-				gateway, ok := lo.Find(gateways, func(g *Gateway) bool {
-					return g.Namespace == gatewayNamespace && g.Name == string(parentRef.Name)
-				})
-				if !ok {
-					return nil
-				}
-				if parentRef.SectionName != nil {
-					listener, ok := lo.Find(listeners, func(l *Listener) bool {
-						return l.Gateway.GetURL() == gateway.GetURL() && l.Name == *parentRef.SectionName
-					})
-					if !ok {
-						return nil
-					}
-					return []Object{listener}
-				}
-				return lo.FilterMap(listeners, func(l *Listener, _ int) (Object, bool) {
-					return l, l.Gateway.GetURL() == gateway.GetURL()
-				})
-			})
+			return lo.FlatMap(httpRoute.Spec.ParentRefs, findListenerFromParentRefFunc(gateways, listeners, httpRoute.Namespace))
 		},
+	}
+}
+
+// LinkListenerToGRPCRouteFunc returns a link function that teaches a topology how to link GRPCRoutes from known
+// Gateways and gateway Listeners, based on the GRPCRoute's `parentRefs` field.
+// The function links a specific Listener of a Gateway to the GRPCRoute when the `sectionName` field of the parent
+// reference is present, otherwise all Listeners of the parent Gateway are linked to the GRPCRoute.
+func LinkListenerToGRPCRouteFunc(gateways []*Gateway, listeners []*Listener) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
+		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"},
+		Func: func(child Object) []Object {
+			grpcRoute := child.(*GRPCRoute)
+			return lo.FlatMap(grpcRoute.Spec.ParentRefs, findListenerFromParentRefFunc(gateways, listeners, grpcRoute.Namespace))
+		},
+	}
+}
+
+// findListenerFromParentRefFunc is a common function to find a gateway Listener from a xRoute's `parentRef` field
+func findListenerFromParentRefFunc(gateways []*Gateway, listeners []*Listener, routeNamespace string) func(parentRef gwapiv1.ParentReference, _ int) []Object {
+	return func(parentRef gwapiv1.ParentReference, _ int) []Object {
+		parentRefGroup := ptr.Deref(parentRef.Group, gwapiv1.GroupName)
+		parentRefKind := ptr.Deref(parentRef.Kind, "Gateway")
+		if parentRefGroup != gwapiv1.GroupName || parentRefKind != "Gateway" {
+			return nil
+		}
+		gatewayNamespace := string(ptr.Deref(parentRef.Namespace, gwapiv1.Namespace(routeNamespace)))
+		gateway, ok := lo.Find(gateways, func(g *Gateway) bool {
+			return g.Namespace == gatewayNamespace && g.Name == string(parentRef.Name)
+		})
+		if !ok {
+			return nil
+		}
+		if parentRef.SectionName != nil {
+			listener, ok := lo.Find(listeners, func(l *Listener) bool {
+				return l.Gateway.GetURL() == gateway.GetURL() && l.Name == *parentRef.SectionName
+			})
+			if !ok {
+				return nil
+			}
+			return []Object{listener}
+		}
+		return lo.FilterMap(listeners, func(l *Listener, _ int) (Object, bool) {
+			return l, l.Gateway.GetURL() == gateway.GetURL()
+		})
 	}
 }
 
@@ -396,8 +492,101 @@ func LinkHTTPRouteRuleToServicePortFunc(httpRouteRules []*HTTPRouteRule) LinkFun
 	}
 }
 
+// LinkGRPCRouteToServiceFunc returns a link function that teaches a topology how to link Services from known
+// GRPCRoutes, based on the GRPCRoute's `backendRefs` fields.
+// Set the `strict` parameter to `true` to link only to services that have no port specified in the backendRefs.
+func LinkGRPCRouteToServiceFunc(routes []*GRPCRoute, strict bool) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"},
+		To:   schema.GroupKind{Kind: "Service"},
+		Func: func(child Object) []Object {
+			service := child.(*Service)
+			return lo.FilterMap(routes, func(route *GRPCRoute, _ int) (Object, bool) {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1.GRPCRouteRule) bool {
+					backendRefs := lo.FilterMap(rule.BackendRefs, func(backendRef gwapiv1.GRPCBackendRef, _ int) (gwapiv1.BackendRef, bool) {
+						return backendRef.BackendRef, !strict || backendRef.Port == nil
+					})
+					return lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(service, route.Namespace))
+				})
+			})
+		},
+	}
+}
+
+// LinkGRPCRouteToServicePortFunc returns a link function that teaches a topology how to link services ports from known
+// GRPCRoutes, based on the GRPCRoute's `backendRefs` fields.
+// The link function disregards backend references that do not specify a port number.
+func LinkGRPCRouteToServicePortFunc(routes []*GRPCRoute) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"},
+		To:   schema.GroupKind{Kind: "ServicePort"},
+		Func: func(child Object) []Object {
+			servicePort := child.(*ServicePort)
+			return lo.FilterMap(routes, func(route *GRPCRoute, _ int) (Object, bool) {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1.GRPCRouteRule) bool {
+					backendRefs := lo.FilterMap(rule.BackendRefs, func(backendRef gwapiv1.GRPCBackendRef, _ int) (gwapiv1.BackendRef, bool) {
+						return backendRef.BackendRef, backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
+					})
+					return lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(servicePort.Service, route.Namespace))
+				})
+			})
+		},
+	}
+}
+
+// LinkGRPCRouteToGRPCRouteRuleFunc returns a link function that teaches a topology how to link GRPCRouteRule from the
+// GRPCRoute they are strongly related to.
+func LinkGRPCRouteToGRPCRouteRuleFunc() LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"},
+		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"},
+		Func: func(child Object) []Object {
+			grpcRouteRule := child.(*GRPCRouteRule)
+			return []Object{grpcRouteRule.GRPCRoute}
+		},
+	}
+}
+
+// LinkGRPCRouteRuleToServiceFunc returns a link function that teaches a topology how to link Services from known
+// GRPCRouteRules, based on the GRPCRouteRule's `backendRefs` field.
+// Set the `strict` parameter to `true` to link only to services that have no port specified in the backendRefs.
+func LinkGRPCRouteRuleToServiceFunc(routeRules []*GRPCRouteRule, strict bool) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"},
+		To:   schema.GroupKind{Kind: "Service"},
+		Func: func(child Object) []Object {
+			service := child.(*Service)
+			return lo.FilterMap(routeRules, func(routeRule *GRPCRouteRule, _ int) (Object, bool) {
+				backendRefs := lo.FilterMap(routeRule.BackendRefs, func(backendRef gwapiv1.GRPCBackendRef, _ int) (gwapiv1.BackendRef, bool) {
+					return backendRef.BackendRef, !strict || backendRef.Port == nil
+				})
+				return routeRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(service, routeRule.GRPCRoute.Namespace))
+			})
+		},
+	}
+}
+
+// LinkGRPCRouteRuleToServicePortFunc returns a link function that teaches a topology how to link services ports from
+// known GRPCRouteRules, based on the GRPCRouteRule's `backendRefs` field.
+// The link function disregards backend references that do not specify a port number.
+func LinkGRPCRouteRuleToServicePortFunc(routeRules []*GRPCRouteRule) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"},
+		To:   schema.GroupKind{Kind: "ServicePort"},
+		Func: func(child Object) []Object {
+			servicePort := child.(*ServicePort)
+			return lo.FilterMap(routeRules, func(routeRule *GRPCRouteRule, _ int) (Object, bool) {
+				backendRefs := lo.FilterMap(routeRule.BackendRefs, func(backendRef gwapiv1.GRPCBackendRef, _ int) (gwapiv1.BackendRef, bool) {
+					return backendRef.BackendRef, backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
+				})
+				return routeRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(servicePort.Service, routeRule.GRPCRoute.Namespace))
+			})
+		},
+	}
+}
+
 // LinkServiceToServicePortFunc returns a link function that teaches a topology how to link service ports from the
-// Serviceg they are strongly related to.
+// Service they are strongly related to.
 func LinkServiceToServicePortFunc() LinkFunc {
 	return LinkFunc{
 		From: schema.GroupKind{Kind: "Service"},
