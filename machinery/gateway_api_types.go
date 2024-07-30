@@ -8,6 +8,7 @@ import (
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gwapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
 const nameSectionNameURLSeparator = '#'
@@ -372,6 +373,18 @@ func (t LocalPolicyTargetReferenceWithSectionName) GetName() string {
 		return string(t.LocalPolicyTargetReference.Name)
 	}
 	return namespacedSectionName(string(t.LocalPolicyTargetReference.Name), *t.SectionName)
+}
+
+// These are wrappers for Gateway API types so instances can be used as objects in the topology.
+
+type ReferenceGrant struct {
+	*gwapiv1beta1.ReferenceGrant
+}
+
+var _ Object = &ReferenceGrant{}
+
+func (o *ReferenceGrant) GetURL() string {
+	return UrlFromObject(o)
 }
 
 func namespacedSectionName(namespace string, sectionName gwapiv1.SectionName) string {
