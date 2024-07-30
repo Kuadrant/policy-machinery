@@ -232,6 +232,46 @@ func (r *GRPCRoute) Policies() []Policy {
 	return r.attachedPolicies
 }
 
+type GRPCRouteRule struct {
+	*gwapiv1.GRPCRouteRule
+
+	GRPCRoute        *GRPCRoute
+	Name             gwapiv1.SectionName // TODO: Use the `name` field of the HTTPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &GRPCRouteRule{}
+
+func (r *GRPCRouteRule) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gwapiv1.GroupName,
+		Version: gwapiv1.GroupVersion.Version,
+		Kind:    "GRPCRouteRule",
+	}
+}
+
+func (r *GRPCRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (r *GRPCRouteRule) GetURL() string {
+	return namespacedSectionName(UrlFromObject(r.GRPCRoute), r.Name)
+}
+
+func (r *GRPCRouteRule) GetNamespace() string {
+	return r.GRPCRoute.GetNamespace()
+}
+
+func (r *GRPCRouteRule) GetName() string {
+	return namespacedSectionName(r.GRPCRoute.Name, r.Name)
+}
+
+func (r *GRPCRouteRule) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *GRPCRouteRule) Policies() []Policy {
+	return r.attachedPolicies
+}
+
 // These are Gateway API target reference types that implement the PolicyTargetReference interface, so policies'
 // targetRef instances can be treated as Objects whose GetURL() functions return the unique identifier of the
 // corresponding targetable the reference points to.
