@@ -213,6 +213,25 @@ func (p *ServicePort) Policies() []Policy {
 	return p.attachedPolicies
 }
 
+type GRPCRoute struct {
+	*gwapiv1.GRPCRoute
+
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &GRPCRoute{}
+
+func (r *GRPCRoute) GetURL() string {
+	return UrlFromObject(r)
+}
+func (r *GRPCRoute) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *GRPCRoute) Policies() []Policy {
+	return r.attachedPolicies
+}
+
 // These are Gateway API target reference types that implement the PolicyTargetReference interface, so policies'
 // targetRef instances can be treated as Objects whose GetURL() functions return the unique identifier of the
 // corresponding targetable the reference points to.
