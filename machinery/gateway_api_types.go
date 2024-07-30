@@ -335,6 +335,26 @@ func (r *TCPRouteRule) Policies() []Policy {
 	return r.attachedPolicies
 }
 
+type TLSRoute struct {
+	*gwapiv1alpha2.TLSRoute
+
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &TLSRoute{}
+
+func (r *TLSRoute) GetURL() string {
+	return UrlFromObject(r)
+}
+
+func (r *TLSRoute) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *TLSRoute) Policies() []Policy {
+	return r.attachedPolicies
+}
+
 // These are Gateway API target reference types that implement the PolicyTargetReference interface, so policies'
 // targetRef instances can be treated as Objects whose GetURL() functions return the unique identifier of the
 // corresponding targetable the reference points to.
