@@ -355,6 +355,46 @@ func (r *TLSRoute) Policies() []Policy {
 	return r.attachedPolicies
 }
 
+type TLSRouteRule struct {
+	*gwapiv1alpha2.TLSRouteRule
+
+	TLSRoute         *TLSRoute
+	Name             gwapiv1.SectionName // TODO: Use the `name` field of the TLSRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &TLSRouteRule{}
+
+func (r *TLSRouteRule) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gwapiv1alpha2.GroupName,
+		Version: gwapiv1alpha2.GroupVersion.Version,
+		Kind:    "TLSRouteRule",
+	}
+}
+
+func (r *TLSRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (r *TLSRouteRule) GetURL() string {
+	return namespacedSectionName(UrlFromObject(r.TLSRoute), r.Name)
+}
+
+func (r *TLSRouteRule) GetNamespace() string {
+	return r.TLSRoute.GetNamespace()
+}
+
+func (r *TLSRouteRule) GetName() string {
+	return namespacedSectionName(r.TLSRoute.Name, r.Name)
+}
+
+func (r *TLSRouteRule) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *TLSRouteRule) Policies() []Policy {
+	return r.attachedPolicies
+}
+
 // These are Gateway API target reference types that implement the PolicyTargetReference interface, so policies'
 // targetRef instances can be treated as Objects whose GetURL() functions return the unique identifier of the
 // corresponding targetable the reference points to.
