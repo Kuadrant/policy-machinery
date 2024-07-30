@@ -20,6 +20,7 @@ import (
 // This results in a topology with the following scheme:
 //
 //	GatewayClass -> Gateway -> HTTPRoute -> Service
+//							∟> GRPCRoute ⤴
 func TestGatewayAPITopology(t *testing.T) {
 	testCases := []struct {
 		name          string
@@ -42,12 +43,14 @@ func TestGatewayAPITopology(t *testing.T) {
 				GatewayClasses: []*gwapiv1.GatewayClass{BuildGatewayClass()},
 				Gateways:       []*gwapiv1.Gateway{BuildGateway()},
 				HTTPRoutes:     []*gwapiv1.HTTPRoute{BuildHTTPRoute()},
+				GRPCRoutes:     []*gwapiv1.GRPCRoute{BuildGRPCRoute()},
 				Services:       []*core.Service{BuildService()},
 			},
 			policies: []Policy{buildPolicy()},
 			expectedLinks: map[string][]string{
 				"my-gateway-class": {"my-gateway"},
-				"my-gateway":       {"my-http-route"},
+				"my-gateway":       {"my-http-route", "my-grpc-route"},
+				"my-grpc-route":    {"my-service"},
 				"my-http-route":    {"my-service"},
 			},
 		},
@@ -79,6 +82,7 @@ func TestGatewayAPITopology(t *testing.T) {
 			})
 			gateways := lo.Map(tc.targetables.Gateways, func(gateway *gwapiv1.Gateway, _ int) *Gateway { return &Gateway{Gateway: gateway} })
 			httpRoutes := lo.Map(tc.targetables.HTTPRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) *HTTPRoute { return &HTTPRoute{HTTPRoute: httpRoute} })
+			grpcRoutes := lo.Map(tc.targetables.GRPCRoutes, func(grpcRoute *gwapiv1.GRPCRoute, _ int) *GRPCRoute { return &GRPCRoute{GRPCRoute: grpcRoute} })
 			services := lo.Map(tc.targetables.Services, func(service *core.Service, _ int) *Service { return &Service{Service: service} })
 
 			topology := NewTopology(
@@ -86,10 +90,13 @@ func TestGatewayAPITopology(t *testing.T) {
 				WithTargetables(gateways...),
 				WithTargetables(httpRoutes...),
 				WithTargetables(services...),
+				WithTargetables(grpcRoutes...),
 				WithLinks(
 					LinkGatewayClassToGatewayFunc(gatewayClasses),
 					LinkGatewayToHTTPRouteFunc(gateways),
 					LinkHTTPRouteToServiceFunc(httpRoutes, false),
+					LinkGatewayToGRPCRouteFunc(gateways),
+					LinkGRPCRouteToServiceFunc(grpcRoutes, false),
 				),
 				WithPolicies(tc.policies...),
 			)
@@ -132,13 +139,16 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 				GatewayClasses: []*gwapiv1.GatewayClass{BuildGatewayClass()},
 				Gateways:       []*gwapiv1.Gateway{BuildGateway()},
 				HTTPRoutes:     []*gwapiv1.HTTPRoute{BuildHTTPRoute()},
+				GRPCRoutes:     []*gwapiv1.GRPCRoute{BuildGRPCRoute()},
 				Services:       []*core.Service{BuildService()},
 			},
 			policies: []Policy{buildPolicy()},
 			expectedLinks: map[string][]string{
 				"my-gateway-class":       {"my-gateway"},
 				"my-gateway":             {"my-gateway#my-listener"},
-				"my-gateway#my-listener": {"my-http-route"},
+				"my-gateway#my-listener": {"my-http-route", "my-grpc-route"},
+				"my-grpc-route":          {"my-grpc-route#rule-1"},
+				"my-grpc-route#rule-1":   {"my-service"},
 				"my-http-route":          {"my-http-route#rule-1"},
 				"my-http-route#rule-1":   {"my-service"},
 				"my-service":             {"my-service#http"},
@@ -239,6 +249,8 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 				ExpandGatewayListeners(),
 				WithHTTPRoutes(tc.targetables.HTTPRoutes...),
 				ExpandHTTPRouteRules(),
+				WithGRPCRoutes(tc.targetables.GRPCRoutes...),
+				ExpandGRPCRouteRules(),
 				WithServices(tc.targetables.Services...),
 				ExpandServicePorts(),
 				WithGatewayAPITopologyPolicies(tc.policies...),
