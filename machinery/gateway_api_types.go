@@ -3,11 +3,13 @@ package machinery
 import (
 	"fmt"
 
+	"github.com/samber/lo"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gwapiv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 	gwapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
@@ -385,6 +387,39 @@ var _ Object = &ReferenceGrant{}
 
 func (o *ReferenceGrant) GetURL() string {
 	return UrlFromObject(o)
+}
+
+// These are wrappers for Gateway API types so instances can be used as policies in the topology.
+
+type BackendTLSPolicy struct {
+	*gwapiv1alpha3.BackendTLSPolicy
+}
+
+var _ Policy = &BackendTLSPolicy{}
+
+func (p *BackendTLSPolicy) GetURL() string {
+	return UrlFromObject(p)
+}
+
+func (p *BackendTLSPolicy) GetTargetRefs() []PolicyTargetReference {
+	return lo.Map(p.Spec.TargetRefs, func(item gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName, _ int) PolicyTargetReference {
+		return LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: item,
+			PolicyNamespace: p.Namespace,
+		}
+	})
+}
+
+func (p *BackendTLSPolicy) GetMergeStrategy() MergeStrategy {
+	return DefaultMergeStrategy
+}
+
+func (p *BackendTLSPolicy) Merge(other Policy) Policy {
+	source, ok := other.(*BackendTLSPolicy)
+	if !ok {
+		return p
+	}
+	return source.GetMergeStrategy()(source, p)
 }
 
 func namespacedSectionName(namespace string, sectionName gwapiv1.SectionName) string {
