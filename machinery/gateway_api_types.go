@@ -239,7 +239,7 @@ type GRPCRouteRule struct {
 	*gwapiv1.GRPCRouteRule
 
 	GRPCRoute        *GRPCRoute
-	Name             gwapiv1.SectionName // TODO: Use the `name` field of the HTTPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	Name             gwapiv1.SectionName // TODO: Use the `name` field of the GRPCRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
 	attachedPolicies []Policy
 }
 
@@ -272,6 +272,26 @@ func (r *GRPCRouteRule) SetPolicies(policies []Policy) {
 }
 
 func (r *GRPCRouteRule) Policies() []Policy {
+	return r.attachedPolicies
+}
+
+type TCPRoute struct {
+	*gwapiv1alpha2.TCPRoute
+
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &TCPRoute{}
+
+func (r *TCPRoute) GetURL() string {
+	return UrlFromObject(r)
+}
+
+func (r *TCPRoute) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *TCPRoute) Policies() []Policy {
 	return r.attachedPolicies
 }
 
