@@ -415,6 +415,46 @@ func (r *UDPRoute) Policies() []Policy {
 	return r.attachedPolicies
 }
 
+type UDPRouteRule struct {
+	*gwapiv1alpha2.UDPRouteRule
+
+	UDPRoute         *UDPRoute
+	Name             gwapiv1.SectionName // TODO: Use the `name` field of the UDPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &UDPRouteRule{}
+
+func (r *UDPRouteRule) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gwapiv1alpha2.GroupName,
+		Version: gwapiv1alpha2.GroupVersion.Version,
+		Kind:    "UDPRouteRule",
+	}
+}
+
+func (r *UDPRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (r *UDPRouteRule) GetURL() string {
+	return namespacedSectionName(UrlFromObject(r.UDPRoute), r.Name)
+}
+
+func (r *UDPRouteRule) GetNamespace() string {
+	return r.UDPRoute.GetNamespace()
+}
+
+func (r *UDPRouteRule) GetName() string {
+	return namespacedSectionName(r.UDPRoute.Name, r.Name)
+}
+
+func (r *UDPRouteRule) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *UDPRouteRule) Policies() []Policy {
+	return r.attachedPolicies
+}
+
 // These are Gateway API target reference types that implement the PolicyTargetReference interface, so policies'
 // targetRef instances can be treated as Objects whose GetURL() functions return the unique identifier of the
 // corresponding targetable the reference points to.
