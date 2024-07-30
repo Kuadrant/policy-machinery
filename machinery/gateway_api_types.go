@@ -602,6 +602,37 @@ func (p *BackendTLSPolicy) Merge(other Policy) Policy {
 	return source.GetMergeStrategy()(source, p)
 }
 
+type BackendLBPolicy struct {
+	*gwapiv1alpha2.BackendLBPolicy
+}
+
+var _ Policy = &BackendLBPolicy{}
+
+func (p *BackendLBPolicy) GetURL() string {
+	return UrlFromObject(p)
+}
+
+func (p *BackendLBPolicy) GetTargetRefs() []PolicyTargetReference {
+	return lo.Map(p.Spec.TargetRefs, func(item gwapiv1alpha2.LocalPolicyTargetReference, _ int) PolicyTargetReference {
+		return LocalPolicyTargetReference{
+			LocalPolicyTargetReference: item,
+			PolicyNamespace:            p.Namespace,
+		}
+	})
+}
+
+func (p *BackendLBPolicy) GetMergeStrategy() MergeStrategy {
+	return DefaultMergeStrategy
+}
+
+func (p *BackendLBPolicy) Merge(other Policy) Policy {
+	source, ok := other.(*BackendLBPolicy)
+	if !ok {
+		return p
+	}
+	return source.GetMergeStrategy()(source, p)
+}
+
 func namespacedSectionName(namespace string, sectionName gwapiv1.SectionName) string {
 	return fmt.Sprintf("%s%s%s", namespace, string(nameSectionNameURLSeparator), sectionName)
 }
