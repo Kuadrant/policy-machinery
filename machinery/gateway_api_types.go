@@ -295,6 +295,46 @@ func (r *TCPRoute) Policies() []Policy {
 	return r.attachedPolicies
 }
 
+type TCPRouteRule struct {
+	*gwapiv1alpha2.TCPRouteRule
+
+	TCPRoute         *TCPRoute
+	Name             gwapiv1.SectionName // TODO: Use the `name` field of the TCPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &TCPRouteRule{}
+
+func (r *TCPRouteRule) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gwapiv1alpha2.GroupName,
+		Version: gwapiv1alpha2.GroupVersion.Version,
+		Kind:    "TCPRouteRule",
+	}
+}
+
+func (r *TCPRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (r *TCPRouteRule) GetURL() string {
+	return namespacedSectionName(UrlFromObject(r.TCPRoute), r.Name)
+}
+
+func (r *TCPRouteRule) GetNamespace() string {
+	return r.TCPRoute.GetNamespace()
+}
+
+func (r *TCPRouteRule) GetName() string {
+	return namespacedSectionName(r.TCPRoute.Name, r.Name)
+}
+
+func (r *TCPRouteRule) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *TCPRouteRule) Policies() []Policy {
+	return r.attachedPolicies
+}
+
 // These are Gateway API target reference types that implement the PolicyTargetReference interface, so policies'
 // targetRef instances can be treated as Objects whose GetURL() functions return the unique identifier of the
 // corresponding targetable the reference points to.
