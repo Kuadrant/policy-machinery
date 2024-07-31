@@ -10,6 +10,18 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+var (
+	GatewayClassGroupKind  = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"}
+	GatewayGroupKind       = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"}
+	ListenerGroupKind      = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"}
+	HTTPRouteGroupKind     = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"}
+	HTTPRouteRuleGroupKind = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"}
+	GRPCRouteGroupKind     = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"}
+	GRPCRouteRuleGroupKind = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"}
+	ServiceGroupKind       = schema.GroupKind{Kind: "Service"}
+	ServicePortGroupKind   = schema.GroupKind{Kind: "ServicePort"}
+)
+
 type GatewayAPITopologyOptions struct {
 	GatewayClasses []*GatewayClass
 	Gateways       []*Gateway
@@ -270,8 +282,8 @@ func ServicePortsFromBackendFunc(service *Service, _ int) []*ServicePort {
 // GatewayClasses, based on the Gateway's `gatewayClassName` field.
 func LinkGatewayClassToGatewayFunc(gatewayClasses []*GatewayClass) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"},
-		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
+		From: GatewayClassGroupKind,
+		To:   GatewayGroupKind,
 		Func: func(child Object) []Object {
 			gateway := child.(*Gateway)
 			gatewayClass, ok := lo.Find(gatewayClasses, func(gc *GatewayClass) bool {
@@ -289,8 +301,8 @@ func LinkGatewayClassToGatewayFunc(gatewayClasses []*GatewayClass) LinkFunc {
 // Gateways, based on the HTTPRoute's `parentRefs` field.
 func LinkGatewayToHTTPRouteFunc(gateways []*Gateway) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
-		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
+		From: GatewayGroupKind,
+		To:   HTTPRouteGroupKind,
 		Func: func(child Object) []Object {
 			httpRoute := child.(*HTTPRoute)
 			return lo.FilterMap(httpRoute.Spec.ParentRefs, findGatewayFromParentRefFunc(gateways, httpRoute.Namespace))
@@ -302,8 +314,8 @@ func LinkGatewayToHTTPRouteFunc(gateways []*Gateway) LinkFunc {
 // Gateway's, based on the GRPCRoute's `parentRefs` field.
 func LinkGatewayToGRPCRouteFunc(gateways []*Gateway) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
-		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"},
+		From: GatewayGroupKind,
+		To:   GRPCRouteGroupKind,
 		Func: func(child Object) []Object {
 			grpcRoute := child.(*GRPCRoute)
 			return lo.FilterMap(grpcRoute.Spec.ParentRefs, findGatewayFromParentRefFunc(gateways, grpcRoute.Namespace))
@@ -330,8 +342,8 @@ func findGatewayFromParentRefFunc(gateways []*Gateway, routeNamespace string) fu
 // Gateways they are strongly related to.
 func LinkGatewayToListenerFunc() LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"},
-		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
+		From: GatewayGroupKind,
+		To:   ListenerGroupKind,
 		Func: func(child Object) []Object {
 			listener := child.(*Listener)
 			return []Object{listener.Gateway}
@@ -345,8 +357,8 @@ func LinkGatewayToListenerFunc() LinkFunc {
 // reference is present, otherwise all Listeners of the parent Gateway are linked to the HTTPRoute.
 func LinkListenerToHTTPRouteFunc(gateways []*Gateway, listeners []*Listener) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
-		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
+		From: ListenerGroupKind,
+		To:   HTTPRouteGroupKind,
 		Func: func(child Object) []Object {
 			httpRoute := child.(*HTTPRoute)
 			return lo.FlatMap(httpRoute.Spec.ParentRefs, findListenerFromParentRefFunc(gateways, listeners, httpRoute.Namespace))
@@ -360,8 +372,8 @@ func LinkListenerToHTTPRouteFunc(gateways []*Gateway, listeners []*Listener) Lin
 // reference is present, otherwise all Listeners of the parent Gateway are linked to the GRPCRoute.
 func LinkListenerToGRPCRouteFunc(gateways []*Gateway, listeners []*Listener) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"},
-		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"},
+		From: ListenerGroupKind,
+		To:   GRPCRouteGroupKind,
 		Func: func(child Object) []Object {
 			grpcRoute := child.(*GRPCRoute)
 			return lo.FlatMap(grpcRoute.Spec.ParentRefs, findListenerFromParentRefFunc(gateways, listeners, grpcRoute.Namespace))
@@ -403,8 +415,8 @@ func findListenerFromParentRefFunc(gateways []*Gateway, listeners []*Listener, r
 // HTTPRoute they are strongly related to.
 func LinkHTTPRouteToHTTPRouteRuleFunc() LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
-		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
+		From: HTTPRouteGroupKind,
+		To:   HTTPRouteRuleGroupKind,
 		Func: func(child Object) []Object {
 			httpRouteRule := child.(*HTTPRouteRule)
 			return []Object{httpRouteRule.HTTPRoute}
@@ -417,8 +429,8 @@ func LinkHTTPRouteToHTTPRouteRuleFunc() LinkFunc {
 // Set the `strict` parameter to `true` to link only to services that have no port specified in the backendRefs.
 func LinkHTTPRouteToServiceFunc(httpRoutes []*HTTPRoute, strict bool) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
-		To:   schema.GroupKind{Kind: "Service"},
+		From: HTTPRouteGroupKind,
+		To:   ServiceGroupKind,
 		Func: func(child Object) []Object {
 			service := child.(*Service)
 			return lo.FilterMap(httpRoutes, func(httpRoute *HTTPRoute, _ int) (Object, bool) {
@@ -438,8 +450,8 @@ func LinkHTTPRouteToServiceFunc(httpRoutes []*HTTPRoute, strict bool) LinkFunc {
 // The link function disregards backend references that do not specify a port number.
 func LinkHTTPRouteToServicePortFunc(httpRoutes []*HTTPRoute) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"},
-		To:   schema.GroupKind{Kind: "ServicePort"},
+		From: HTTPRouteGroupKind,
+		To:   ServicePortGroupKind,
 		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
 			return lo.FilterMap(httpRoutes, func(httpRoute *HTTPRoute, _ int) (Object, bool) {
@@ -459,8 +471,8 @@ func LinkHTTPRouteToServicePortFunc(httpRoutes []*HTTPRoute) LinkFunc {
 // Set the `strict` parameter to `true` to link only to services that have no port specified in the backendRefs.
 func LinkHTTPRouteRuleToServiceFunc(httpRouteRules []*HTTPRouteRule, strict bool) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
-		To:   schema.GroupKind{Kind: "Service"},
+		From: HTTPRouteRuleGroupKind,
+		To:   ServiceGroupKind,
 		Func: func(child Object) []Object {
 			service := child.(*Service)
 			return lo.FilterMap(httpRouteRules, func(httpRouteRule *HTTPRouteRule, _ int) (Object, bool) {
@@ -478,8 +490,8 @@ func LinkHTTPRouteRuleToServiceFunc(httpRouteRules []*HTTPRouteRule, strict bool
 // The link function disregards backend references that do not specify a port number.
 func LinkHTTPRouteRuleToServicePortFunc(httpRouteRules []*HTTPRouteRule) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"},
-		To:   schema.GroupKind{Kind: "ServicePort"},
+		From: HTTPRouteRuleGroupKind,
+		To:   ServicePortGroupKind,
 		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
 			return lo.FilterMap(httpRouteRules, func(httpRouteRule *HTTPRouteRule, _ int) (Object, bool) {
@@ -497,8 +509,8 @@ func LinkHTTPRouteRuleToServicePortFunc(httpRouteRules []*HTTPRouteRule) LinkFun
 // Set the `strict` parameter to `true` to link only to services that have no port specified in the backendRefs.
 func LinkGRPCRouteToServiceFunc(routes []*GRPCRoute, strict bool) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"},
-		To:   schema.GroupKind{Kind: "Service"},
+		From: GRPCRouteGroupKind,
+		To:   ServiceGroupKind,
 		Func: func(child Object) []Object {
 			service := child.(*Service)
 			return lo.FilterMap(routes, func(route *GRPCRoute, _ int) (Object, bool) {
@@ -518,8 +530,8 @@ func LinkGRPCRouteToServiceFunc(routes []*GRPCRoute, strict bool) LinkFunc {
 // The link function disregards backend references that do not specify a port number.
 func LinkGRPCRouteToServicePortFunc(routes []*GRPCRoute) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"},
-		To:   schema.GroupKind{Kind: "ServicePort"},
+		From: GRPCRouteGroupKind,
+		To:   ServicePortGroupKind,
 		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
 			return lo.FilterMap(routes, func(route *GRPCRoute, _ int) (Object, bool) {
@@ -538,8 +550,8 @@ func LinkGRPCRouteToServicePortFunc(routes []*GRPCRoute) LinkFunc {
 // GRPCRoute they are strongly related to.
 func LinkGRPCRouteToGRPCRouteRuleFunc() LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"},
-		To:   schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"},
+		From: GRPCRouteGroupKind,
+		To:   GRPCRouteRuleGroupKind,
 		Func: func(child Object) []Object {
 			grpcRouteRule := child.(*GRPCRouteRule)
 			return []Object{grpcRouteRule.GRPCRoute}
@@ -552,8 +564,8 @@ func LinkGRPCRouteToGRPCRouteRuleFunc() LinkFunc {
 // Set the `strict` parameter to `true` to link only to services that have no port specified in the backendRefs.
 func LinkGRPCRouteRuleToServiceFunc(routeRules []*GRPCRouteRule, strict bool) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"},
-		To:   schema.GroupKind{Kind: "Service"},
+		From: GRPCRouteRuleGroupKind,
+		To:   ServiceGroupKind,
 		Func: func(child Object) []Object {
 			service := child.(*Service)
 			return lo.FilterMap(routeRules, func(routeRule *GRPCRouteRule, _ int) (Object, bool) {
@@ -571,8 +583,8 @@ func LinkGRPCRouteRuleToServiceFunc(routeRules []*GRPCRouteRule, strict bool) Li
 // The link function disregards backend references that do not specify a port number.
 func LinkGRPCRouteRuleToServicePortFunc(routeRules []*GRPCRouteRule) LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"},
-		To:   schema.GroupKind{Kind: "ServicePort"},
+		From: GRPCRouteRuleGroupKind,
+		To:   ServicePortGroupKind,
 		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
 			return lo.FilterMap(routeRules, func(routeRule *GRPCRouteRule, _ int) (Object, bool) {
@@ -589,8 +601,8 @@ func LinkGRPCRouteRuleToServicePortFunc(routeRules []*GRPCRouteRule) LinkFunc {
 // Service they are strongly related to.
 func LinkServiceToServicePortFunc() LinkFunc {
 	return LinkFunc{
-		From: schema.GroupKind{Kind: "Service"},
-		To:   schema.GroupKind{Kind: "ServicePort"},
+		From: ServiceGroupKind,
+		To:   ServicePortGroupKind,
 		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
 			return []Object{servicePort.Service}
