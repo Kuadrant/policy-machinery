@@ -203,12 +203,45 @@ func BuildTCPRoute(f ...func(route *gwapiv1alpha2.TCPRoute)) *gwapiv1alpha2.TCPR
 	return r
 }
 
+func BuildTLSRoute(f ...func(route *gwapiv1alpha2.TLSRoute)) *gwapiv1alpha2.TLSRoute {
+	r := &gwapiv1alpha2.TLSRoute{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: gwapiv1.GroupVersion.String(),
+			Kind:       "TLSRoute",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-tls-route",
+			Namespace: "my-namespace",
+		},
+		Spec: gwapiv1alpha2.TLSRouteSpec{
+			CommonRouteSpec: gwapiv1.CommonRouteSpec{
+				ParentRefs: []gwapiv1.ParentReference{
+					{
+						Name: "my-gateway",
+					},
+				},
+			},
+			Rules: []gwapiv1alpha2.TLSRouteRule{
+				{
+					BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
+				},
+			},
+		},
+	}
+	for _, fn := range f {
+		fn(r)
+	}
+
+	return r
+}
+
 type GatewayAPIResources struct {
 	GatewayClasses []*gwapiv1.GatewayClass
 	Gateways       []*gwapiv1.Gateway
 	HTTPRoutes     []*gwapiv1.HTTPRoute
 	GRPCRoutes     []*gwapiv1.GRPCRoute
 	TCPRoutes      []*gwapiv1alpha2.TCPRoute
+	TLSRoutes      []*gwapiv1alpha2.TLSRoute
 	Services       []*core.Service
 }
 
@@ -360,23 +393,6 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 					},
 				}
 			}),
-			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "http-route-5"
-				r.Spec.ParentRefs[0].Name = "gateway-3"
-				r.Spec.ParentRefs = append(r.Spec.ParentRefs, gwapiv1.ParentReference{Name: "gateway-4"})
-				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
-					{ // rule-1
-						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-							backendRef.Name = "service-5"
-						})},
-					},
-					{ // rule-2
-						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-							backendRef.Name = "service-5"
-						})},
-					},
-				}
-			}),
 		},
 		Services: []*core.Service{
 			BuildService(func(s *core.Service) {
@@ -444,6 +460,25 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
 							backendRef.Name = "service-6"
 							backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
+						})},
+					},
+				}
+			}),
+		},
+		TLSRoutes: []*gwapiv1alpha2.TLSRoute{
+			BuildTLSRoute(func(r *gwapiv1alpha2.TLSRoute) {
+				r.Name = "tls-route-1"
+				r.Spec.ParentRefs[0].Name = "gateway-3"
+				r.Spec.ParentRefs = append(r.Spec.ParentRefs, gwapiv1.ParentReference{Name: "gateway-4"})
+				r.Spec.Rules = []gwapiv1alpha2.TLSRouteRule{
+					{ // rule-1
+						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-5"
+						})},
+					},
+					{ // rule-2
+						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-5"
 						})},
 					},
 				}
