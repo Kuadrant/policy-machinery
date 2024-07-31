@@ -13,45 +13,38 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type EventType int
-
-const (
-	CreateEvent EventType = iota
-	UpdateEvent
-	DeleteEvent
-)
-
-func (t *EventType) String() string {
-	return [...]string{"create", "update", "delete"}[*t]
+type Runnable interface {
+	Run(stopCh <-chan struct{})
+	HasSynced() bool
 }
 
-type InformerBuilderOptions struct {
+type RunnableBuilderOptions struct {
 	LabelSelector string
 	FieldSelector string
 }
 
-type InformerBuilderOptionsFunc func(*InformerBuilderOptions)
+type RunnableBuilderOptionsFunc func(*RunnableBuilderOptions)
 
-func FilterResourcesByLabel(selector string) InformerBuilderOptionsFunc {
-	return func(o *InformerBuilderOptions) {
+func FilterResourcesByLabel(selector string) RunnableBuilderOptionsFunc {
+	return func(o *RunnableBuilderOptions) {
 		o.LabelSelector = selector
 	}
 }
 
-func FilterResourcesByField(selector string) InformerBuilderOptionsFunc {
-	return func(o *InformerBuilderOptions) {
+func FilterResourcesByField(selector string) RunnableBuilderOptionsFunc {
+	return func(o *RunnableBuilderOptions) {
 		o.FieldSelector = selector
 	}
 }
 
-type InformerBuilder func(controller *Controller) cache.SharedInformer
+type RunnableBuilder func(controller *Controller) Runnable
 
-func For[T RuntimeObject](resource schema.GroupVersionResource, namespace string, options ...InformerBuilderOptionsFunc) InformerBuilder {
-	o := &InformerBuilderOptions{}
+func Watch[T RuntimeObject](resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOptionsFunc) RunnableBuilder {
+	o := &RunnableBuilderOptions{}
 	for _, f := range options {
 		f(o)
 	}
-	return func(controller *Controller) cache.SharedInformer {
+	return func(controller *Controller) Runnable {
 		informer := cache.NewSharedInformer(
 			&cache.ListWatch{
 				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
