@@ -3,6 +3,8 @@ package controller
 import (
 	"sync"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/telepresenceio/watchable"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -13,23 +15,43 @@ type RuntimeObject interface {
 	metav1.Object
 }
 
+type RuntimeObjects map[string]RuntimeObject
+
+func (o RuntimeObjects) DeepCopy() RuntimeObjects {
+	co := make(RuntimeObjects, len(o))
+	for k, v := range o {
+		co[k] = v.DeepCopyObject().(RuntimeObject)
+	}
+	return co
+}
+
+func (o RuntimeObjects) Equal(other RuntimeObjects) bool {
+	if len(o) != len(other) {
+		return false
+	}
+	for k, v := range o {
+		if ov, ok := other[k]; !ok || !cmp.Equal(v, ov) {
+			return false
+		}
+	}
+	return true
+}
+
 type Cache interface {
 	List() Store
 	Add(obj RuntimeObject)
 	Delete(obj RuntimeObject)
 }
 
-type Store map[schema.GroupKind]map[string]RuntimeObject
+type Store map[schema.GroupKind]RuntimeObjects
+
+func newCacheStore() Cache {
+	return &watchableCacheStore{}
+}
 
 type cacheStore struct {
 	mu    sync.RWMutex
 	store Store
-}
-
-func newCacheStore() Cache {
-	return &cacheStore{
-		store: make(Store),
-	}
 }
 
 func (c *cacheStore) List() Store {
@@ -39,7 +61,7 @@ func (c *cacheStore) List() Store {
 	cm := make(Store, len(c.store))
 	for gk, objs := range c.store {
 		if _, ok := cm[gk]; !ok {
-			cm[gk] = map[string]RuntimeObject{}
+			cm[gk] = RuntimeObjects{}
 		}
 		for url, obj := range objs {
 			cm[gk][url] = obj
@@ -54,7 +76,7 @@ func (c *cacheStore) Add(obj RuntimeObject) {
 
 	gk := obj.GetObjectKind().GroupVersionKind().GroupKind()
 	if _, ok := c.store[gk]; !ok {
-		c.store[gk] = map[string]RuntimeObject{}
+		c.store[gk] = RuntimeObjects{}
 	}
 	c.store[gk][string(obj.GetUID())] = obj
 }
@@ -65,4 +87,35 @@ func (c *cacheStore) Delete(obj RuntimeObject) {
 
 	gk := obj.GetObjectKind().GroupVersionKind().GroupKind()
 	delete(c.store[gk], string(obj.GetUID()))
+}
+
+type watchableCacheStore struct {
+	watchable.Map[schema.GroupKind, RuntimeObjects]
+}
+
+func (c *watchableCacheStore) List() Store {
+	return c.LoadAll()
+}
+
+func (c *watchableCacheStore) Add(obj RuntimeObject) {
+	gk := obj.GetObjectKind().GroupVersionKind().GroupKind()
+	increment := RuntimeObjects{
+		string(obj.GetUID()): obj,
+	}
+	value, loaded := c.LoadOrStore(gk, increment)
+	if !loaded {
+		return
+	}
+	value[string(obj.GetUID())] = obj
+	c.Store(gk, value)
+}
+
+func (c *watchableCacheStore) Delete(obj RuntimeObject) {
+	gk := obj.GetObjectKind().GroupVersionKind().GroupKind()
+	value, ok := c.Load(gk)
+	if !ok {
+		return
+	}
+	delete(value, string(obj.GetUID()))
+	c.Store(gk, value)
 }
