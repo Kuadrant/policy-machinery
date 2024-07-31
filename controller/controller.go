@@ -24,7 +24,7 @@ type RuntimeLinkFunc func(objs Store) machinery.LinkFunc
 
 type ControllerOptions struct {
 	client      *dynamic.DynamicClient
-	informers   map[string]InformerBuilder
+	runnables   map[string]RunnableBuilder
 	callback    CallbackFunc
 	policyKinds []schema.GroupKind
 	objectKinds []schema.GroupKind
@@ -40,9 +40,9 @@ func WithClient(client *dynamic.DynamicClient) ControllerOptionFunc {
 	}
 }
 
-func WithInformer(name string, informer InformerBuilder) ControllerOptionFunc {
+func WithRunnable(name string, builder RunnableBuilder) ControllerOptionFunc {
 	return func(o *ControllerOptions) {
-		o.informers[name] = informer
+		o.runnables[name] = builder
 	}
 }
 
@@ -72,7 +72,7 @@ func WithObjectLinks(objectLinks ...RuntimeLinkFunc) ControllerOptionFunc {
 
 func NewController(f ...ControllerOptionFunc) *Controller {
 	opts := &ControllerOptions{
-		informers: map[string]InformerBuilder{},
+		runnables: map[string]RunnableBuilder{},
 		callback: func(context.Context, ResourceEvent, *machinery.Topology) {
 		},
 	}
@@ -85,12 +85,12 @@ func NewController(f ...ControllerOptionFunc) *Controller {
 		client:    opts.client,
 		cache:     newCacheStore(),
 		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks),
-		informers: map[string]cache.SharedInformer{},
+		runnables: map[string]Runnable{},
 		callback:  opts.callback,
 	}
 
-	for name, builder := range opts.informers {
-		controller.informers[name] = builder(controller)
+	for name, builder := range opts.runnables {
+		controller.runnables[name] = builder(controller)
 	}
 
 	return controller
@@ -101,23 +101,23 @@ type Controller struct {
 	client    *dynamic.DynamicClient
 	cache     Cache
 	topology  *gatewayAPITopologyBuilder
-	informers map[string]cache.SharedInformer
+	runnables map[string]Runnable
 	callback  CallbackFunc
 }
 
-// Starts starts the informers and blocks until a stop signal is received
+// Starts starts the runnables and blocks until a stop signal is received
 func (c *Controller) Start() {
-	stopCh := make(chan struct{}, len(c.informers))
+	stopCh := make(chan struct{}, len(c.runnables))
 
-	for name := range c.informers {
+	for name := range c.runnables {
 		defer close(stopCh)
-		log.Printf("Starting %s informer", name)
-		go c.informers[name].Run(stopCh)
+		log.Printf("Starting %s", name)
+		go c.runnables[name].Run(stopCh)
 	}
 
 	// wait for stop signal
-	for name := range c.informers {
-		if !cache.WaitForCacheSync(stopCh, c.informers[name].HasSynced) {
+	for name := range c.runnables {
+		if !cache.WaitForCacheSync(stopCh, c.runnables[name].HasSynced) {
 			log.Fatalf("Error waiting for %s cache sync", name)
 		}
 	}
@@ -157,4 +157,16 @@ func (c *Controller) delete(resource schema.GroupVersionResource, obj RuntimeObj
 func (c *Controller) propagate(resourceEvent ResourceEvent) {
 	topology := c.topology.Build(c.cache.List())
 	c.callback(context.TODO(), resourceEvent, topology)
+}
+
+type EventType int
+
+const (
+	CreateEvent EventType = iota
+	UpdateEvent
+	DeleteEvent
+)
+
+func (t *EventType) String() string {
+	return [...]string{"create", "update", "delete"}[*t]
 }
