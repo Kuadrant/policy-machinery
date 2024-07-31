@@ -88,16 +88,8 @@ func BuildHTTPRoute(f ...func(*gwapiv1.HTTPRoute)) *gwapiv1.HTTPRoute {
 }
 
 func BuildHTTPBackendRef(f ...func(*gwapiv1.BackendObjectReference)) gwapiv1.HTTPBackendRef {
-	bor := &gwapiv1.BackendObjectReference{
-		Name: "my-service",
-	}
-	for _, fn := range f {
-		fn(bor)
-	}
 	return gwapiv1.HTTPBackendRef{
-		BackendRef: gwapiv1.BackendRef{
-			BackendObjectReference: *bor,
-		},
+		BackendRef: BuildBackendRef(f...),
 	}
 }
 
@@ -162,17 +154,53 @@ func BuildGRPCRoute(f ...func(*gwapiv1.GRPCRoute)) *gwapiv1.GRPCRoute {
 }
 
 func BuildGRPCBackendRef(f ...func(*gwapiv1.BackendObjectReference)) gwapiv1.GRPCBackendRef {
+	return gwapiv1.GRPCBackendRef{
+		BackendRef: BuildBackendRef(f...),
+	}
+}
+
+func BuildBackendRef(f ...func(*gwapiv1.BackendObjectReference)) gwapiv1.BackendRef {
 	bor := &gwapiv1.BackendObjectReference{
 		Name: "my-service",
 	}
 	for _, fn := range f {
 		fn(bor)
 	}
-	return gwapiv1.GRPCBackendRef{
-		BackendRef: gwapiv1.BackendRef{
-			BackendObjectReference: *bor,
+	return gwapiv1.BackendRef{
+		BackendObjectReference: *bor,
+	}
+}
+
+func BuildTCPRoute(f ...func(route *gwapiv1alpha2.TCPRoute)) *gwapiv1alpha2.TCPRoute {
+	r := &gwapiv1alpha2.TCPRoute{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: gwapiv1.GroupVersion.String(),
+			Kind:       "TCPRoute",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-tcp-route",
+			Namespace: "my-namespace",
+		},
+		Spec: gwapiv1alpha2.TCPRouteSpec{
+			CommonRouteSpec: gwapiv1.CommonRouteSpec{
+				ParentRefs: []gwapiv1.ParentReference{
+					{
+						Name: "my-gateway",
+					},
+				},
+			},
+			Rules: []gwapiv1alpha2.TCPRouteRule{
+				{
+					BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
+				},
+			},
 		},
 	}
+	for _, fn := range f {
+		fn(r)
+	}
+
+	return r
 }
 
 type GatewayAPIResources struct {
@@ -180,6 +208,7 @@ type GatewayAPIResources struct {
 	Gateways       []*gwapiv1.Gateway
 	HTTPRoutes     []*gwapiv1.HTTPRoute
 	GRPCRoutes     []*gwapiv1.GRPCRoute
+	TCPRoutes      []*gwapiv1alpha2.TCPRoute
 	Services       []*core.Service
 }
 
@@ -205,7 +234,7 @@ type GatewayAPIResources struct {
 //	                      │            └───────┬───────┘     │                    │            └────────────┬─────────────┘           │                          │
 //	                      │                    │             │                    │                         │                         │                          │
 //	          ┌───────────┴───────────┐ ┌──────┴─────┐ ┌─────┴──────┐ ┌───────────┴───────────┐ ┌───────────┴───────────┐ ┌───────────┴───────────┐        ┌─────┴──────┐
-//	          │        route-1        │ │  route-2   │ │  route-3   │ │        route-4        │ │        route-5        │ │        route-6        │        │   route-7  │
+//	          │        h-route-1      │ │ h-route-2  │ │ h-route-3  │ │        h-route-4      │ │        h-route-5      │ │        tcp-route-1    │        │  g-route-1 │
 //	          │                       │ │            │ │            │ │                       │ │                       │ │                       │        │            │
 //	          │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ │ │ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │        │ ┌────────┐ │
 //	          │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ │ │ rule-1 │ │ │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ rule-2 │ │        │ │ rule-1 │ │
@@ -273,7 +302,7 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 		},
 		HTTPRoutes: []*gwapiv1.HTTPRoute{
 			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-1"
+				r.Name = "http-route-1"
 				r.Spec.ParentRefs[0].Name = "gateway-1"
 				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
 					{ // rule-1
@@ -289,7 +318,7 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 				}
 			}),
 			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-2"
+				r.Name = "http-route-2"
 				r.Spec.ParentRefs = []gwapiv1.ParentReference{
 					{
 						Name:        "gateway-1",
@@ -306,7 +335,7 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 				})
 			}),
 			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-3"
+				r.Name = "http-route-3"
 				r.Spec.ParentRefs[0].Name = "gateway-2"
 				r.Spec.Rules[0].BackendRefs[0] = BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
 					backendRef.Name = "service-3"
@@ -314,7 +343,7 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 				})
 			}),
 			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-4"
+				r.Name = "http-route-4"
 				r.Spec.ParentRefs[0].Name = "gateway-3"
 				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
 					{ // rule-1
@@ -332,7 +361,7 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 				}
 			}),
 			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-5"
+				r.Name = "http-route-5"
 				r.Spec.ParentRefs[0].Name = "gateway-3"
 				r.Spec.ParentRefs = append(r.Spec.ParentRefs, gwapiv1.ParentReference{Name: "gateway-4"})
 				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
@@ -344,28 +373,6 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 					{ // rule-2
 						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
 							backendRef.Name = "service-5"
-						})},
-					},
-				}
-			}),
-			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-6"
-				r.Spec.ParentRefs[0].Name = "gateway-4"
-				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
-					{ // rule-1
-						BackendRefs: []gwapiv1.HTTPBackendRef{
-							BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-5"
-							}),
-							BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-6"
-							}),
-						},
-					},
-					{ // rule-2
-						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-							backendRef.Name = "service-6"
-							backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
 						})},
 					},
 				}
@@ -411,11 +418,35 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 		},
 		GRPCRoutes: []*gwapiv1.GRPCRoute{
 			BuildGRPCRoute(func(r *gwapiv1.GRPCRoute) {
-				r.Name = "route-7"
+				r.Name = "grpc-route-1"
 				r.Spec.ParentRefs[0].Name = "gateway-5"
 				r.Spec.Rules[0].BackendRefs[0] = BuildGRPCBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
 					backendRef.Name = "service-7"
 				})
+			}),
+		},
+		TCPRoutes: []*gwapiv1alpha2.TCPRoute{
+			BuildTCPRoute(func(r *gwapiv1alpha2.TCPRoute) {
+				r.Name = "tcp-route-1"
+				r.Spec.ParentRefs[0].Name = "gateway-4"
+				r.Spec.Rules = []gwapiv1alpha2.TCPRouteRule{
+					{ // rule-1
+						BackendRefs: []gwapiv1.BackendRef{
+							BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+								backendRef.Name = "service-5"
+							}),
+							BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+								backendRef.Name = "service-6"
+							}),
+						},
+					},
+					{ // rule-2
+						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-6"
+							backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
+						})},
+					},
+				}
 			}),
 		},
 	}
