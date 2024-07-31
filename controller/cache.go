@@ -13,6 +13,12 @@ type RuntimeObject interface {
 	metav1.Object
 }
 
+type Cache interface {
+	List() Store
+	Add(obj RuntimeObject)
+	Delete(obj RuntimeObject)
+}
+
 type Store map[schema.GroupKind]map[string]RuntimeObject
 
 type cacheStore struct {
@@ -20,7 +26,7 @@ type cacheStore struct {
 	store Store
 }
 
-func newCacheStore() *cacheStore {
+func newCacheStore() Cache {
 	return &cacheStore{
 		store: make(Store),
 	}

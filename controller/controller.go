@@ -99,7 +99,7 @@ func NewController(f ...ControllerOptionFunc) *Controller {
 type Controller struct {
 	mu        sync.RWMutex
 	client    *dynamic.DynamicClient
-	cache     *cacheStore
+	cache     Cache
 	topology  *gatewayAPITopologyBuilder
 	informers map[string]cache.SharedInformer
 	callback  CallbackFunc
