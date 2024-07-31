@@ -21,6 +21,8 @@ var (
 	GRPCRouteRuleGroupKind = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"}
 	TCPRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TCPRoute"}
 	TCPRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TCPRouteRule"}
+	TLSRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TLSRoute"}
+	TLSRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TLSRouteRule"}
 	ServiceGroupKind       = schema.GroupKind{Kind: "Service"}
 	ServicePortGroupKind   = schema.GroupKind{Kind: "ServicePort"}
 )
@@ -31,6 +33,7 @@ type GatewayAPITopologyOptions struct {
 	HTTPRoutes     []*HTTPRoute
 	GRPCRoutes     []*GRPCRoute
 	TCPRoutes      []*TCPRoute
+	TLSRoutes      []*TLSRoute
 	Services       []*Service
 	Policies       []Policy
 	Objects        []Object
@@ -40,6 +43,7 @@ type GatewayAPITopologyOptions struct {
 	ExpandHTTPRouteRules   bool
 	ExpandGRPCRouteRules   bool
 	ExpandTCPRouteRules    bool
+	ExpandTLSRouteRules    bool
 	ExpandServicePorts     bool
 }
 
@@ -86,6 +90,15 @@ func WithTCPRoutes(tcpRoutes ...*gwapiv1alpha2.TCPRoute) GatewayAPITopologyOptio
 	return func(o *GatewayAPITopologyOptions) {
 		o.TCPRoutes = append(o.TCPRoutes, lo.Map(tcpRoutes, func(tcpRoute *gwapiv1alpha2.TCPRoute, _ int) *TCPRoute {
 			return &TCPRoute{TCPRoute: tcpRoute}
+		})...)
+	}
+}
+
+// WithTLSRoutes adds TLS routes to the options to initialize a new Gateway API topology.
+func WithTLSRoutes(tlsRoutes ...*gwapiv1alpha2.TLSRoute) GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.TLSRoutes = append(o.TLSRoutes, lo.Map(tlsRoutes, func(tlsRoute *gwapiv1alpha2.TLSRoute, _ int) *TLSRoute {
+			return &TLSRoute{TLSRoute: tlsRoute}
 		})...)
 	}
 }
@@ -150,6 +163,13 @@ func ExpandTCPRouteRules() GatewayAPITopologyOptionsFunc {
 	}
 }
 
+// ExpandTLSRouteRules adds targetable TLS route rules to the options to initialize a new Gateway API topology.
+func ExpandTLSRouteRules() GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.ExpandTLSRouteRules = true
+	}
+}
+
 // ExpandServicePorts adds targetable service ports to the options to initialize a new Gateway API topology.
 func ExpandServicePorts() GatewayAPITopologyOptionsFunc {
 	return func(o *GatewayAPITopologyOptions) {
@@ -181,6 +201,7 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		WithTargetables(o.HTTPRoutes...),
 		WithTargetables(o.GRPCRoutes...),
 		WithTargetables(o.TCPRoutes...),
+		WithTargetables(o.TLSRoutes...),
 		WithTargetables(o.Services...),
 		WithLinks(o.Links...),
 		WithLinks(LinkGatewayClassToGatewayFunc(o.GatewayClasses)), // GatewayClass -> Gateway
@@ -194,11 +215,13 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 			LinkListenerToHTTPRouteFunc(o.Gateways, listeners), // Listener -> HTTPRoute
 			LinkListenerToGRPCRouteFunc(o.Gateways, listeners), // Listener -> GRPCRoute
 			LinkListenerToTCPRouteFunc(o.Gateways, listeners),  // Listener -> TCPRoute
+			LinkListenerToTLSRouteFunc(o.Gateways, listeners),  // Listener -> TLSRoute
 		))
 	} else {
 		opts = append(opts, WithLinks(LinkGatewayToHTTPRouteFunc(o.Gateways))) // Gateway -> HTTPRoute
 		opts = append(opts, WithLinks(LinkGatewayToGRPCRouteFunc(o.Gateways))) // Gateway -> GRPCRoute
 		opts = append(opts, WithLinks(LinkGatewayToTCPRouteFunc(o.Gateways)))  // Gateway -> TCPRoute
+		opts = append(opts, WithLinks(LinkGatewayToTLSRouteFunc(o.Gateways)))  // Gateway -> TLSRoute
 	}
 
 	if o.ExpandHTTPRouteRules {
@@ -279,6 +302,32 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		}
 	}
 
+	if o.ExpandTLSRouteRules {
+		tlsRouteRules := lo.FlatMap(o.TLSRoutes, TLSRouteRulesFromTLSRouteFunc)
+		opts = append(opts, WithTargetables(tlsRouteRules...))
+		opts = append(opts, WithLinks(LinkTLSRouteToTLSRouteRuleFunc()))
+
+		if o.ExpandServicePorts {
+			servicePorts := lo.FlatMap(o.Services, ServicePortsFromBackendFunc)
+			opts = append(opts, WithTargetables(servicePorts...))
+			opts = append(opts, WithLinks(
+				LinkTLSRouteRuleToServicePortFunc(tlsRouteRules),   // TLSRoute -> ServicePort
+				LinkTLSRouteRuleToServiceFunc(tlsRouteRules, true), // TLSRoute -> Service
+			))
+		} else {
+			opts = append(opts, WithLinks(LinkTLSRouteToServiceFunc(o.TLSRoutes, false))) // TLSRoute -> Service
+		}
+	} else {
+		if o.ExpandServicePorts {
+			opts = append(opts, WithLinks(
+				LinkTLSRouteToServicePortFunc(o.TLSRoutes),   // TLSRoute -> ServicePort
+				LinkTLSRouteToServiceFunc(o.TLSRoutes, true), // TLSRoute -> Service
+			))
+		} else {
+			opts = append(opts, WithLinks(LinkTLSRouteToServiceFunc(o.TLSRoutes, false))) // TLSRoute -> Service
+		}
+	}
+
 	if o.ExpandServicePorts {
 		opts = append(opts, WithLinks(LinkServiceToServicePortFunc())) // Service -> ServicePort
 	}
@@ -324,6 +373,17 @@ func TCPRouteRulesFromTCPRouteFunc(tcpRoute *TCPRoute, _ int) []*TCPRouteRule {
 		return &TCPRouteRule{
 			TCPRouteRule: &rule,
 			TCPRoute:     tcpRoute,
+			Name:         gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
+		}
+	})
+}
+
+// TLSRouteRulesFromTLSRouteFunc returns a list of targetable TCPRouteRules from a targetable TLSRoute.
+func TLSRouteRulesFromTLSRouteFunc(tlsRoute *TLSRoute, _ int) []*TLSRouteRule {
+	return lo.Map(tlsRoute.Spec.Rules, func(rule gwapiv1alpha2.TLSRouteRule, i int) *TLSRouteRule {
+		return &TLSRouteRule{
+			TLSRouteRule: &rule,
+			TLSRoute:     tlsRoute,
 			Name:         gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
 		}
 	})
@@ -397,6 +457,19 @@ func LinkGatewayToTCPRouteFunc(gateways []*Gateway) LinkFunc {
 	}
 }
 
+// LinkGatewayToTLSRouteFunc returns a link function that teaches a topology how to link TLSRoute's from known
+// Gateway's, based on the TLSRoute's `parentRefs` field.
+func LinkGatewayToTLSRouteFunc(gateways []*Gateway) LinkFunc {
+	return LinkFunc{
+		From: GatewayGroupKind,
+		To:   TLSRouteGroupKind,
+		Func: func(child Object) []Object {
+			tlsRoute := child.(*TLSRoute)
+			return lo.FilterMap(tlsRoute.Spec.ParentRefs, findGatewayFromParentRefFunc(gateways, tlsRoute.Namespace))
+		},
+	}
+}
+
 // findGatewayFromParentRefFunc is a common function to find a Gateway from a xRoute's `parentRef` field
 func findGatewayFromParentRefFunc(gateways []*Gateway, routeNamespace string) func(parentRef gwapiv1.ParentReference, _ int) (Object, bool) {
 	return func(parentRef gwapiv1.ParentReference, _ int) (Object, bool) {
@@ -466,6 +539,21 @@ func LinkListenerToTCPRouteFunc(gateways []*Gateway, listeners []*Listener) Link
 		Func: func(child Object) []Object {
 			tcpRoute := child.(*TCPRoute)
 			return lo.FlatMap(tcpRoute.Spec.ParentRefs, findListenerFromParentRefFunc(gateways, listeners, tcpRoute.Namespace))
+		},
+	}
+}
+
+// LinkListenerToTLSRouteFunc returns a link function that teaches a topology how to link GRPCRoutes from known
+// Gateways and gateway Listeners, based on the TLSRoute's `parentRefs` field.
+// The function links a specific Listener of a Gateway to the TLSRoute when the `sectionName` field of the parent
+// reference is present, otherwise all Listeners of the parent Gateway are linked to the TLSRoute.
+func LinkListenerToTLSRouteFunc(gateways []*Gateway, listeners []*Listener) LinkFunc {
+	return LinkFunc{
+		From: ListenerGroupKind,
+		To:   TLSRouteGroupKind,
+		Func: func(child Object) []Object {
+			tlsRoute := child.(*TLSRoute)
+			return lo.FlatMap(tlsRoute.Spec.ParentRefs, findListenerFromParentRefFunc(gateways, listeners, tlsRoute.Namespace))
 		},
 	}
 }
@@ -765,7 +853,7 @@ func LinkTCPRouteRuleToServiceFunc(routeRules []*TCPRouteRule, strict bool) Link
 // The link function disregards backend references that do not specify a port number.
 func LinkTCPRouteRuleToServicePortFunc(routeRules []*TCPRouteRule) LinkFunc {
 	return LinkFunc{
-		From: TCPRouteGroupKind,
+		From: TCPRouteRuleGroupKind,
 		To:   ServicePortGroupKind,
 		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
@@ -774,6 +862,99 @@ func LinkTCPRouteRuleToServicePortFunc(routeRules []*TCPRouteRule) LinkFunc {
 					return backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
 				})
 				return routeRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(servicePort.Service, routeRule.TCPRoute.Namespace))
+			})
+		},
+	}
+}
+
+// LinkTLSRouteToServiceFunc returns a link function that teaches a topology how to link Services from known
+// TLSRoutes, based on the TLSRoute's `backendRefs` fields.
+// Set the `strict` parameter to `true` to link only to services that have no port specified in the backendRefs.
+func LinkTLSRouteToServiceFunc(routes []*TLSRoute, strict bool) LinkFunc {
+	return LinkFunc{
+		From: TLSRouteGroupKind,
+		To:   ServiceGroupKind,
+		Func: func(child Object) []Object {
+			service := child.(*Service)
+			return lo.FilterMap(routes, func(route *TLSRoute, _ int) (Object, bool) {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1alpha2.TLSRouteRule) bool {
+					backendRefs := lo.Filter(rule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
+						return !strict || backendRef.Port == nil
+					})
+					return lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(service, route.Namespace))
+				})
+			})
+		},
+	}
+}
+
+// LinkTLSRouteToServicePortFunc returns a link function that teaches a topology how to link services ports from known
+// TLSRoutes, based on the TLSRoute's `backendRefs` fields.
+// The link function disregards backend references that do not specify a port number.
+func LinkTLSRouteToServicePortFunc(routes []*TLSRoute) LinkFunc {
+	return LinkFunc{
+		From: TLSRouteGroupKind,
+		To:   ServicePortGroupKind,
+		Func: func(child Object) []Object {
+			servicePort := child.(*ServicePort)
+			return lo.FilterMap(routes, func(route *TLSRoute, _ int) (Object, bool) {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1alpha2.TLSRouteRule) bool {
+					backendRefs := lo.Filter(rule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
+						return backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
+					})
+					return lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(servicePort.Service, route.Namespace))
+				})
+			})
+		},
+	}
+}
+
+// LinkTLSRouteToTLSRouteRuleFunc returns a link function that teaches a topology how to link TLSRouteRule from the
+// TLSRoute they are strongly related to.
+func LinkTLSRouteToTLSRouteRuleFunc() LinkFunc {
+	return LinkFunc{
+		From: TLSRouteGroupKind,
+		To:   TLSRouteRuleGroupKind,
+		Func: func(child Object) []Object {
+			tlsRouteRule := child.(*TLSRouteRule)
+			return []Object{tlsRouteRule.TLSRoute}
+		},
+	}
+}
+
+// LinkTLSRouteRuleToServiceFunc returns a link function that teaches a topology how to link Services from known
+// TLSRouteRules, based on the TLSRouteRule's `backendRefs` field.
+// Set the `strict` parameter to `true` to link only to services that have no port specified in the backendRefs.
+func LinkTLSRouteRuleToServiceFunc(routeRules []*TLSRouteRule, strict bool) LinkFunc {
+	return LinkFunc{
+		From: TLSRouteRuleGroupKind,
+		To:   ServiceGroupKind,
+		Func: func(child Object) []Object {
+			service := child.(*Service)
+			return lo.FilterMap(routeRules, func(routeRule *TLSRouteRule, _ int) (Object, bool) {
+				backendRefs := lo.Filter(routeRule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
+					return !strict || backendRef.Port == nil
+				})
+				return routeRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(service, routeRule.TLSRoute.Namespace))
+			})
+		},
+	}
+}
+
+// LinkTLSRouteRuleToServicePortFunc returns a link function that teaches a topology how to link services ports from
+// known TLSRouteRules, based on the TLSRouteRule's `backendRefs` field.
+// The link function disregards backend references that do not specify a port number.
+func LinkTLSRouteRuleToServicePortFunc(routeRules []*TLSRouteRule) LinkFunc {
+	return LinkFunc{
+		From: TLSRouteRuleGroupKind,
+		To:   ServicePortGroupKind,
+		Func: func(child Object) []Object {
+			servicePort := child.(*ServicePort)
+			return lo.FilterMap(routeRules, func(routeRule *TLSRouteRule, _ int) (Object, bool) {
+				backendRefs := lo.Filter(routeRule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
+					return backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
+				})
+				return routeRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(servicePort.Service, routeRule.TLSRoute.Namespace))
 			})
 		},
 	}
