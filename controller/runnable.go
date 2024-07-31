@@ -3,8 +3,10 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,29 +20,46 @@ type Runnable interface {
 	HasSynced() bool
 }
 
-type RunnableBuilderOptions struct {
+type RunnableBuilder func(controller *Controller) Runnable
+
+type RunnableBuilderOptions[T RuntimeObject] struct {
 	LabelSelector string
 	FieldSelector string
+	Builder       func(resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder
 }
 
-type RunnableBuilderOptionsFunc func(*RunnableBuilderOptions)
+type RunnableBuilderOption[T RuntimeObject] func(*RunnableBuilderOptions[T])
 
-func FilterResourcesByLabel(selector string) RunnableBuilderOptionsFunc {
-	return func(o *RunnableBuilderOptions) {
+func FilterResourcesByLabel[T RuntimeObject](selector string) RunnableBuilderOption[T] {
+	return func(o *RunnableBuilderOptions[T]) {
 		o.LabelSelector = selector
 	}
 }
 
-func FilterResourcesByField(selector string) RunnableBuilderOptionsFunc {
-	return func(o *RunnableBuilderOptions) {
+func FilterResourcesByField[T RuntimeObject](selector string) RunnableBuilderOption[T] {
+	return func(o *RunnableBuilderOptions[T]) {
 		o.FieldSelector = selector
 	}
 }
 
-type RunnableBuilder func(controller *Controller) Runnable
+func Builder[T RuntimeObject](builder func(resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder) RunnableBuilderOption[T] {
+	return func(o *RunnableBuilderOptions[T]) {
+		o.Builder = builder
+	}
+}
 
-func Watch[T RuntimeObject](resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOptionsFunc) RunnableBuilder {
-	o := &RunnableBuilderOptions{}
+func Watch[T RuntimeObject](resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
+	o := &RunnableBuilderOptions[T]{
+		Builder: IncrementalInformer[T],
+	}
+	for _, f := range options {
+		f(o)
+	}
+	return o.Builder(resource, namespace, options...)
+}
+
+func IncrementalInformer[T RuntimeObject](resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
+	o := &RunnableBuilderOptions[T]{}
 	for _, f := range options {
 		f(o)
 	}
@@ -87,6 +106,58 @@ func Watch[T RuntimeObject](resource schema.GroupVersionResource, namespace stri
 		informer.SetTransform(Restructure[T])
 		return informer
 	}
+}
+
+func StateReconciler[T RuntimeObject](resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
+	o := &RunnableBuilderOptions[T]{}
+	for _, f := range options {
+		f(o)
+	}
+	obj := new(T)
+	kind := fmt.Sprintf("%T", obj)
+	kind = kind[strings.LastIndex(kind, ".")+1:]
+	return func(controller *Controller) Runnable {
+		return &stateReconciler{
+			controller: controller,
+			listFunc: func() (schema.GroupKind, RuntimeObjects) {
+				gk := schema.GroupKind{
+					Group: resource.Group,
+					Kind:  kind,
+				}
+				objs, err := controller.client.Resource(resource).Namespace(namespace).List(context.Background(), metav1.ListOptions{
+					LabelSelector: o.LabelSelector,
+					FieldSelector: o.FieldSelector,
+				})
+				if err != nil || len(objs.Items) == 0 {
+					return gk, nil
+				}
+				return gk, lo.SliceToMap(objs.Items, func(o unstructured.Unstructured) (string, RuntimeObject) {
+					obj, err := Restructure[T](&o)
+					if err != nil {
+						return "", nil
+					}
+					runtimeObj, ok := obj.(RuntimeObject)
+					if !ok {
+						return "", nil
+					}
+					return string(o.GetUID()), runtimeObj
+				})
+			},
+		}
+	}
+}
+
+type stateReconciler struct {
+	controller *Controller
+	listFunc   func() (schema.GroupKind, RuntimeObjects)
+}
+
+func (r *stateReconciler) Run(_ <-chan struct{}) {
+	r.controller.listFuncs = append(r.controller.listFuncs)
+}
+
+func (r *stateReconciler) HasSynced() bool {
+	return true
 }
 
 func Restructure[T any](obj any) (any, error) {

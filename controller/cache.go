@@ -41,6 +41,7 @@ type Cache interface {
 	List() Store
 	Add(obj RuntimeObject)
 	Delete(obj RuntimeObject)
+	Replace(Store)
 }
 
 type Store map[schema.GroupKind]RuntimeObjects
@@ -89,6 +90,13 @@ func (c *cacheStore) Delete(obj RuntimeObject) {
 	delete(c.store[gk], string(obj.GetUID()))
 }
 
+func (c *cacheStore) Replace(store Store) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.store = store
+}
+
 type watchableCacheStore struct {
 	watchable.Map[schema.GroupKind, RuntimeObjects]
 }
@@ -118,4 +126,10 @@ func (c *watchableCacheStore) Delete(obj RuntimeObject) {
 	}
 	delete(value, string(obj.GetUID()))
 	c.Store(gk, value)
+}
+
+func (c *watchableCacheStore) Replace(store Store) {
+	for gk, objs := range store {
+		c.Store(gk, objs)
+	}
 }

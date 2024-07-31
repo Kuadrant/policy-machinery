@@ -6,11 +6,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kuadrant/policy-machinery/machinery"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/kuadrant/policy-machinery/machinery"
 )
 
 type ResourceEvent struct {
@@ -102,6 +104,7 @@ type Controller struct {
 	cache     Cache
 	topology  *gatewayAPITopologyBuilder
 	runnables map[string]Runnable
+	listFuncs []func() (schema.GroupKind, RuntimeObjects)
 	callback  CallbackFunc
 }
 
@@ -124,6 +127,18 @@ func (c *Controller) Start() {
 
 	// keep the thread alive
 	wait.Until(func() {}, time.Second, stopCh)
+}
+
+func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	store := Store{}
+	for _, f := range c.listFuncs {
+		gk, objects := f()
+		store[gk] = objects
+	}
+	c.cache.Replace(store)
 }
 
 func (c *Controller) add(resource schema.GroupVersionResource, obj RuntimeObject) {
