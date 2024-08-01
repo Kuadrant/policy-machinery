@@ -23,6 +23,8 @@ var (
 	TCPRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TCPRouteRule"}
 	TLSRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TLSRoute"}
 	TLSRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TLSRouteRule"}
+	UDPRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "UDPRoute"}
+	UDPRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "UDPRouteRule"}
 	ServiceGroupKind       = schema.GroupKind{Kind: "Service"}
 	ServicePortGroupKind   = schema.GroupKind{Kind: "ServicePort"}
 )
@@ -34,6 +36,7 @@ type GatewayAPITopologyOptions struct {
 	GRPCRoutes     []*GRPCRoute
 	TCPRoutes      []*TCPRoute
 	TLSRoutes      []*TLSRoute
+	UDPRoutes      []*UDPRoute
 	Services       []*Service
 	Policies       []Policy
 	Objects        []Object
@@ -44,6 +47,7 @@ type GatewayAPITopologyOptions struct {
 	ExpandGRPCRouteRules   bool
 	ExpandTCPRouteRules    bool
 	ExpandTLSRouteRules    bool
+	ExpandUDPRouteRules    bool
 	ExpandServicePorts     bool
 }
 
@@ -99,6 +103,15 @@ func WithTLSRoutes(tlsRoutes ...*gwapiv1alpha2.TLSRoute) GatewayAPITopologyOptio
 	return func(o *GatewayAPITopologyOptions) {
 		o.TLSRoutes = append(o.TLSRoutes, lo.Map(tlsRoutes, func(tlsRoute *gwapiv1alpha2.TLSRoute, _ int) *TLSRoute {
 			return &TLSRoute{TLSRoute: tlsRoute}
+		})...)
+	}
+}
+
+// WithUDPRoutes adds UDP routes to the options to initialize a new Gateway API topology.
+func WithUDPRoutes(udpRoutes ...*gwapiv1alpha2.UDPRoute) GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.UDPRoutes = append(o.UDPRoutes, lo.Map(udpRoutes, func(udpRoute *gwapiv1alpha2.UDPRoute, _ int) *UDPRoute {
+			return &UDPRoute{UDPRoute: udpRoute}
 		})...)
 	}
 }
@@ -170,6 +183,13 @@ func ExpandTLSRouteRules() GatewayAPITopologyOptionsFunc {
 	}
 }
 
+// ExpandUDPRouteRules adds targetable UDP route rules to the options to initialize a new Gateway API topology.
+func ExpandUDPRouteRules() GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.ExpandUDPRouteRules = true
+	}
+}
+
 // ExpandServicePorts adds targetable service ports to the options to initialize a new Gateway API topology.
 func ExpandServicePorts() GatewayAPITopologyOptionsFunc {
 	return func(o *GatewayAPITopologyOptions) {
@@ -202,6 +222,7 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		WithTargetables(o.GRPCRoutes...),
 		WithTargetables(o.TCPRoutes...),
 		WithTargetables(o.TLSRoutes...),
+		WithTargetables(o.UDPRoutes...),
 		WithTargetables(o.Services...),
 		WithLinks(o.Links...),
 		WithLinks(LinkGatewayClassToGatewayFunc(o.GatewayClasses)), // GatewayClass -> Gateway
@@ -216,12 +237,16 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 			LinkListenerToGRPCRouteFunc(o.Gateways, listeners), // Listener -> GRPCRoute
 			LinkListenerToTCPRouteFunc(o.Gateways, listeners),  // Listener -> TCPRoute
 			LinkListenerToTLSRouteFunc(o.Gateways, listeners),  // Listener -> TLSRoute
+			LinkListenerToUDPRouteFunc(o.Gateways, listeners),  // Listener -> UDPRoute
 		))
 	} else {
-		opts = append(opts, WithLinks(LinkGatewayToHTTPRouteFunc(o.Gateways))) // Gateway -> HTTPRoute
-		opts = append(opts, WithLinks(LinkGatewayToGRPCRouteFunc(o.Gateways))) // Gateway -> GRPCRoute
-		opts = append(opts, WithLinks(LinkGatewayToTCPRouteFunc(o.Gateways)))  // Gateway -> TCPRoute
-		opts = append(opts, WithLinks(LinkGatewayToTLSRouteFunc(o.Gateways)))  // Gateway -> TLSRoute
+		opts = append(opts, WithLinks(
+			LinkGatewayToHTTPRouteFunc(o.Gateways), // Gateway -> HTTPRoute
+			LinkGatewayToGRPCRouteFunc(o.Gateways), // Gateway -> GRPCRoute
+			LinkGatewayToTCPRouteFunc(o.Gateways),  // Gateway -> TCPRoute
+			LinkGatewayToTLSRouteFunc(o.Gateways),  // Gateway -> TLSRoute
+			LinkGatewayToUDPRouteFunc(o.Gateways),  // Gateway -> UDPRoute
+		))
 	}
 
 	if o.ExpandHTTPRouteRules {
@@ -311,8 +336,8 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 			servicePorts := lo.FlatMap(o.Services, ServicePortsFromBackendFunc)
 			opts = append(opts, WithTargetables(servicePorts...))
 			opts = append(opts, WithLinks(
-				LinkTLSRouteRuleToServicePortFunc(tlsRouteRules),   // TLSRoute -> ServicePort
-				LinkTLSRouteRuleToServiceFunc(tlsRouteRules, true), // TLSRoute -> Service
+				LinkTLSRouteRuleToServicePortFunc(tlsRouteRules),   // TLSRouteRule -> ServicePort
+				LinkTLSRouteRuleToServiceFunc(tlsRouteRules, true), // TLSRouteRule -> Service
 			))
 		} else {
 			opts = append(opts, WithLinks(LinkTLSRouteToServiceFunc(o.TLSRoutes, false))) // TLSRoute -> Service
@@ -325,6 +350,32 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 			))
 		} else {
 			opts = append(opts, WithLinks(LinkTLSRouteToServiceFunc(o.TLSRoutes, false))) // TLSRoute -> Service
+		}
+	}
+
+	if o.ExpandUDPRouteRules {
+		udpRouteRules := lo.FlatMap(o.UDPRoutes, UDPRouteRulesFromUDPRouteFunc)
+		opts = append(opts, WithTargetables(udpRouteRules...))
+		opts = append(opts, WithLinks(LinkUDPRouteToUDPRouteRuleFunc()))
+
+		if o.ExpandServicePorts {
+			servicePorts := lo.FlatMap(o.Services, ServicePortsFromBackendFunc)
+			opts = append(opts, WithTargetables(servicePorts...))
+			opts = append(opts, WithLinks(
+				LinkUDPRouteRuleToServicePortFunc(udpRouteRules),   // UDPRouteRule -> ServicePort
+				LinkUDPRouteRuleToServiceFunc(udpRouteRules, true), // UDPRouteRule -> Service
+			))
+		} else {
+			opts = append(opts, WithLinks(LinkUDPRouteToServiceFunc(o.UDPRoutes, false))) // UDPRoute -> Service
+		}
+	} else {
+		if o.ExpandServicePorts {
+			opts = append(opts, WithLinks(
+				LinkUDPRouteToServicePortFunc(o.UDPRoutes),   // UDPRoute -> ServicePort
+				LinkUDPRouteToServiceFunc(o.UDPRoutes, true), // UDPRoute -> Service
+			))
+		} else {
+			opts = append(opts, WithLinks(LinkUDPRouteToServiceFunc(o.UDPRoutes, false))) // UDPRoute -> Service
 		}
 	}
 
@@ -384,6 +435,17 @@ func TLSRouteRulesFromTLSRouteFunc(tlsRoute *TLSRoute, _ int) []*TLSRouteRule {
 		return &TLSRouteRule{
 			TLSRouteRule: &rule,
 			TLSRoute:     tlsRoute,
+			Name:         gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
+		}
+	})
+}
+
+// UDPRouteRulesFromUDPRouteFunc returns a list of targetable UDPRouteRules from a targetable UDPRoute.
+func UDPRouteRulesFromUDPRouteFunc(udpRoute *UDPRoute, _ int) []*UDPRouteRule {
+	return lo.Map(udpRoute.Spec.Rules, func(rule gwapiv1alpha2.UDPRouteRule, i int) *UDPRouteRule {
+		return &UDPRouteRule{
+			UDPRouteRule: &rule,
+			UDPRoute:     udpRoute,
 			Name:         gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
 		}
 	})
@@ -470,6 +532,19 @@ func LinkGatewayToTLSRouteFunc(gateways []*Gateway) LinkFunc {
 	}
 }
 
+// LinkGatewayToUDPRouteFunc returns a link function that teaches a topology how to link UDPRoute's from known
+// Gateway's, based on the UDPRoute's `parentRefs` field.
+func LinkGatewayToUDPRouteFunc(gateways []*Gateway) LinkFunc {
+	return LinkFunc{
+		From: GatewayGroupKind,
+		To:   UDPRouteGroupKind,
+		Func: func(child Object) []Object {
+			udpRoute := child.(*UDPRoute)
+			return lo.FilterMap(udpRoute.Spec.ParentRefs, findGatewayFromParentRefFunc(gateways, udpRoute.Namespace))
+		},
+	}
+}
+
 // findGatewayFromParentRefFunc is a common function to find a Gateway from a xRoute's `parentRef` field
 func findGatewayFromParentRefFunc(gateways []*Gateway, routeNamespace string) func(parentRef gwapiv1.ParentReference, _ int) (Object, bool) {
 	return func(parentRef gwapiv1.ParentReference, _ int) (Object, bool) {
@@ -528,7 +603,7 @@ func LinkListenerToGRPCRouteFunc(gateways []*Gateway, listeners []*Listener) Lin
 	}
 }
 
-// LinkListenerToTCPRouteFunc returns a link function that teaches a topology how to link GRPCRoutes from known
+// LinkListenerToTCPRouteFunc returns a link function that teaches a topology how to link TCPRoutes from known
 // Gateways and gateway Listeners, based on the TCPRoute's `parentRefs` field.
 // The function links a specific Listener of a Gateway to the TCPRoute when the `sectionName` field of the parent
 // reference is present, otherwise all Listeners of the parent Gateway are linked to the TCPRoute.
@@ -543,7 +618,7 @@ func LinkListenerToTCPRouteFunc(gateways []*Gateway, listeners []*Listener) Link
 	}
 }
 
-// LinkListenerToTLSRouteFunc returns a link function that teaches a topology how to link GRPCRoutes from known
+// LinkListenerToTLSRouteFunc returns a link function that teaches a topology how to link TLSRoutes from known
 // Gateways and gateway Listeners, based on the TLSRoute's `parentRefs` field.
 // The function links a specific Listener of a Gateway to the TLSRoute when the `sectionName` field of the parent
 // reference is present, otherwise all Listeners of the parent Gateway are linked to the TLSRoute.
@@ -554,6 +629,21 @@ func LinkListenerToTLSRouteFunc(gateways []*Gateway, listeners []*Listener) Link
 		Func: func(child Object) []Object {
 			tlsRoute := child.(*TLSRoute)
 			return lo.FlatMap(tlsRoute.Spec.ParentRefs, findListenerFromParentRefFunc(gateways, listeners, tlsRoute.Namespace))
+		},
+	}
+}
+
+// LinkListenerToUDPRouteFunc returns a link function that teaches a topology how to link UDPRoutes from known
+// Gateways and gateway Listeners, based on the UDPRoute's `parentRefs` field.
+// The function links a specific Listener of a Gateway to the UDPRoute when the `sectionName` field of the parent
+// reference is present, otherwise all Listeners of the parent Gateway are linked to the UDPRoute.
+func LinkListenerToUDPRouteFunc(gateways []*Gateway, listeners []*Listener) LinkFunc {
+	return LinkFunc{
+		From: ListenerGroupKind,
+		To:   UDPRouteGroupKind,
+		Func: func(child Object) []Object {
+			udpRoute := child.(*UDPRoute)
+			return lo.FlatMap(udpRoute.Spec.ParentRefs, findListenerFromParentRefFunc(gateways, listeners, udpRoute.Namespace))
 		},
 	}
 }
@@ -955,6 +1045,99 @@ func LinkTLSRouteRuleToServicePortFunc(routeRules []*TLSRouteRule) LinkFunc {
 					return backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
 				})
 				return routeRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(servicePort.Service, routeRule.TLSRoute.Namespace))
+			})
+		},
+	}
+}
+
+// LinkUDPRouteToServiceFunc returns a link function that teaches a topology how to link Services from known
+// UDPRoutes, based on the UDPRoute's `backendRefs` fields.
+// Set the `strict` parameter to `true` to link only to services that have no port specified in the backendRefs.
+func LinkUDPRouteToServiceFunc(routes []*UDPRoute, strict bool) LinkFunc {
+	return LinkFunc{
+		From: UDPRouteGroupKind,
+		To:   ServiceGroupKind,
+		Func: func(child Object) []Object {
+			service := child.(*Service)
+			return lo.FilterMap(routes, func(route *UDPRoute, _ int) (Object, bool) {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1alpha2.UDPRouteRule) bool {
+					backendRefs := lo.Filter(rule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
+						return !strict || backendRef.Port == nil
+					})
+					return lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(service, route.Namespace))
+				})
+			})
+		},
+	}
+}
+
+// LinkUDPRouteToServicePortFunc returns a link function that teaches a topology how to link services ports from known
+// UDPRoutes, based on the UDPRoute's `backendRefs` fields.
+// The link function disregards backend references that do not specify a port number.
+func LinkUDPRouteToServicePortFunc(routes []*UDPRoute) LinkFunc {
+	return LinkFunc{
+		From: UDPRouteGroupKind,
+		To:   ServicePortGroupKind,
+		Func: func(child Object) []Object {
+			servicePort := child.(*ServicePort)
+			return lo.FilterMap(routes, func(route *UDPRoute, _ int) (Object, bool) {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1alpha2.UDPRouteRule) bool {
+					backendRefs := lo.Filter(rule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
+						return backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
+					})
+					return lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(servicePort.Service, route.Namespace))
+				})
+			})
+		},
+	}
+}
+
+// LinkUDPRouteToUDPRouteRuleFunc returns a link function that teaches a topology how to link UDPRouteRule from the
+// UDPRoute they are strongly related to.
+func LinkUDPRouteToUDPRouteRuleFunc() LinkFunc {
+	return LinkFunc{
+		From: UDPRouteGroupKind,
+		To:   UDPRouteRuleGroupKind,
+		Func: func(child Object) []Object {
+			updRouteRule := child.(*UDPRouteRule)
+			return []Object{updRouteRule.UDPRoute}
+		},
+	}
+}
+
+// LinkUDPRouteRuleToServiceFunc returns a link function that teaches a topology how to link Services from known
+// UDPRouteRules, based on the UDPRouteRule's `backendRefs` field.
+// Set the `strict` parameter to `true` to link only to services that have no port specified in the backendRefs.
+func LinkUDPRouteRuleToServiceFunc(routeRules []*UDPRouteRule, strict bool) LinkFunc {
+	return LinkFunc{
+		From: UDPRouteRuleGroupKind,
+		To:   ServiceGroupKind,
+		Func: func(child Object) []Object {
+			service := child.(*Service)
+			return lo.FilterMap(routeRules, func(routeRule *UDPRouteRule, _ int) (Object, bool) {
+				backendRefs := lo.Filter(routeRule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
+					return !strict || backendRef.Port == nil
+				})
+				return routeRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(service, routeRule.UDPRoute.Namespace))
+			})
+		},
+	}
+}
+
+// LinkUDPRouteRuleToServicePortFunc returns a link function that teaches a topology how to link services ports from
+// known UDPRouteRules, based on the UDPRouteRule's `backendRefs` field.
+// The link function disregards backend references that do not specify a port number.
+func LinkUDPRouteRuleToServicePortFunc(routeRules []*UDPRouteRule) LinkFunc {
+	return LinkFunc{
+		From: UDPRouteRuleGroupKind,
+		To:   ServicePortGroupKind,
+		Func: func(child Object) []Object {
+			servicePort := child.(*ServicePort)
+			return lo.FilterMap(routeRules, func(routeRule *UDPRouteRule, _ int) (Object, bool) {
+				backendRefs := lo.Filter(routeRule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
+					return backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
+				})
+				return routeRule, lo.ContainsBy(backendRefs, backendRefContainsServiceFunc(servicePort.Service, routeRule.UDPRoute.Namespace))
 			})
 		},
 	}
