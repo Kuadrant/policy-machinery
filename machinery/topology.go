@@ -1,6 +1,7 @@
 package machinery
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -65,7 +66,7 @@ func WithLinks(links ...LinkFunc) TopologyOptionsFunc {
 // The topology is represented as a directed acyclic graph (DAG) with the structure given by link functions.
 // The links between policies to targteables are inferred from the policies' target references.
 // The targetables, policies, objects and link functions are provided as options.
-func NewTopology(options ...TopologyOptionsFunc) *Topology {
+func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
 	o := &TopologyOptions{}
 	for _, f := range options {
 		f(o)
@@ -88,7 +89,7 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 		return t
 	})
 
-	graph := dot.NewGraph(dot.Directed)
+	graph := dot.NewGraph(dot.Directed, dot.Strict)
 
 	addObjectsToGraph(graph, o.Objects)
 	addTargetablesToGraph(graph, targetables)
@@ -111,12 +112,17 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 
 	addPoliciesToGraph(graph, policies)
 
+	var err error
+	if !validate(graph) {
+		err = errors.New("loop detected in graph check linking functions")
+	}
+
 	return &Topology{
 		graph:       graph,
 		objects:     lo.SliceToMap(o.Objects, associateLocator[Object]),
 		targetables: lo.SliceToMap(targetables, associateLocator[Targetable]),
 		policies:    lo.SliceToMap(policies, associateLocator[Policy]),
-	}
+	}, err
 }
 
 // Topology models a network of related targetables and respective policies attached to them.
@@ -204,6 +210,92 @@ func addEdgeToGraph(graph *dot.Graph, name string, parent, child Object) {
 		edge := graph.Edge(p, c)
 		edge.Attr("comment", name)
 	}
+}
+
+// validate returns true if loops are detected in a given graph
+func validate(g *dot.Graph) bool {
+	// Based on Kahn's algorithm
+	// https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
+	type node struct {
+		id       string
+		parents  map[string]interface{}
+		children []*node
+	}
+
+	type graph struct {
+		nodes []*node
+	}
+
+	// build simplified graph
+	build := func(g *dot.Graph) *graph {
+		graph_ := &graph{
+			nodes: make([]*node, 0),
+		}
+
+		nodeIndex := make(map[string]*node)
+
+		for _, n := range g.FindNodes() {
+			nodeIndex[n.ID()] = &node{
+				id:       n.ID(),
+				parents:  make(map[string]interface{}),
+				children: make([]*node, 0),
+			}
+		}
+
+		for _, n := range g.FindNodes() {
+			simpleNode := nodeIndex[n.ID()]
+			if simpleNode == nil {
+				panic("it should never happen")
+			}
+			for from, edges := range g.EdgesMap() {
+				if lo.ContainsBy(edges, func(edge dot.Edge) bool {
+					return edge.To().ID() == simpleNode.id
+				}) {
+					simpleNode.parents[from] = nil
+				}
+			}
+
+			edges := g.EdgesMap()[simpleNode.id]
+			for _, edge := range edges {
+				simpleNode.children = append(simpleNode.children, nodeIndex[edge.To().ID()])
+			}
+
+			graph_.nodes = append(graph_.nodes, simpleNode)
+		}
+
+		return graph_
+	}
+
+	graph_ := build(g)
+
+	// Run kahn's algorithm
+	s := lo.Filter(graph_.nodes, func(node *node, _ int) bool {
+		return len(node.parents) == 0
+	})
+
+	for len(s) != 0 {
+		var n *node
+		n, s = s[0], s[1:]
+
+		for len(n.children) != 0 {
+			var m *node
+			m, n.children = n.children[0], n.children[1:]
+
+			delete(m.parents, n.id)
+			if len(m.parents) == 0 {
+				s = append(s, m)
+			}
+		}
+
+	}
+
+	for _, n := range graph_.nodes {
+		if len(n.children) > 0 {
+			return false
+		}
+	}
+
+	return true
 }
 
 func associateLocator[T Object](obj T) (string, T) {

@@ -321,3 +321,123 @@ func buildFruitPolicy(f ...func(*FruitPolicy)) *FruitPolicy {
 	}
 	return p
 }
+
+type Peach struct {
+	Name          string
+	Namespace     string
+	OrangeParents []string
+	ChildApples   []string
+
+	policies []Policy
+}
+
+var _ Targetable = &Peach{}
+
+func (o *Peach) GetName() string {
+	return o.Name
+}
+
+func (o *Peach) GetNamespace() string {
+	return o.Namespace
+}
+
+func (o *Peach) GetURL() string {
+	return UrlFromObject(o)
+}
+
+func (o *Peach) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   TestGroupName,
+		Version: "v1beta1",
+		Kind:    "Peach",
+	}
+}
+
+func (o *Peach) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (o *Peach) Policies() []Policy {
+	return o.policies
+}
+
+func (o *Peach) SetPolicies(policies []Policy) {
+	o.policies = policies
+}
+
+func LinkOrangesToPeaches(oranges []*Orange) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: TestGroupName, Kind: "Orange"},
+		To:   schema.GroupKind{Group: TestGroupName, Kind: "Peach"},
+		Func: func(child Object) []Object {
+			peach := child.(*Peach)
+			return lo.FilterMap(oranges, func(orange *Orange, _ int) (Object, bool) {
+				return orange, lo.Contains(peach.OrangeParents, orange.Name)
+			})
+		},
+	}
+}
+
+func LinkPeachesToApples(peaches []*Peach) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: TestGroupName, Kind: "Peach"},
+		To:   schema.GroupKind{Group: TestGroupName, Kind: "Apple"},
+		Func: func(child Object) []Object {
+			apple := child.(*Apple)
+			return lo.FilterMap(peaches, func(peach *Peach, _ int) (Object, bool) {
+				return peach, lo.Contains(peach.ChildApples, apple.Name)
+			})
+		},
+	}
+}
+
+type Lemon struct {
+	Name         string
+	Namespace    string
+	PeachParents []string
+
+	policies []Policy
+}
+
+var _ Targetable = &Lemon{}
+
+func (o *Lemon) GetName() string {
+	return o.Name
+}
+
+func (o *Lemon) GetNamespace() string {
+	return o.Namespace
+}
+
+func (o *Lemon) GetURL() string {
+	return UrlFromObject(o)
+}
+
+func (o *Lemon) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   TestGroupName,
+		Version: "v1beta1",
+		Kind:    "Lemon",
+	}
+}
+
+func (o *Lemon) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (o *Lemon) Policies() []Policy {
+	return o.policies
+}
+
+func (o *Lemon) SetPolicies(policies []Policy) {
+	o.policies = policies
+}
+
+func LinkPeachesToLemons(peaches []*Peach) LinkFunc {
+	return LinkFunc{
+		From: schema.GroupKind{Group: TestGroupName, Kind: "Peach"},
+		To:   schema.GroupKind{Group: TestGroupName, Kind: "Lemon"},
+		Func: func(child Object) []Object {
+			lemon := child.(*Lemon)
+			return lo.FilterMap(peaches, func(peach *Peach, _ int) (Object, bool) {
+				return peach, lo.Contains(lemon.PeachParents, peach.Name)
+			})
+		},
+	}
+}

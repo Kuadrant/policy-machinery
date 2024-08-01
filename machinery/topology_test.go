@@ -15,7 +15,7 @@ func TestTopologyRoots(t *testing.T) {
 		{Name: "apple-1"},
 		{Name: "apple-2"},
 	}
-	topology := NewTopology(
+	topology, err := NewTopology(
 		WithTargetables(apples...),
 		WithTargetables(&Orange{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1"}}),
 		WithLinks(LinkApplesToOranges(apples)),
@@ -38,6 +38,11 @@ func TestTopologyRoots(t *testing.T) {
 			}),
 		),
 	)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+
 	roots := topology.Targetables().Roots()
 	if expected := len(apples); len(roots) != expected {
 		t.Errorf("expected %d roots, got %d", expected, len(roots))
@@ -55,7 +60,7 @@ func TestTopologyParents(t *testing.T) {
 	apple2 := &Apple{Name: "apple-2"}
 	orange1 := &Orange{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1", "apple-2"}}
 	orange2 := &Orange{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-2"}}
-	topology := NewTopology(
+	topology, err := NewTopology(
 		WithTargetables(apple1, apple2),
 		WithTargetables(orange1, orange2),
 		WithLinks(LinkApplesToOranges([]*Apple{apple1, apple2})),
@@ -70,6 +75,11 @@ func TestTopologyParents(t *testing.T) {
 			}),
 		),
 	)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+
 	// orange-1
 	parents := topology.Targetables().Parents(orange1)
 	if expected := 2; len(parents) != expected {
@@ -98,7 +108,7 @@ func TestTopologyChildren(t *testing.T) {
 	apple2 := &Apple{Name: "apple-2"}
 	orange1 := &Orange{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1", "apple-2"}}
 	orange2 := &Orange{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-2"}}
-	topology := NewTopology(
+	topology, err := NewTopology(
 		WithTargetables(apple1, apple2),
 		WithTargetables(orange1, orange2),
 		WithLinks(LinkApplesToOranges([]*Apple{apple1, apple2})),
@@ -113,6 +123,11 @@ func TestTopologyChildren(t *testing.T) {
 			}),
 		),
 	)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+
 	// apple-1
 	children := topology.Targetables().Children(apple1)
 	if expected := 1; len(children) != expected {
@@ -143,7 +158,7 @@ func TestTopologyPaths(t *testing.T) {
 		{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-1"}, ChildBananas: []string{"banana-1"}},
 	}
 	bananas := []*Banana{{Name: "banana-1"}}
-	topology := NewTopology(
+	topology, err := NewTopology(
 		WithTargetables(apples...),
 		WithTargetables(oranges...),
 		WithTargetables(bananas...),
@@ -162,6 +177,11 @@ func TestTopologyPaths(t *testing.T) {
 			}),
 		),
 	)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+
 	testCases := []struct {
 		name          string
 		from          Targetable
@@ -285,7 +305,7 @@ func TestFruitTopology(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			topology := NewTopology(
+			topology, err := NewTopology(
 				WithTargetables(tc.targetables.apples...),
 				WithTargetables(tc.targetables.oranges...),
 				WithTargetables(tc.targetables.bananas...),
@@ -295,6 +315,10 @@ func TestFruitTopology(t *testing.T) {
 				),
 				WithPolicies(tc.policies...),
 			)
+
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
 
 			links := make(map[string][]string)
 			for _, root := range topology.Targetables().Roots() {
@@ -325,7 +349,7 @@ func TestTopologyWithRuntimeObjects(t *testing.T) {
 		{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-1"}},
 	}
 
-	topology := NewTopology(
+	topology, err := NewTopology(
 		WithObjects(objects...),
 		WithTargetables(apples...),
 		WithTargetables(oranges...),
@@ -348,6 +372,10 @@ func TestTopologyWithRuntimeObjects(t *testing.T) {
 		),
 	)
 
+	if err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+
 	expectedLinks := map[string][]string{
 		"apple-1": {"orange-1", "orange-2"},
 		"info-1":  {"apple-1"},
@@ -368,4 +396,73 @@ func TestTopologyWithRuntimeObjects(t *testing.T) {
 	}
 
 	SaveToOutputDir(t, topology.ToDot(), "../tests/out", ".dot")
+}
+func TestTopologyHasLoops(t *testing.T) {
+	apples := []*Apple{{Name: "apple-1"}, {Name: "apple-3"}}
+	oranges := []*Orange{
+		{Name: "orange-1", AppleParents: []string{"apple-1"}},
+		{Name: "orange-3", AppleParents: []string{"apple-3", "apple-1"}},
+		{Name: "orange-4", AppleParents: []string{"apple-3"}},
+	}
+	peaches := []*Peach{
+		{Name: "peach-2", OrangeParents: []string{"orange-1"}},
+		{Name: "peach-1", OrangeParents: []string{"orange-1"}, ChildApples: []string{"apple-1"}},
+		{Name: "peach-2", OrangeParents: []string{"orange-3", "orange-4"}},
+	}
+
+	lemons := []*Lemon{
+		{Name: "lemon-1", PeachParents: []string{"peach-1"}},
+	}
+	_, err := NewTopology(
+		WithTargetables(lemons...),
+		WithTargetables(apples...),
+		WithTargetables(peaches...),
+		WithTargetables(oranges...),
+		WithLinks(
+			LinkPeachesToLemons(peaches),
+			LinkApplesToOranges(apples),
+			LinkPeachesToApples(peaches),
+			LinkOrangesToPeaches(oranges),
+		),
+	)
+	if err == nil {
+		t.Errorf("Expected error, got none")
+	}
+	if err != nil && !strings.Contains(err.Error(), "loop detected") {
+		t.Errorf("Expected loop detection error, got: %s", err.Error())
+	}
+}
+
+func TestTopologyHasNoLoops(t *testing.T) {
+	apples := []*Apple{{Name: "apple-1"}, {Name: "apple-2"}, {Name: "apple-3"}}
+	oranges := []*Orange{
+		{Name: "orange-1", AppleParents: []string{"apple-1"}},
+		{Name: "orange-2", AppleParents: []string{"apple-2"}},
+		{Name: "orange-3", AppleParents: []string{"apple-3", "apple-1"}},
+		{Name: "orange-4", AppleParents: []string{"apple-3"}},
+	}
+	peaches := []*Peach{
+		{Name: "peach-1", OrangeParents: []string{"orange-1"}},
+		{Name: "peach-2", OrangeParents: []string{"orange-1"}},
+		{Name: "peach-2", OrangeParents: []string{"orange-3", "orange-4"}},
+	}
+
+	lemons := []*Lemon{
+		{Name: "lemon-1", PeachParents: []string{"peach-1"}},
+	}
+	_, err := NewTopology(
+		WithTargetables(lemons...),
+		WithTargetables(apples...),
+		WithTargetables(peaches...),
+		WithTargetables(oranges...),
+		WithLinks(
+			LinkPeachesToLemons(peaches),
+			LinkApplesToOranges(apples),
+			LinkPeachesToApples(peaches),
+			LinkOrangesToPeaches(oranges),
+		),
+	)
+	if err != nil {
+		t.Errorf("Expected no error, got: %s", err.Error())
+	}
 }

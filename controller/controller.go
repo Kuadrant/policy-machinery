@@ -239,7 +239,10 @@ func (c *Controller) delete(obj Object) {
 }
 
 func (c *Controller) propagate(resourceEvents []ResourceEvent) {
-	topology := c.topology.Build(c.cache.List())
+	topology, err := c.topology.Build(c.cache.List())
+	if err != nil {
+		panic(err)
+	}
 	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology)
 }
 

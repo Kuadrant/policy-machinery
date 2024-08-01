@@ -188,7 +188,7 @@ func ExpandServicePorts() GatewayAPITopologyOptionsFunc {
 // The links will then be established accordingly. E.g.:
 //   - Without expanding Gateway listeners (default): Gateway -> HTTPRoute links.
 //   - Expanding Gateway listeners: Gateway -> Listener and Listener -> HTTPRoute links.
-func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
+func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) (*Topology, error) {
 	o := &GatewayAPITopologyOptions{}
 	for _, f := range options {
 		f(o)
