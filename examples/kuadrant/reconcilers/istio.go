@@ -287,7 +287,7 @@ func hostSubsetOf(superset gwapiv1.Hostname) func(gwapiv1.Hostname, int) bool {
 }
 
 func LinkGatewayToIstioAuthorizationPolicyFunc(objs controller.Store) machinery.LinkFunc {
-	gatewayKind := schema.GroupKind{Group: gwapiv1.GroupName, Kind: "Gateway"}
+	gatewayKind := machinery.GatewayGroupKind
 	gateways := lo.FilterMap(lo.Values(objs[gatewayKind]), func(obj controller.RuntimeObject, _ int) (*gwapiv1.Gateway, bool) {
 		g, ok := obj.(*gwapiv1.Gateway)
 		if !ok {
