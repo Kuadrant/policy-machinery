@@ -177,3 +177,7 @@ type TLSPolicyList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TLSPolicy `json:"items"`
 }
+
+func init() {
+	SchemeBuilder.Register(&TLSPolicy{}, &TLSPolicyList{})
+}

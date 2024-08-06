@@ -29,7 +29,7 @@ type EnvoyGatewayProvider struct {
 	Client *dynamic.DynamicClient
 }
 
-func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
+func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
 	authPaths := pathsFromContext(ctx, authPathsKey)
 	targetables := topology.Targetables()
 	gateways := targetables.Items(func(o machinery.Object) bool {
@@ -54,9 +54,11 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, re
 	}
 }
 
-func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
-	gateway := resourceEvent.OldObject
-	p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
+func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology) {
+	for _, resourceEvent := range resourceEvents {
+		gateway := resourceEvent.OldObject
+		p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
+	}
 }
 
 func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topology *machinery.Topology, gateway machinery.Targetable) {

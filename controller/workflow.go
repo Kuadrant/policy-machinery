@@ -10,15 +10,15 @@ import (
 // Workflow runs an optional precondition reconciliation function, then dispatches the reconciliation event to
 // a list of concurrent reconciliation tasks, and runs an optional postcondition reconciliation function.
 type Workflow struct {
-	Precondition  CallbackFunc
-	Tasks         []CallbackFunc
-	Postcondition CallbackFunc
+	Precondition  ReconcileFunc
+	Tasks         []ReconcileFunc
+	Postcondition ReconcileFunc
 }
 
-func (d *Workflow) Run(ctx context.Context, resourceEvent ResourceEvent, topology *machinery.Topology) {
+func (d *Workflow) Run(ctx context.Context, resourceEvents []ResourceEvent, topology *machinery.Topology) {
 	// run precondition reconcile function
 	if d.Precondition != nil {
-		d.Precondition(ctx, resourceEvent, topology)
+		d.Precondition(ctx, resourceEvents, topology)
 	}
 
 	// dispatch the event to concurrent tasks
@@ -28,13 +28,13 @@ func (d *Workflow) Run(ctx context.Context, resourceEvent ResourceEvent, topolog
 	for _, f := range funcs {
 		go func() {
 			defer waitGroup.Done()
-			f(ctx, resourceEvent, topology)
+			f(ctx, resourceEvents, topology)
 		}()
 	}
 	waitGroup.Wait()
 
 	// run precondition reconcile function
 	if d.Postcondition != nil {
-		d.Postcondition(ctx, resourceEvent, topology)
+		d.Postcondition(ctx, resourceEvents, topology)
 	}
 }
