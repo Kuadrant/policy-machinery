@@ -27,10 +27,10 @@ const authPathsKey = "authPaths"
 // as argument to the subsequent concurrent reconcilers.
 type EffectivePoliciesReconciler struct {
 	Client         *dynamic.DynamicClient
-	ReconcileFuncs []controller.CallbackFunc
+	ReconcileFuncs []controller.ReconcileFunc
 }
 
-func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
+func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology) {
 	targetables := topology.Targetables()
 
 	// reconcile policies
@@ -86,7 +86,7 @@ func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEve
 	for _, f := range funcs {
 		go func() {
 			defer waitGroup.Done()
-			f(ctx, resourceEvent, topology)
+			f(ctx, resourceEvents, topology)
 		}()
 	}
 }
