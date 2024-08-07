@@ -308,7 +308,7 @@ func (c *collection[T]) Children(item Object) []T {
 // Paths returns all paths from a source item to a destination item in the collection.
 // The order of the elements in the inner slices represents a path from the source to the destination.
 func (c *collection[T]) Paths(from, to Object) [][]T {
-	if &from == nil || &to == nil {
+	if from == nil || to == nil {
 		return nil
 	}
 	var paths [][]T
