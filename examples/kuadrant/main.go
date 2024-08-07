@@ -7,10 +7,8 @@ import (
 	"strings"
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
-	"github.com/go-logr/zapr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/samber/lo"
-	"go.uber.org/zap"
 	istiov1 "istio.io/client-go/pkg/apis/security/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -19,7 +17,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/klog/v2"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -101,26 +98,20 @@ func main() {
 	}
 
 	// create logger
-	zapLogger, err := zap.NewProduction()
-	if err != nil {
-		log.Fatalf("Error creating zap logger: %v", err)
-	}
-	logger := zapr.NewLogger(zapLogger)
-	ctrlruntime.SetLogger(logger)
-	klog.SetLogger(logger)
+	logger := controller.CreateAndSetLogger()
 
 	// load kubeconfig
 	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{})
 	config, err := kubeconfig.ClientConfig()
 	if err != nil {
-		logger.Error(err, "Error loading kubeconfig")
+		logger.Error(err, "error loading kubeconfig")
 		os.Exit(1)
 	}
 
 	// create the client
 	client, err := dynamic.NewForConfig(config)
 	if err != nil {
-		logger.Error(err, "Error creating client")
+		logger.Error(err, "error creating client")
 		os.Exit(1)
 	}
 
@@ -166,7 +157,7 @@ func main() {
 
 	// start the controller
 	if err := controller.NewController(controllerOpts...).Start(); err != nil {
-		logger.Error(err, "Error starting controller")
+		logger.Error(err, "error starting controller")
 		os.Exit(1)
 	}
 }
@@ -250,17 +241,24 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 	}
 
 	reconciler := &controller.Workflow{
-		Precondition: func(_ context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology) {
+		Precondition: func(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology) {
+			logger := controller.LoggerFromContext(ctx).WithName("event logger")
 			for _, event := range resourceEvents {
 				// log the event
 				obj := event.OldObject
 				if obj == nil {
 					obj = event.NewObject
 				}
-				log.Printf("%s %sd: %s/%s\n", obj.GetObjectKind().GroupVersionKind().Kind, event.EventType.String(), obj.GetNamespace(), obj.GetName())
-				if event.EventType == controller.UpdateEvent {
-					log.Println(cmp.Diff(event.OldObject, event.NewObject))
+				values := []any{
+					"type", event.EventType.String(),
+					"kind", obj.GetObjectKind().GroupVersionKind().Kind,
+					"namespace", obj.GetNamespace(),
+					"name", obj.GetName(),
 				}
+				if event.EventType == controller.UpdateEvent && logger.V(1).Enabled() {
+					values = append(values, "diff", cmp.Diff(event.OldObject, event.NewObject))
+				}
+				logger.Info("new event", values...)
 			}
 		},
 		Tasks: []controller.ReconcileFunc{

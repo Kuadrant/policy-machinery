@@ -170,14 +170,14 @@ func (c *Controller) Start() error {
 	// start runnables
 	for name := range c.runnables {
 		defer close(stopCh)
-		c.logger.Info("Starting runnable", "name", name)
+		c.logger.Info("starting runnable", "name", name)
 		go c.runnables[name].Run(stopCh)
 	}
 
 	// wait for cache sync
 	for name := range c.runnables {
 		if !cache.WaitForCacheSync(stopCh, c.runnables[name].HasSynced) {
-			return fmt.Errorf("Error waiting for %s cache sync", name)
+			return fmt.Errorf("error waiting for %s cache sync", name)
 		}
 	}
 
@@ -192,16 +192,16 @@ func (c *Controller) Start() error {
 				return fmt.Errorf("Error watching resource: %v", err)
 			}
 		}
-		c.logger.Info("Starting controller manager")
+		c.logger.V(1).Info("starting controller manager")
 		c.manager.Start(ctrlruntime.SetupSignalHandler())
-		c.logger.Info("Finishing controller manager")
+		c.logger.V(1).Info("finishing controller manager")
 		return nil
 	}
 
 	// keep the thread alive
-	c.logger.Info("Waiting until stop signal is received")
+	c.logger.Info("waiting until stop signal is received")
 	wait.Until(func() {}, time.Second, stopCh)
-	c.logger.Info("Stop signal received. Finishing controller...")
+	c.logger.Info("stop signal received. finishing controller...")
 
 	return nil
 }
@@ -210,8 +210,8 @@ func (c *Controller) Reconcile(ctx context.Context, _ ctrlruntimereconcile.Reque
 	c.Lock()
 	defer c.Unlock()
 
-	c.logger.Info("Reconciling state of the world started")
-	defer c.logger.Info("Reconciling state of the world finished")
+	c.logger.Info("reconciling state of the world started")
+	defer c.logger.Info("reconciling state of the world finished")
 
 	store := Store{}
 	for _, f := range c.listFuncs {
@@ -261,7 +261,7 @@ func (c *Controller) delete(obj RuntimeObject) {
 
 func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 	topology := c.topology.Build(c.cache.List())
-	c.reconcile(context.TODO(), resourceEvents, topology)
+	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology)
 }
 
 func (c *Controller) subscribe() {

@@ -2,7 +2,6 @@ package reconcilers
 
 import (
 	"context"
-	"log"
 	"os"
 
 	"github.com/kuadrant/policy-machinery/controller"
@@ -13,14 +12,18 @@ const topologyFile = "topology.dot"
 
 type TopologyFileReconciler struct{}
 
-func (r *TopologyFileReconciler) Reconcile(_ context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
+func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
+	logger := controller.LoggerFromContext(ctx).WithName("topology file")
+
 	file, err := os.Create(topologyFile)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err, "failed to create topology file")
+		return
 	}
 	defer file.Close()
 	_, err = file.WriteString(topology.ToDot())
 	if err != nil {
-		log.Fatal(err)
+		logger.Error(err, "failed to write to topology file")
+		return
 	}
 }

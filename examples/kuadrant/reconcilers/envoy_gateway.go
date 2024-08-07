@@ -2,8 +2,7 @@ package reconcilers
 
 import (
 	"context"
-	"log"
-	"strings"
+	"fmt"
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/samber/lo"
@@ -30,6 +29,9 @@ type EnvoyGatewayProvider struct {
 }
 
 func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
+	logger := controller.LoggerFromContext(ctx).WithName("envoy gateway").WithName("securitypolicy")
+	ctx = controller.LoggerIntoContext(ctx, logger)
+
 	authPaths := pathsFromContext(ctx, authPathsKey)
 	targetables := topology.Targetables()
 	gateways := targetables.Items(func(o machinery.Object) bool {
@@ -38,8 +40,9 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ 
 	})
 	for _, gateway := range gateways {
 		paths := lo.Filter(authPaths, func(path []machinery.Targetable, _ int) bool {
-			if len(path) < 4 { // should never happen
-				log.Fatalf("Unexpected topology path length to build Envoy SecurityPolicy: %s\n", strings.Join(lo.Map(path, machinery.MapTargetableToURLFunc), " → "))
+			if len(path) != 4 { // should never happen
+				logger.Error(fmt.Errorf("unexpected topology path length to build Envoy SecurityPolicy"), "path", lo.Map(path, machinery.MapTargetableToURLFunc))
+				return false
 			}
 			return path[0].GetURL() == gateway.GetURL() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
 				gc, ok := parent.(*machinery.GatewayClass)
@@ -62,6 +65,8 @@ func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourc
 }
 
 func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topology *machinery.Topology, gateway machinery.Targetable) {
+	logger := controller.LoggerFromContext(ctx)
+
 	desiredSecurityPolicy := &egv1alpha1.SecurityPolicy{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: egv1alpha1.GroupVersion.String(),
@@ -103,7 +108,7 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 		o, _ := controller.Destruct(desiredSecurityPolicy)
 		_, err := resource.Create(ctx, o, metav1.CreateOptions{})
 		if err != nil {
-			log.Println("failed to create SecurityPolicy", err)
+			logger.Error(err, "failed to create SecurityPolicy")
 		}
 		return
 	}
@@ -125,7 +130,7 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 	o, _ := controller.Destruct(securityPolicy)
 	_, err := resource.Update(ctx, o, metav1.UpdateOptions{})
 	if err != nil {
-		log.Println("failed to update SecurityPolicy", err)
+		logger.Error(err, "failed to update SecurityPolicy")
 	}
 }
 
@@ -145,7 +150,7 @@ func (p *EnvoyGatewayProvider) deleteSecurityPolicy(ctx context.Context, topolog
 	resource := p.Client.Resource(EnvoyGatewaySecurityPoliciesResource).Namespace(namespace)
 	err := resource.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		log.Println("failed to delete SecurityPolicy", err)
+		controller.LoggerFromContext(ctx).Error(err, "failed to delete SecurityPolicy")
 	}
 }
 

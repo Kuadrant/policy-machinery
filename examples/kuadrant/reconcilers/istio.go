@@ -3,7 +3,6 @@ package reconcilers
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/samber/lo"
@@ -33,6 +32,9 @@ type IstioGatewayProvider struct {
 }
 
 func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
+	logger := controller.LoggerFromContext(ctx).WithName("istio").WithName("authorizationpolicy")
+	ctx = controller.LoggerIntoContext(ctx, logger)
+
 	authPaths := pathsFromContext(ctx, authPathsKey)
 	targetables := topology.Targetables()
 	gateways := targetables.Items(func(o machinery.Object) bool {
@@ -41,8 +43,9 @@ func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Contex
 	})
 	for _, gateway := range gateways {
 		paths := lo.Filter(authPaths, func(path []machinery.Targetable, _ int) bool {
-			if len(path) < 4 { // should never happen
-				log.Fatalf("Unexpected topology path length to build Istio AuthorizationPolicy: %s\n", strings.Join(lo.Map(path, machinery.MapTargetableToURLFunc), " → "))
+			if len(path) != 4 { // should never happen
+				logger.Error(fmt.Errorf("unexpected topology path length to build Istio AuthorizationPolicy"), "path", lo.Map(path, machinery.MapTargetableToURLFunc))
+				return false
 			}
 			return path[0].GetURL() == gateway.GetURL() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
 				gc, ok := parent.(*machinery.GatewayClass)
@@ -65,6 +68,8 @@ func (p *IstioGatewayProvider) DeleteAuthorizationPolicy(ctx context.Context, re
 }
 
 func (p *IstioGatewayProvider) createAuthorizationPolicy(ctx context.Context, topology *machinery.Topology, gateway machinery.Targetable, paths [][]machinery.Targetable) {
+	logger := controller.LoggerFromContext(ctx)
+
 	desiredAuthorizationPolicy := &istiov1.AuthorizationPolicy{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: istiov1.SchemeGroupVersion.String(),
@@ -112,7 +117,7 @@ func (p *IstioGatewayProvider) createAuthorizationPolicy(ctx context.Context, to
 		o, _ := controller.Destruct(desiredAuthorizationPolicy)
 		_, err := resource.Create(ctx, o, metav1.CreateOptions{})
 		if err != nil {
-			log.Println("failed to create AuthorizationPolicy", err)
+			logger.Error(err, "failed to create AuthorizationPolicy")
 		}
 		return
 	}
@@ -133,7 +138,7 @@ func (p *IstioGatewayProvider) createAuthorizationPolicy(ctx context.Context, to
 	o, _ := controller.Destruct(authorizationPolicy)
 	_, err := resource.Update(ctx, o, metav1.UpdateOptions{})
 	if err != nil {
-		log.Println("failed to update AuthorizationPolicy", err)
+		logger.Error(err, "failed to update AuthorizationPolicy")
 	}
 }
 
@@ -153,7 +158,7 @@ func (p *IstioGatewayProvider) deleteAuthorizationPolicy(ctx context.Context, to
 	resource := p.Client.Resource(IstioAuthorizationPoliciesResource).Namespace(namespace)
 	err := resource.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		log.Println("failed to delete AuthorizationPolicy", err)
+		controller.LoggerFromContext(ctx).Error(err, "failed to delete AuthorizationPolicy")
 	}
 }
 
