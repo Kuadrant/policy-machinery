@@ -1,12 +1,10 @@
 package machinery
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 
-	graphviz "github.com/goccy/go-graphviz"
-	"github.com/goccy/go-graphviz/cgraph"
+	"github.com/emicklei/dot"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -90,8 +88,7 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 		return t
 	})
 
-	gz := graphviz.New()
-	graph, _ := gz.Graph(graphviz.StrictDirected)
+	graph := dot.NewGraph(dot.Directed)
 
 	addObjectsToGraph(graph, o.Objects)
 	addTargetablesToGraph(graph, targetables)
@@ -124,7 +121,7 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 
 // Topology models a network of related targetables and respective policies attached to them.
 type Topology struct {
-	graph       *cgraph.Graph
+	graph       *dot.Graph
 	targetables map[string]Targetable
 	policies    map[string]Policy
 	objects     map[string]Object
@@ -157,51 +154,55 @@ func (t *Topology) Objects() *collection[Object] {
 	}
 }
 
-func (t *Topology) ToDot() *bytes.Buffer {
-	gz := graphviz.New()
-	var buf bytes.Buffer
-	gz.Render(t.graph, "dot", &buf)
-	return &buf
+func (t *Topology) ToDot() string {
+	return t.graph.String()
 }
 
-func addObjectsToGraph[T Object](graph *cgraph.Graph, objects []T) []*cgraph.Node {
-	return lo.Map(objects, func(object T, _ int) *cgraph.Node {
+func addObjectsToGraph[T Object](graph *dot.Graph, objects []T) []dot.Node {
+	return lo.Map(objects, func(object T, _ int) dot.Node {
 		name := strings.TrimPrefix(namespacedName(object.GetNamespace(), object.GetName()), string(k8stypes.Separator))
-		n, _ := graph.CreateNode(string(object.GetURL()))
-		n.SetLabel(fmt.Sprintf("%s\\n%s", object.GroupVersionKind().Kind, name))
-		n.SetShape(cgraph.EllipseShape)
+		n := graph.Node(string(object.GetURL()))
+		n.Label(fmt.Sprintf("%s\n%s", object.GroupVersionKind().Kind, name))
+		n.Attr("shape", "ellipse")
 		return n
 	})
 }
 
-func addTargetablesToGraph[T Targetable](graph *cgraph.Graph, targetables []T) {
+func addTargetablesToGraph[T Targetable](graph *dot.Graph, targetables []T) {
 	for _, node := range addObjectsToGraph(graph, targetables) {
-		node.SetShape(cgraph.BoxShape)
-		node.SetStyle(cgraph.FilledNodeStyle)
-		node.SetFillColor("#e5e5e5")
+		node.Attrs(
+			"shape", "box",
+			"style", "filled",
+			"fillcolor", "#e5e5e5",
+		)
 	}
 }
 
-func addPoliciesToGraph[T Policy](graph *cgraph.Graph, policies []T) {
+func addPoliciesToGraph[T Policy](graph *dot.Graph, policies []T) {
 	for i, policyNode := range addObjectsToGraph(graph, policies) {
-		policyNode.SetShape(cgraph.NoteShape)
-		policyNode.SetStyle(cgraph.DashedNodeStyle)
+		policyNode.Attrs(
+			"shape", "note",
+			"style", "dashed",
+		)
 		// Policy -> Target edges
 		for _, targetRef := range policies[i].GetTargetRefs() {
-			targetNode, _ := graph.Node(string(targetRef.GetURL()))
-			if targetNode != nil {
-				edge, _ := graph.CreateEdge("Policy -> Target", policyNode, targetNode)
-				edge.SetStyle(cgraph.DashedEdgeStyle)
+			targetNode, found := graph.FindNodeById(string(targetRef.GetURL()))
+			if !found {
+				continue
 			}
+			edge := graph.Edge(policyNode, targetNode)
+			edge.Attr("comment", "Policy -> Target")
+			edge.Dashed()
 		}
 	}
 }
 
-func addEdgeToGraph(graph *cgraph.Graph, name string, parent, child Object) {
-	p, _ := graph.Node(string(parent.GetURL()))
-	c, _ := graph.Node(string(child.GetURL()))
-	if p != nil && c != nil {
-		graph.CreateEdge(name, p, c)
+func addEdgeToGraph(graph *dot.Graph, name string, parent, child Object) {
+	p, foundParent := graph.FindNodeById(string(parent.GetURL()))
+	c, foundChild := graph.FindNodeById(string(child.GetURL()))
+	if foundParent && foundChild {
+		edge := graph.Edge(p, c)
+		edge.Attr("comment", name)
 	}
 }
 
@@ -266,43 +267,27 @@ func (c *collection[T]) Roots() []T {
 // Parents returns all parents of a given item in the collection.
 func (c *collection[T]) Parents(item Object) []T {
 	var parents []T
-	n, err := c.topology.graph.Node(item.GetURL())
-	if err != nil {
-		return nil
-	}
-	edge := c.topology.graph.FirstIn(n)
-	for {
-		if edge == nil {
-			break
+	for from, edges := range c.topology.graph.EdgesMap() {
+		if !lo.ContainsBy(edges, func(edge dot.Edge) bool {
+			return edge.To().ID() == item.GetURL()
+		}) {
+			continue
 		}
-		_, ok := c.items[edge.Node().Name()]
-		if ok {
-			parents = append(parents, c.items[edge.Node().Name()])
+		parent, found := c.items[from]
+		if !found {
+			continue
 		}
-		edge = c.topology.graph.NextIn(edge)
+		parents = append(parents, parent)
 	}
 	return parents
 }
 
 // Children returns all children of a given item in the collection.
 func (c *collection[T]) Children(item Object) []T {
-	var children []T
-	n, err := c.topology.graph.Node(item.GetURL())
-	if err != nil {
-		return nil
-	}
-	edge := c.topology.graph.FirstOut(n)
-	for {
-		if edge == nil {
-			break
-		}
-		_, ok := c.items[edge.Node().Name()]
-		if ok {
-			children = append(children, c.items[edge.Node().Name()])
-		}
-		edge = c.topology.graph.NextOut(edge)
-	}
-	return children
+	return lo.FilterMap(c.topology.graph.EdgesMap()[item.GetURL()], func(edge dot.Edge, _ int) (T, bool) {
+		child, found := c.items[edge.To().ID()]
+		return child, found
+	})
 }
 
 // Paths returns all paths from a source item to a destination item in the collection.
