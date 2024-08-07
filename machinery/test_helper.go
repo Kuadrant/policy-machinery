@@ -3,7 +3,6 @@
 package machinery
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -16,13 +15,13 @@ import (
 )
 
 // SaveToOutputDir saves the output of a test case to a file in the output directory.
-func SaveToOutputDir(t *testing.T, out *bytes.Buffer, outDir, ext string) {
+func SaveToOutputDir(t *testing.T, out string, outDir, ext string) {
 	file, err := os.Create(fmt.Sprintf("%s/%s%s", outDir, strings.ReplaceAll(t.Name(), "/", "__"), ext))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	_, err = file.Write(out.Bytes())
+	_, err = file.WriteString(out)
 	if err != nil {
 		t.Fatal(err)
 	}
