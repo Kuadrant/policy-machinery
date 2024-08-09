@@ -1,9 +1,9 @@
 package controller
 
 import (
+	"reflect"
 	"sync"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/telepresenceio/watchable"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,7 +30,7 @@ func (o RuntimeObjects) Equal(other RuntimeObjects) bool {
 		return false
 	}
 	for k, v := range o {
-		if ov, ok := other[k]; !ok || !cmp.Equal(v, ov) {
+		if ov, ok := other[k]; !ok || !reflect.DeepEqual(v, ov) {
 			return false
 		}
 	}
@@ -129,6 +129,11 @@ func (c *watchableCacheStore) Delete(obj RuntimeObject) {
 }
 
 func (c *watchableCacheStore) Replace(store Store) {
+	for gk := range c.LoadAll() {
+		if objs := store[gk]; len(objs) == 0 {
+			c.Map.Delete(gk)
+		}
+	}
 	for gk, objs := range store {
 		c.Store(gk, objs)
 	}

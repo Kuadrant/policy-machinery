@@ -277,7 +277,7 @@ func (c *Controller) subscribe() {
 			c.propagate(lo.FlatMap(snapshot.Updates, func(update watchable.Update[schema.GroupKind, RuntimeObjects], _ int) []ResourceEvent {
 				var events []ResourceEvent
 
-				eventType := UpdateEvent // what about CreateEvent?
+				eventType := CreateEvent // what about UpdateEvent?
 				if update.Delete {
 					eventType = DeleteEvent
 				}
