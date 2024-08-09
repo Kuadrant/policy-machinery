@@ -155,17 +155,10 @@ func (p *EnvoyGatewayProvider) deleteSecurityPolicy(ctx context.Context, topolog
 }
 
 func LinkGatewayToEnvoyGatewaySecurityPolicyFunc(objs controller.Store) machinery.LinkFunc {
-	gatewayKind := schema.GroupKind{Group: gwapiv1.GroupName, Kind: "Gateway"}
-	gateways := lo.FilterMap(lo.Values(objs[gatewayKind]), func(obj controller.RuntimeObject, _ int) (*gwapiv1.Gateway, bool) {
-		g, ok := obj.(*gwapiv1.Gateway)
-		if !ok {
-			return nil, false
-		}
-		return g, true
-	})
+	gateways := lo.Map(objs.ListByGroupKind(controller.GatewayKind), controller.RuntimeObjectAs[*gwapiv1.Gateway])
 
 	return machinery.LinkFunc{
-		From: gatewayKind,
+		From: controller.GatewayKind,
 		To:   EnvoyGatewaySecurityPolicyKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			o := child.(*controller.Object)
@@ -175,7 +168,7 @@ func LinkGatewayToEnvoyGatewaySecurityPolicyFunc(objs controller.Store) machiner
 				refs = append(refs, *ref)
 			}
 			refs = lo.Filter(refs, func(ref gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName, _ int) bool {
-				return ref.Group == gwapiv1.GroupName && ref.Kind == gwapiv1.Kind(gatewayKind.Kind)
+				return ref.Group == gwapiv1.GroupName && ref.Kind == gwapiv1.Kind(controller.GatewayKind.Kind)
 			})
 			if len(refs) == 0 {
 				return nil

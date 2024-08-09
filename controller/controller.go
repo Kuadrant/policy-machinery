@@ -143,7 +143,7 @@ func NewController(f ...ControllerOption) *Controller {
 	return controller
 }
 
-type ListFunc func() (schema.GroupKind, RuntimeObjects)
+type ListFunc func() []RuntimeObject
 type WatchFunc func(ctrlruntime.Manager) ctrlruntimesrc.Source
 
 type Controller struct {
@@ -155,8 +155,8 @@ type Controller struct {
 	cache      Cache
 	topology   *gatewayAPITopologyBuilder
 	runnables  map[string]Runnable
-	listFuncs  []func() (schema.GroupKind, RuntimeObjects)
-	watchFuncs []func(ctrlruntime.Manager) ctrlruntimesrc.Source
+	listFuncs  []ListFunc
+	watchFuncs []WatchFunc
 	reconcile  ReconcileFunc
 }
 
@@ -215,8 +215,9 @@ func (c *Controller) Reconcile(ctx context.Context, _ ctrlruntimereconcile.Reque
 
 	store := Store{}
 	for _, f := range c.listFuncs {
-		gk, objects := f()
-		store[gk] = objects
+		for _, object := range f() {
+			store[string(object.GetUID())] = object
+		}
 	}
 	c.cache.Replace(store)
 
@@ -274,31 +275,22 @@ func (c *Controller) subscribe() {
 		for snapshot := range subscription {
 			c.Lock()
 
-			c.propagate(lo.FlatMap(snapshot.Updates, func(update watchable.Update[schema.GroupKind, RuntimeObjects], _ int) []ResourceEvent {
-				var events []ResourceEvent
+			c.propagate(lo.FlatMap(snapshot.Updates, func(update watchable.Update[string, watchableCacheEntry], _ int) []ResourceEvent {
+				obj := update.Value
 
-				eventType := CreateEvent // what about UpdateEvent?
+				event := ResourceEvent{
+					Kind: obj.GetObjectKind().GroupVersionKind().GroupKind(),
+				}
+
 				if update.Delete {
-					eventType = DeleteEvent
+					event.EventType = DeleteEvent
+					event.OldObject = obj
+				} else {
+					event.EventType = CreateEvent // what about UpdateEvent?
+					event.NewObject = obj
 				}
 
-				for _, obj := range update.Value {
-					event := ResourceEvent{
-						Kind:      update.Key,
-						EventType: eventType,
-					}
-					switch eventType {
-					case CreateEvent:
-						event.NewObject = obj
-					case UpdateEvent:
-						event.OldObject = nil // what about previous state?
-						event.NewObject = obj
-					case DeleteEvent:
-						event.OldObject = obj
-					}
-					events = append(events, event)
-				}
-				return events
+				return []ResourceEvent{event}
 			}))
 
 			c.Unlock()

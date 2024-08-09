@@ -131,11 +131,7 @@ func StateReconciler[T RuntimeObject](obj T, resource schema.GroupVersionResourc
 	return func(controller *Controller) Runnable {
 		return &stateReconciler{
 			controller: controller,
-			listFunc: func() (schema.GroupKind, RuntimeObjects) {
-				gk := schema.GroupKind{
-					Group: resource.Group,
-					Kind:  kind,
-				}
+			listFunc: func() []RuntimeObject {
 				listOptions := metav1.ListOptions{}
 				if o.LabelSelector != "" {
 					listOptions.LabelSelector = o.LabelSelector
@@ -143,20 +139,15 @@ func StateReconciler[T RuntimeObject](obj T, resource schema.GroupVersionResourc
 				if o.FieldSelector != "" {
 					listOptions.FieldSelector = o.FieldSelector
 				}
-				objs, err := controller.client.Resource(resource).Namespace(namespace).List(context.Background(), listOptions)
-				if err != nil || len(objs.Items) == 0 {
-					return gk, nil
-				}
-				return gk, lo.SliceToMap(objs.Items, func(o unstructured.Unstructured) (string, RuntimeObject) {
+				objs, _ := controller.client.Resource(resource).Namespace(namespace).List(context.Background(), listOptions)
+				return lo.Map(objs.Items, func(o unstructured.Unstructured, _ int) RuntimeObject {
 					obj, err := Restructure[T](&o)
 					if err != nil {
-						return "", nil
+						// TODO: log error
+						return nil
 					}
-					runtimeObj, ok := obj.(RuntimeObject)
-					if !ok {
-						return "", nil
-					}
-					return string(o.GetUID()), runtimeObj
+					runtimeObj, _ := obj.(RuntimeObject)
+					return runtimeObj
 				})
 			},
 			watchFunc: func(manager ctrlruntime.Manager) ctrlruntimesrc.Source {
