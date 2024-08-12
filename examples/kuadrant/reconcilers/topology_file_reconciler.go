@@ -19,7 +19,7 @@ func (r *TopologyFileReconciler) Reconcile(_ context.Context, _ controller.Resou
 		log.Fatal(err)
 	}
 	defer file.Close()
-	_, err = file.Write(topology.ToDot().Bytes())
+	_, err = file.WriteString(topology.ToDot())
 	if err != nil {
 		log.Fatal(err)
 	}
