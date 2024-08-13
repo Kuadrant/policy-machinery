@@ -197,9 +197,9 @@ func controllerOptionsFor(gatewayProviders []string) []controller.ControllerOpti
 // buildReconciler builds a reconciler that executes the following workflow:
 //  1. log event
 //  2. save topology to file
-//  3. effective policies
-//  4. (gateway deleted) delete SecurityPolicy / (other events) reconcile SecurityPolicies
-//  4. (gateway deleted) delete AuthorizationPolicy / (other events) reconcile AuthorizationPolicies
+//  2. effective policies
+//  3. (gateway deleted) delete SecurityPolicy / (other events) reconcile SecurityPolicies
+//  3. (gateway deleted) delete AuthorizationPolicy / (other events) reconcile AuthorizationPolicies
 func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) controller.ReconcileFunc {
 	effectivePolicyReconciler := &reconcilers.EffectivePoliciesReconciler{Client: client}
 
