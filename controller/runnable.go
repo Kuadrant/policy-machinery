@@ -148,7 +148,7 @@ func StateReconciler[T RuntimeObject](obj T, resource schema.GroupVersionResourc
 				return lo.Map(objs.Items, func(o unstructured.Unstructured, _ int) RuntimeObject {
 					obj, err := Restructure[T](&o)
 					if err != nil {
-						// TODO: log error
+						controller.logger.Error(err, "failed to restructure object", "kind", kind)
 						return nil
 					}
 					runtimeObj, _ := obj.(RuntimeObject)
