@@ -266,7 +266,7 @@ func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 }
 
 func (c *Controller) subscribe() {
-	cache, ok := c.cache.(*watchableCacheStore) // TODO(guicassolato): decide if we should extend the Cache interface or remove it altogether
+	cache, ok := c.cache.(*watchableCacheStore) // should we add Subscribe(ctx) to the Cache interface or remove the interface altogether?
 	if !ok {
 		return
 	}
