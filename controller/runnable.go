@@ -10,6 +10,7 @@ import (
 	"github.com/samber/lo"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -139,7 +140,11 @@ func StateReconciler[T RuntimeObject](obj T, resource schema.GroupVersionResourc
 				if o.FieldSelector != "" {
 					listOptions.FieldSelector = o.FieldSelector
 				}
-				objs, _ := controller.client.Resource(resource).Namespace(namespace).List(context.Background(), listOptions)
+				objs, err := controller.client.Resource(resource).Namespace(namespace).List(context.Background(), listOptions)
+				if err != nil {
+					controller.logger.Error(err, "failed to list resources", "kind", kind)
+					return nil
+				}
 				return lo.Map(objs.Items, func(o unstructured.Unstructured, _ int) RuntimeObject {
 					obj, err := Restructure[T](&o)
 					if err != nil {
@@ -159,7 +164,14 @@ func StateReconciler[T RuntimeObject](obj T, resource schema.GroupVersionResourc
 						return ToLabelSelector(o.LabelSelector).Matches(labels.Set(obj.GetLabels()))
 					}))
 				}
-				// TODO(guicassolato): field selector predicate
+				if o.FieldSelector != "" {
+					predicates = append(predicates, ctrlruntimepredicate.NewTypedPredicateFuncs(func(obj T) bool {
+						selector := ToFieldSelector(o.FieldSelector)
+						return selector.Matches(fields.Set(FieldsFromObject(obj, lo.Map(selector.Requirements(), func(r fields.Requirement, _ int) string {
+							return r.Field
+						}))))
+					}))
+				}
 				return ctrlruntimesrc.Kind(manager.GetCache(), obj, ctrlruntimehandler.TypedEnqueueRequestsFromMapFunc(TypedEnqueueRequestsMapFunc[T]), predicates...)
 			},
 		}
@@ -208,8 +220,40 @@ func Destruct[T any](obj T) (*unstructured.Unstructured, error) {
 
 func ToLabelSelector(s string) labels.Selector {
 	if selector, err := labels.Parse(s); err != nil {
-		return labels.NewSelector()
+		return labels.Nothing()
 	} else {
 		return selector
 	}
+}
+
+func ToFieldSelector(s string) fields.Selector {
+	if selector, err := fields.ParseSelector(s); err != nil {
+		return fields.Nothing()
+	} else {
+		return selector
+	}
+}
+
+func FieldsFromObject[T any](obj T, fields []string) map[string]string {
+	m := make(map[string]string, len(fields))
+	for _, path := range fields {
+		parts := strings.SplitN(path, ".", 2)
+		field := parts[0]
+		rest := strings.Join(parts[1:], ".")
+		o, err := Destruct(obj)
+		if err != nil {
+			continue
+		}
+		var value string
+		switch reflect.TypeOf(o.Object[field]).Kind() {
+		case reflect.Struct, reflect.Map:
+			if len(rest) > 0 {
+				value = FieldsFromObject(o.Object[field], []string{rest})[rest]
+			}
+		default:
+			value = fmt.Sprintf("%v", o.Object[field])
+		}
+		m[path] = value
+	}
+	return m
 }
