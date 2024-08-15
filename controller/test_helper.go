@@ -22,7 +22,7 @@ var (
 	testClient        *dynamic.DynamicClient
 	testPolicyKinds   []schema.GroupKind
 	testObjctKinds    []schema.GroupKind
-	testLinkFunc      RuntimeLinkFunc
+	testLinkFunc      LinkFunc
 	testScheme        *runtime.Scheme
 	testManager       ctrlruntimemanager.Manager
 	testReconcileFunc ReconcileFunc
@@ -46,7 +46,7 @@ func init() {
 		return machinery.LinkFunc{
 			From: schema.GroupKind{Group: "test/v1", Kind: "MyObject"},
 			To:   GatewayKind,
-			Func: func(_ machinery.Object) []machinery.Object { return []machinery.Object{&Object{myObjects[0]}} },
+			Func: func(_ machinery.Object) []machinery.Object { return []machinery.Object{&RuntimeObject{myObjects[0]}} },
 		}
 	}
 	testReconcileFunc = func(_ context.Context, events []ResourceEvent, topology *machinery.Topology) {

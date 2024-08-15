@@ -314,7 +314,7 @@ func TestFruitTopology(t *testing.T) {
 	}
 }
 
-func TestTopologyWithGenericObjects(t *testing.T) {
+func TestTopologyWithRuntimeObjects(t *testing.T) {
 	objects := []*Info{
 		{Name: "info-1", Ref: "apple.example.test:apple-1"},
 		{Name: "info-2", Ref: "orange.example.test:my-namespace/orange-1"},

@@ -162,7 +162,7 @@ func main() {
 	}
 }
 
-func buildWatcher[T controller.RuntimeObject](obj T, resource schema.GroupVersionResource, namespace string, options ...controller.RunnableBuilderOption[T]) controller.RunnableBuilder {
+func buildWatcher[T controller.Object](obj T, resource schema.GroupVersionResource, namespace string, options ...controller.RunnableBuilderOption[T]) controller.RunnableBuilder {
 	switch reconciliationMode {
 	case deltaReconciliationMode:
 		options = append(options, controller.Builder(controller.IncrementalInformer[T]))

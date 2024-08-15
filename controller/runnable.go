@@ -32,33 +32,33 @@ type Runnable interface {
 
 type RunnableBuilder func(controller *Controller) Runnable
 
-type RunnableBuilderOptions[T RuntimeObject] struct {
+type RunnableBuilderOptions[T Object] struct {
 	LabelSelector string
 	FieldSelector string
 	Builder       func(obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder
 }
 
-type RunnableBuilderOption[T RuntimeObject] func(*RunnableBuilderOptions[T])
+type RunnableBuilderOption[T Object] func(*RunnableBuilderOptions[T])
 
-func FilterResourcesByLabel[T RuntimeObject](selector string) RunnableBuilderOption[T] {
+func FilterResourcesByLabel[T Object](selector string) RunnableBuilderOption[T] {
 	return func(o *RunnableBuilderOptions[T]) {
 		o.LabelSelector = selector
 	}
 }
 
-func FilterResourcesByField[T RuntimeObject](selector string) RunnableBuilderOption[T] {
+func FilterResourcesByField[T Object](selector string) RunnableBuilderOption[T] {
 	return func(o *RunnableBuilderOptions[T]) {
 		o.FieldSelector = selector
 	}
 }
 
-func Builder[T RuntimeObject](builder func(obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder) RunnableBuilderOption[T] {
+func Builder[T Object](builder func(obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder) RunnableBuilderOption[T] {
 	return func(o *RunnableBuilderOptions[T]) {
 		o.Builder = builder
 	}
 }
 
-func Watch[T RuntimeObject](obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
+func Watch[T Object](obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
 	o := &RunnableBuilderOptions[T]{
 		Builder: StateReconciler[T],
 	}
@@ -68,7 +68,7 @@ func Watch[T RuntimeObject](obj T, resource schema.GroupVersionResource, namespa
 	return o.Builder(obj, resource, namespace, options...)
 }
 
-func IncrementalInformer[T RuntimeObject](obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
+func IncrementalInformer[T Object](obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
 	o := &RunnableBuilderOptions[T]{}
 	for _, f := range options {
 		f(o)
@@ -118,7 +118,7 @@ func IncrementalInformer[T RuntimeObject](obj T, resource schema.GroupVersionRes
 	}
 }
 
-func StateReconciler[T RuntimeObject](obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
+func StateReconciler[T Object](obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
 	o := &RunnableBuilderOptions[T]{}
 	for _, f := range options {
 		f(o)
@@ -132,7 +132,7 @@ func StateReconciler[T RuntimeObject](obj T, resource schema.GroupVersionResourc
 	return func(controller *Controller) Runnable {
 		return &stateReconciler{
 			controller: controller,
-			listFunc: func() []RuntimeObject {
+			listFunc: func() []Object {
 				listOptions := metav1.ListOptions{}
 				if o.LabelSelector != "" {
 					listOptions.LabelSelector = o.LabelSelector
@@ -145,13 +145,13 @@ func StateReconciler[T RuntimeObject](obj T, resource schema.GroupVersionResourc
 					controller.logger.Error(err, "failed to list resources", "kind", kind)
 					return nil
 				}
-				return lo.Map(objs.Items, func(o unstructured.Unstructured, _ int) RuntimeObject {
+				return lo.Map(objs.Items, func(o unstructured.Unstructured, _ int) Object {
 					obj, err := Restructure[T](&o)
 					if err != nil {
 						controller.logger.Error(err, "failed to restructure object", "kind", kind)
 						return nil
 					}
-					runtimeObj, _ := obj.(RuntimeObject)
+					runtimeObj, _ := obj.(Object)
 					return runtimeObj
 				})
 			},
@@ -178,7 +178,7 @@ func StateReconciler[T RuntimeObject](obj T, resource schema.GroupVersionResourc
 	}
 }
 
-func TypedEnqueueRequestsMapFunc[T RuntimeObject](_ context.Context, _ T) []ctrlruntimereconcile.Request {
+func TypedEnqueueRequestsMapFunc[T Object](_ context.Context, _ T) []ctrlruntimereconcile.Request {
 	return []ctrlruntimereconcile.Request{{NamespacedName: types.NamespacedName{}}}
 }
 

@@ -102,7 +102,7 @@ func TestNewController(t *testing.T) {
 		manager       ctrlruntime.Manager
 		policyKinds   []schema.GroupKind
 		objectKinds   []schema.GroupKind
-		objectLinks   []RuntimeLinkFunc
+		objectLinks   []LinkFunc
 		runnableNames []string
 	}
 
@@ -120,7 +120,7 @@ func TestNewController(t *testing.T) {
 				manager:       nil,
 				policyKinds:   []schema.GroupKind{},
 				objectKinds:   []schema.GroupKind{},
-				objectLinks:   []RuntimeLinkFunc{},
+				objectLinks:   []LinkFunc{},
 				runnableNames: []string{},
 			},
 		},
@@ -144,7 +144,7 @@ func TestNewController(t *testing.T) {
 				manager:       testManager,
 				policyKinds:   testPolicyKinds,
 				objectKinds:   testObjctKinds,
-				objectLinks:   []RuntimeLinkFunc{testLinkFunc},
+				objectLinks:   []LinkFunc{testLinkFunc},
 				runnableNames: []string{"service watcher", "configmap watcher"},
 			},
 		},
@@ -213,17 +213,17 @@ func TestStartControllerManaged(t *testing.T) {
 }
 
 func TestControllerReconcile(t *testing.T) {
-	objs := []RuntimeObject{
+	objs := []Object{
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "test-service", UID: "7ed703a2-635d-4002-a825-5624823760a5"}},
 		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "test-configmap", UID: "aed148b1-285a-48ab-8839-fe99475bc6fc"}},
 	}
-	objUIDs := lo.Map(objs, func(o RuntimeObject, _ int) string { return string(o.GetUID()) })
+	objUIDs := lo.Map(objs, func(o Object, _ int) string { return string(o.GetUID()) })
 	cache := &cacheStore{store: make(Store)}
 	controller := &Controller{
 		logger: testLogger,
 		cache:  cache,
 		listFuncs: []ListFunc{
-			func() []RuntimeObject { return objs },
+			func() []Object { return objs },
 		},
 	}
 	controller.Reconcile(context.TODO(), ctrlruntimereconcile.Request{})

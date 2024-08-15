@@ -185,7 +185,7 @@ func main() {
 	controller.Start()
 }
 
-func reconcile(eventType controller.EventType, oldObj, newObj controller.RuntimeObject, topology *machinery.Topology) {
+func reconcile(eventType controller.EventType, oldObj, newObj controller.Object, topology *machinery.Topology) {
   // TODO
 }
 ```

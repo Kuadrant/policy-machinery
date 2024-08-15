@@ -22,27 +22,6 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
-type ResourceEvent struct {
-	Kind      schema.GroupKind
-	EventType EventType
-	OldObject RuntimeObject
-	NewObject RuntimeObject
-}
-
-type EventType int
-
-const (
-	CreateEvent EventType = iota
-	UpdateEvent
-	DeleteEvent
-)
-
-func (t *EventType) String() string {
-	return [...]string{"create", "update", "delete"}[*t]
-}
-
-type RuntimeLinkFunc func(objs Store) machinery.LinkFunc
-
 type ControllerOptions struct {
 	name        string
 	logger      logr.Logger
@@ -52,12 +31,10 @@ type ControllerOptions struct {
 	reconcile   ReconcileFunc
 	policyKinds []schema.GroupKind
 	objectKinds []schema.GroupKind
-	objectLinks []RuntimeLinkFunc
+	objectLinks []LinkFunc
 }
 
 type ControllerOption func(*ControllerOptions)
-
-type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology)
 
 func WithName(name string) ControllerOption {
 	return func(o *ControllerOptions) {
@@ -83,6 +60,8 @@ func WithRunnable(name string, builder RunnableBuilder) ControllerOption {
 	}
 }
 
+type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology)
+
 func WithReconcile(reconcile ReconcileFunc) ControllerOption {
 	return func(o *ControllerOptions) {
 		o.reconcile = reconcile
@@ -95,21 +74,23 @@ func WithPolicyKinds(policyKinds ...schema.GroupKind) ControllerOption {
 	}
 }
 
-func ManagedBy(manager ctrlruntime.Manager) ControllerOption {
-	return func(o *ControllerOptions) {
-		o.manager = manager
-	}
-}
-
 func WithObjectKinds(objectKinds ...schema.GroupKind) ControllerOption {
 	return func(o *ControllerOptions) {
 		o.objectKinds = append(o.objectKinds, objectKinds...)
 	}
 }
 
-func WithObjectLinks(objectLinks ...RuntimeLinkFunc) ControllerOption {
+type LinkFunc func(objs Store) machinery.LinkFunc
+
+func WithObjectLinks(objectLinks ...LinkFunc) ControllerOption {
 	return func(o *ControllerOptions) {
 		o.objectLinks = append(o.objectLinks, objectLinks...)
+	}
+}
+
+func ManagedBy(manager ctrlruntime.Manager) ControllerOption {
+	return func(o *ControllerOptions) {
+		o.manager = manager
 	}
 }
 
@@ -143,7 +124,7 @@ func NewController(f ...ControllerOption) *Controller {
 	return controller
 }
 
-type ListFunc func() []RuntimeObject
+type ListFunc func() []Object
 type WatchFunc func(ctrlruntime.Manager) ctrlruntimesrc.Source
 
 type Controller struct {
@@ -236,7 +217,7 @@ func (c *Controller) listAndWatch(listFunc ListFunc, watchFunc WatchFunc) {
 	c.watchFuncs = append(c.watchFuncs, watchFunc)
 }
 
-func (c *Controller) add(obj RuntimeObject) {
+func (c *Controller) add(obj Object) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -244,7 +225,7 @@ func (c *Controller) add(obj RuntimeObject) {
 	c.propagate([]ResourceEvent{{obj.GetObjectKind().GroupVersionKind().GroupKind(), CreateEvent, nil, obj}})
 }
 
-func (c *Controller) update(oldObj, newObj RuntimeObject) {
+func (c *Controller) update(oldObj, newObj Object) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -256,7 +237,7 @@ func (c *Controller) update(oldObj, newObj RuntimeObject) {
 	c.propagate([]ResourceEvent{{newObj.GetObjectKind().GroupVersionKind().GroupKind(), UpdateEvent, oldObj, newObj}})
 }
 
-func (c *Controller) delete(obj RuntimeObject) {
+func (c *Controller) delete(obj Object) {
 	c.Lock()
 	defer c.Unlock()
 

@@ -113,7 +113,7 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 		return
 	}
 
-	securityPolicy := obj.(*controller.Object).RuntimeObject.(*egv1alpha1.SecurityPolicy)
+	securityPolicy := obj.(*controller.RuntimeObject).Object.(*egv1alpha1.SecurityPolicy)
 
 	if securityPolicy.Spec.ExtAuth != nil &&
 		securityPolicy.Spec.ExtAuth.GRPC != nil &&
@@ -155,14 +155,14 @@ func (p *EnvoyGatewayProvider) deleteSecurityPolicy(ctx context.Context, topolog
 }
 
 func LinkGatewayToEnvoyGatewaySecurityPolicyFunc(objs controller.Store) machinery.LinkFunc {
-	gateways := lo.Map(objs.FilterByGroupKind(controller.GatewayKind), controller.RuntimeObjectAs[*gwapiv1.Gateway])
+	gateways := lo.Map(objs.FilterByGroupKind(controller.GatewayKind), controller.ObjectAs[*gwapiv1.Gateway])
 
 	return machinery.LinkFunc{
 		From: controller.GatewayKind,
 		To:   EnvoyGatewaySecurityPolicyKind,
 		Func: func(child machinery.Object) []machinery.Object {
-			o := child.(*controller.Object)
-			sp := o.RuntimeObject.(*egv1alpha1.SecurityPolicy)
+			o := child.(*controller.RuntimeObject)
+			sp := o.Object.(*egv1alpha1.SecurityPolicy)
 			refs := sp.Spec.PolicyTargetReferences.TargetRefs
 			if ref := sp.Spec.PolicyTargetReferences.TargetRef; ref != nil {
 				refs = append(refs, *ref)

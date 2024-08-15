@@ -122,7 +122,7 @@ func (p *IstioGatewayProvider) createAuthorizationPolicy(ctx context.Context, to
 		return
 	}
 
-	authorizationPolicy := obj.(*controller.Object).RuntimeObject.(*istiov1.AuthorizationPolicy)
+	authorizationPolicy := obj.(*controller.RuntimeObject).Object.(*istiov1.AuthorizationPolicy)
 
 	if authorizationPolicy.Spec.Action == desiredAuthorizationPolicy.Spec.Action &&
 		authorizationPolicy.Spec.GetProvider() != nil &&
@@ -294,14 +294,14 @@ func hostSubsetOf(superset gwapiv1.Hostname) func(gwapiv1.Hostname, int) bool {
 }
 
 func LinkGatewayToIstioAuthorizationPolicyFunc(objs controller.Store) machinery.LinkFunc {
-	gateways := lo.Map(objs.FilterByGroupKind(controller.GatewayKind), controller.RuntimeObjectAs[*gwapiv1.Gateway])
+	gateways := lo.Map(objs.FilterByGroupKind(controller.GatewayKind), controller.ObjectAs[*gwapiv1.Gateway])
 
 	return machinery.LinkFunc{
 		From: controller.GatewayKind,
 		To:   IstioAuthorizationPolicyKind,
 		Func: func(child machinery.Object) []machinery.Object {
-			o := child.(*controller.Object)
-			ap := o.RuntimeObject.(*istiov1.AuthorizationPolicy)
+			o := child.(*controller.RuntimeObject)
+			ap := o.Object.(*istiov1.AuthorizationPolicy)
 			refs := ap.Spec.TargetRefs
 			if ref := ap.Spec.TargetRef; ref != nil {
 				refs = append(refs, ref)

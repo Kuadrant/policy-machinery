@@ -4,17 +4,9 @@ import (
 	"context"
 
 	"github.com/samber/lo"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 )
-
-type ResourceEventMatcher struct {
-	Kind            *schema.GroupKind
-	EventType       *EventType
-	ObjectNamespace string
-	ObjectName      string
-}
 
 // Subscription runs a reconciliation function when the list of events has at least one event in common with
 // the list of event matchers. The list of events then propagated to the reconciliation function is filtered

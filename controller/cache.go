@@ -6,44 +6,31 @@ import (
 
 	"github.com/samber/lo"
 	"github.com/telepresenceio/watchable"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-type RuntimeObject interface {
-	runtime.Object
-	metav1.Object
-}
+type Store map[string]Object
 
-// RuntimeObjectAs casts a RuntimeObject generically into any kind
-func RuntimeObjectAs[T any](obj RuntimeObject, _ int) T {
-	o, _ := obj.(T)
-	return o
-}
-
-type Store map[string]RuntimeObject
-
-func (s Store) Filter(predicates ...func(RuntimeObject) bool) []RuntimeObject {
-	var objects []RuntimeObject
+func (s Store) Filter(predicates ...func(Object) bool) []Object {
+	var objects []Object
 	for _, object := range s {
-		if lo.EveryBy(predicates, func(p func(RuntimeObject) bool) bool { return p(object) }) {
+		if lo.EveryBy(predicates, func(p func(Object) bool) bool { return p(object) }) {
 			objects = append(objects, object)
 		}
 	}
 	return objects
 }
 
-func (s Store) FilterByGroupKind(gk schema.GroupKind) []RuntimeObject {
-	return s.Filter(func(o RuntimeObject) bool {
+func (s Store) FilterByGroupKind(gk schema.GroupKind) []Object {
+	return s.Filter(func(o Object) bool {
 		return o.GetObjectKind().GroupVersionKind().GroupKind() == gk
 	})
 }
 
 type Cache interface {
 	List() Store
-	Add(obj RuntimeObject)
-	Delete(obj RuntimeObject)
+	Add(obj Object)
+	Delete(obj Object)
 	Replace(Store)
 }
 
@@ -58,19 +45,19 @@ func (c *cacheStore) List() Store {
 
 	ret := make(Store, len(c.store))
 	for k, v := range c.store {
-		ret[k] = v.DeepCopyObject().(RuntimeObject)
+		ret[k] = v.DeepCopyObject().(Object)
 	}
 	return ret
 }
 
-func (c *cacheStore) Add(obj RuntimeObject) {
+func (c *cacheStore) Add(obj Object) {
 	c.Lock()
 	defer c.Unlock()
 
 	c.store[string(obj.GetUID())] = obj
 }
 
-func (c *cacheStore) Delete(obj RuntimeObject) {
+func (c *cacheStore) Delete(obj Object) {
 	c.Lock()
 	defer c.Unlock()
 
@@ -83,7 +70,7 @@ func (c *cacheStore) Replace(store Store) {
 
 	c.store = make(Store, len(store))
 	for k, v := range store {
-		c.store[k] = v.DeepCopyObject().(RuntimeObject)
+		c.store[k] = v.DeepCopyObject().(Object)
 	}
 }
 
@@ -95,16 +82,16 @@ func (c *watchableCacheStore) List() Store {
 	entries := c.LoadAll()
 	store := make(Store, len(entries))
 	for uid, obj := range entries {
-		store[uid] = obj.RuntimeObject
+		store[uid] = obj.Object
 	}
 	return store
 }
 
-func (c *watchableCacheStore) Add(obj RuntimeObject) {
+func (c *watchableCacheStore) Add(obj Object) {
 	c.Store(string(obj.GetUID()), watchableCacheEntry{obj})
 }
 
-func (c *watchableCacheStore) Delete(obj RuntimeObject) {
+func (c *watchableCacheStore) Delete(obj Object) {
 	c.Map.Delete(string(obj.GetUID()))
 }
 
@@ -120,11 +107,11 @@ func (c *watchableCacheStore) Replace(store Store) {
 }
 
 type watchableCacheEntry struct {
-	RuntimeObject
+	Object
 }
 
 func (e watchableCacheEntry) DeepCopy() watchableCacheEntry {
-	return watchableCacheEntry{e.DeepCopyObject().(RuntimeObject)}
+	return watchableCacheEntry{e.DeepCopyObject().(Object)}
 }
 
 func (e watchableCacheEntry) Equal(other watchableCacheEntry) bool {
