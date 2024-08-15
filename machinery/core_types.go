@@ -6,6 +6,11 @@ import (
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+var (
+	ServiceGroupKind     = schema.GroupKind{Kind: "Service"}
+	ServicePortGroupKind = schema.GroupKind{Kind: "ServicePort"}
+)
+
 // These are wrappers for Core API types so instances can be used as targetables in the topology.
 
 type Namespace struct {

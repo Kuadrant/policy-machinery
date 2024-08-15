@@ -12,6 +12,22 @@ import (
 	gwapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
 
+var (
+	GatewayClassGroupKind  = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"}
+	GatewayGroupKind       = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"}
+	ListenerGroupKind      = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"}
+	HTTPRouteGroupKind     = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"}
+	HTTPRouteRuleGroupKind = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"}
+	GRPCRouteGroupKind     = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"}
+	GRPCRouteRuleGroupKind = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"}
+	TCPRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TCPRoute"}
+	TCPRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TCPRouteRule"}
+	TLSRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TLSRoute"}
+	TLSRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TLSRouteRule"}
+	UDPRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "UDPRoute"}
+	UDPRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "UDPRouteRule"}
+)
+
 const nameSectionNameURLSeparator = '#'
 
 // These are wrappers for Gateway API types so instances can be used as targetables in the topology.

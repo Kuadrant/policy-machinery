@@ -20,10 +20,10 @@ import (
 // This results in a topology with the following scheme:
 //
 //	GatewayClass -> Gateway -> HTTPRoute -> Service
-//							∟> GRPCRoute ⤴
-//							∟> TCPRoute  ⤴
-//							∟> TLSRoute  ⤴
-//							∟> UDPRoute  ⤴
+//	                        ∟> GRPCRoute ⤴
+//	                        ∟> TCPRoute  ⤴
+//	                        ∟> TLSRoute  ⤴
+//	                        ∟> UDPRoute  ⤴
 func TestGatewayAPITopology(t *testing.T) {
 	testCases := []struct {
 		name          string
