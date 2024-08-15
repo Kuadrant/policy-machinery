@@ -24,10 +24,10 @@ type gatewayAPITopologyBuilder struct {
 }
 
 func (t *gatewayAPITopologyBuilder) Build(objs Store) *machinery.Topology {
-	gatewayClasses := lo.Map(objs.ListByGroupKind(GatewayClassKind), RuntimeObjectAs[*gwapiv1.GatewayClass])
-	gateways := lo.Map(objs.ListByGroupKind(GatewayKind), RuntimeObjectAs[*gwapiv1.Gateway])
-	httpRoutes := lo.Map(objs.ListByGroupKind(HTTPRouteKind), RuntimeObjectAs[*gwapiv1.HTTPRoute])
-	services := lo.Map(objs.ListByGroupKind(ServiceKind), RuntimeObjectAs[*core.Service])
+	gatewayClasses := lo.Map(objs.FilterByGroupKind(GatewayClassKind), RuntimeObjectAs[*gwapiv1.GatewayClass])
+	gateways := lo.Map(objs.FilterByGroupKind(GatewayKind), RuntimeObjectAs[*gwapiv1.Gateway])
+	httpRoutes := lo.Map(objs.FilterByGroupKind(HTTPRouteKind), RuntimeObjectAs[*gwapiv1.HTTPRoute])
+	services := lo.Map(objs.FilterByGroupKind(ServiceKind), RuntimeObjectAs[*core.Service])
 
 	linkFuncs := lo.Map(t.objectLinks, func(linkFunc RuntimeLinkFunc, _ int) machinery.LinkFunc {
 		return linkFunc(objs)
@@ -46,13 +46,13 @@ func (t *gatewayAPITopologyBuilder) Build(objs Store) *machinery.Topology {
 
 	for i := range t.policyKinds {
 		policyKind := t.policyKinds[i]
-		policies := lo.Map(objs.ListByGroupKind(policyKind), RuntimeObjectAs[machinery.Policy])
+		policies := lo.Map(objs.FilterByGroupKind(policyKind), RuntimeObjectAs[machinery.Policy])
 		opts = append(opts, machinery.WithGatewayAPITopologyPolicies(policies...))
 	}
 
 	for i := range t.objectKinds {
 		objectKind := t.objectKinds[i]
-		objects := lo.FilterMap(objs.ListByGroupKind(objectKind), func(obj RuntimeObject, _ int) (machinery.Object, bool) {
+		objects := lo.FilterMap(objs.FilterByGroupKind(objectKind), func(obj RuntimeObject, _ int) (machinery.Object, bool) {
 			object, ok := obj.(machinery.Object)
 			if ok {
 				return object, ok

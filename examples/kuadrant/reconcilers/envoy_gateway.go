@@ -155,7 +155,7 @@ func (p *EnvoyGatewayProvider) deleteSecurityPolicy(ctx context.Context, topolog
 }
 
 func LinkGatewayToEnvoyGatewaySecurityPolicyFunc(objs controller.Store) machinery.LinkFunc {
-	gateways := lo.Map(objs.ListByGroupKind(controller.GatewayKind), controller.RuntimeObjectAs[*gwapiv1.Gateway])
+	gateways := lo.Map(objs.FilterByGroupKind(controller.GatewayKind), controller.RuntimeObjectAs[*gwapiv1.Gateway])
 
 	return machinery.LinkFunc{
 		From: controller.GatewayKind,

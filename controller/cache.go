@@ -24,7 +24,7 @@ func RuntimeObjectAs[T any](obj RuntimeObject, _ int) T {
 
 type Store map[string]RuntimeObject
 
-func (s Store) List(predicates ...func(RuntimeObject) bool) []RuntimeObject {
+func (s Store) Filter(predicates ...func(RuntimeObject) bool) []RuntimeObject {
 	var objects []RuntimeObject
 	for _, object := range s {
 		if lo.EveryBy(predicates, func(p func(RuntimeObject) bool) bool { return p(object) }) {
@@ -34,8 +34,8 @@ func (s Store) List(predicates ...func(RuntimeObject) bool) []RuntimeObject {
 	return objects
 }
 
-func (s Store) ListByGroupKind(gk schema.GroupKind) []RuntimeObject {
-	return s.List(func(o RuntimeObject) bool {
+func (s Store) FilterByGroupKind(gk schema.GroupKind) []RuntimeObject {
+	return s.Filter(func(o RuntimeObject) bool {
 		return o.GetObjectKind().GroupVersionKind().GroupKind() == gk
 	})
 }
