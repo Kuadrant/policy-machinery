@@ -5,28 +5,9 @@ import (
 
 	"github.com/samber/lo"
 	core "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-)
-
-var (
-	GatewayClassGroupKind  = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"}
-	GatewayGroupKind       = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"}
-	ListenerGroupKind      = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"}
-	HTTPRouteGroupKind     = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"}
-	HTTPRouteRuleGroupKind = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"}
-	GRPCRouteGroupKind     = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"}
-	GRPCRouteRuleGroupKind = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"}
-	TCPRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TCPRoute"}
-	TCPRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TCPRouteRule"}
-	TLSRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TLSRoute"}
-	TLSRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TLSRouteRule"}
-	UDPRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "UDPRoute"}
-	UDPRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "UDPRouteRule"}
-	ServiceGroupKind       = schema.GroupKind{Kind: "Service"}
-	ServicePortGroupKind   = schema.GroupKind{Kind: "ServicePort"}
 )
 
 type GatewayAPITopologyOptions struct {

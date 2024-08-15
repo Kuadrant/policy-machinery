@@ -26,34 +26,22 @@ type gatewayAPITopologyBuilder struct {
 func (t *gatewayAPITopologyBuilder) Build(objs Store) *machinery.Topology {
 	gatewayClasses := lo.FilterMap(lo.Values(objs[machinery.GatewayClassGroupKind]), func(obj RuntimeObject, _ int) (*gwapiv1.GatewayClass, bool) {
 		gc, ok := obj.(*gwapiv1.GatewayClass)
-		if !ok {
-			return nil, false
-		}
-		return gc, true
+		return gc, ok
 	})
 
 	gateways := lo.FilterMap(lo.Values(objs[machinery.GatewayGroupKind]), func(obj RuntimeObject, _ int) (*gwapiv1.Gateway, bool) {
 		gw, ok := obj.(*gwapiv1.Gateway)
-		if !ok {
-			return nil, false
-		}
-		return gw, true
+		return gw, ok
 	})
 
 	httpRoutes := lo.FilterMap(lo.Values(objs[machinery.HTTPRouteGroupKind]), func(obj RuntimeObject, _ int) (*gwapiv1.HTTPRoute, bool) {
 		httpRoute, ok := obj.(*gwapiv1.HTTPRoute)
-		if !ok {
-			return nil, false
-		}
-		return httpRoute, true
+		return httpRoute, ok
 	})
 
 	services := lo.FilterMap(lo.Values(objs[machinery.ServiceGroupKind]), func(obj RuntimeObject, _ int) (*core.Service, bool) {
 		service, ok := obj.(*core.Service)
-		if !ok {
-			return nil, false
-		}
-		return service, true
+		return service, ok
 	})
 
 	linkFuncs := lo.Map(t.objectLinks, func(linkFunc RuntimeLinkFunc, _ int) machinery.LinkFunc {
