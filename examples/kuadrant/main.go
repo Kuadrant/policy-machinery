@@ -156,7 +156,7 @@ func main() {
 	}
 
 	// start the controller
-	if err := controller.NewController(controllerOpts...).Start(); err != nil {
+	if err := controller.NewController(controllerOpts...).Start(ctrlruntime.SetupSignalHandler()); err != nil {
 		logger.Error(err, "error starting controller")
 		os.Exit(1)
 	}

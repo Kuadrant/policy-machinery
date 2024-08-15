@@ -160,16 +160,15 @@ type Controller struct {
 	reconcile  ReconcileFunc
 }
 
-// Start starts the runnables and blocks until a stop signal is received
-func (c *Controller) Start() error {
-	stopCh := make(chan struct{}, len(c.runnables))
+// Start starts the runnables and blocks until the context is cancelled
+func (c *Controller) Start(ctx context.Context) error {
+	stopCh := make(chan struct{})
 
 	// subscribe to cache
 	c.subscribe()
 
 	// start runnables
 	for name := range c.runnables {
-		defer close(stopCh)
 		c.logger.Info("starting runnable", "name", name)
 		go c.runnables[name].Run(stopCh)
 	}
@@ -193,14 +192,19 @@ func (c *Controller) Start() error {
 			}
 		}
 		c.logger.V(1).Info("starting controller manager")
-		c.manager.Start(ctrlruntime.SetupSignalHandler())
+		c.manager.Start(ctx)
 		c.logger.V(1).Info("finishing controller manager")
 		return nil
 	}
 
 	// keep the thread alive
 	c.logger.Info("waiting until stop signal is received")
-	wait.Until(func() {}, time.Second, stopCh)
+	wait.Until(func() {
+		select {
+		case <-ctx.Done():
+			close(stopCh)
+		}
+	}, time.Second, stopCh)
 	c.logger.Info("stop signal received. finishing controller...")
 
 	return nil
