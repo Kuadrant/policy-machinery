@@ -130,7 +130,7 @@ func NewController(f ...ControllerOption) *Controller {
 		logger:    opts.logger,
 		client:    opts.client,
 		manager:   opts.manager,
-		cache:     newCacheStore(),
+		cache:     &watchableCacheStore{},
 		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks),
 		runnables: map[string]Runnable{},
 		reconcile: opts.reconcile,

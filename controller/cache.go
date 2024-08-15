@@ -47,10 +47,6 @@ type Cache interface {
 	Replace(Store)
 }
 
-func newCacheStore() Cache {
-	return &watchableCacheStore{}
-}
-
 type cacheStore struct {
 	sync.RWMutex
 	store Store
