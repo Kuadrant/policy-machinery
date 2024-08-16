@@ -9,7 +9,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
-func newGatewayAPITopologyBuilder(policyKinds, objectKinds []schema.GroupKind, objectLinks []RuntimeLinkFunc) *gatewayAPITopologyBuilder {
+func newGatewayAPITopologyBuilder(policyKinds, objectKinds []schema.GroupKind, objectLinks []LinkFunc) *gatewayAPITopologyBuilder {
 	return &gatewayAPITopologyBuilder{
 		policyKinds: policyKinds,
 		objectKinds: objectKinds,
@@ -20,44 +20,17 @@ func newGatewayAPITopologyBuilder(policyKinds, objectKinds []schema.GroupKind, o
 type gatewayAPITopologyBuilder struct {
 	policyKinds []schema.GroupKind
 	objectKinds []schema.GroupKind
-	objectLinks []RuntimeLinkFunc
+	objectLinks []LinkFunc
 }
 
 func (t *gatewayAPITopologyBuilder) Build(objs Store) *machinery.Topology {
-	gatewayClasses := lo.FilterMap(lo.Values(objs[schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"}]), func(obj RuntimeObject, _ int) (*gwapiv1.GatewayClass, bool) {
-		gc, ok := obj.(*gwapiv1.GatewayClass)
-		if !ok {
-			return nil, false
-		}
-		return gc, true
-	})
+	gatewayClasses := lo.Map(objs.FilterByGroupKind(GatewayClassKind), ObjectAs[*gwapiv1.GatewayClass])
+	gateways := lo.Map(objs.FilterByGroupKind(GatewayKind), ObjectAs[*gwapiv1.Gateway])
+	httpRoutes := lo.Map(objs.FilterByGroupKind(HTTPRouteKind), ObjectAs[*gwapiv1.HTTPRoute])
+	services := lo.Map(objs.FilterByGroupKind(ServiceKind), ObjectAs[*core.Service])
 
-	gateways := lo.FilterMap(lo.Values(objs[schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"}]), func(obj RuntimeObject, _ int) (*gwapiv1.Gateway, bool) {
-		gw, ok := obj.(*gwapiv1.Gateway)
-		if !ok {
-			return nil, false
-		}
-		return gw, true
-	})
-
-	httpRoutes := lo.FilterMap(lo.Values(objs[schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"}]), func(obj RuntimeObject, _ int) (*gwapiv1.HTTPRoute, bool) {
-		httpRoute, ok := obj.(*gwapiv1.HTTPRoute)
-		if !ok {
-			return nil, false
-		}
-		return httpRoute, true
-	})
-
-	services := lo.FilterMap(lo.Values(objs[schema.GroupKind{Group: core.GroupName, Kind: "Service"}]), func(obj RuntimeObject, _ int) (*core.Service, bool) {
-		service, ok := obj.(*core.Service)
-		if !ok {
-			return nil, false
-		}
-		return service, true
-	})
-
-	linkFuncs := lo.Map(t.objectLinks, func(linkFunc RuntimeLinkFunc, _ int) machinery.LinkFunc {
-		return linkFunc(objs)
+	linkFuncs := lo.Map(t.objectLinks, func(f LinkFunc, _ int) machinery.LinkFunc {
+		return f(objs)
 	})
 
 	opts := []machinery.GatewayAPITopologyOptionsFunc{
@@ -73,48 +46,21 @@ func (t *gatewayAPITopologyBuilder) Build(objs Store) *machinery.Topology {
 
 	for i := range t.policyKinds {
 		policyKind := t.policyKinds[i]
-		policies := lo.FilterMap(lo.Values(objs[policyKind]), func(obj RuntimeObject, _ int) (machinery.Policy, bool) {
-			policy, ok := obj.(machinery.Policy)
-			return policy, ok
-		})
-
+		policies := lo.Map(objs.FilterByGroupKind(policyKind), ObjectAs[machinery.Policy])
 		opts = append(opts, machinery.WithGatewayAPITopologyPolicies(policies...))
 	}
 
 	for i := range t.objectKinds {
 		objectKind := t.objectKinds[i]
-		objects := lo.FilterMap(lo.Values(objs[objectKind]), func(obj RuntimeObject, _ int) (machinery.Object, bool) {
+		objects := lo.FilterMap(objs.FilterByGroupKind(objectKind), func(obj Object, _ int) (machinery.Object, bool) {
 			object, ok := obj.(machinery.Object)
 			if ok {
 				return object, ok
 			}
-			return &Object{obj}, true
+			return &RuntimeObject{obj}, true
 		})
-
 		opts = append(opts, machinery.WithGatewayAPITopologyObjects(objects...))
 	}
 
 	return machinery.NewGatewayAPITopology(opts...)
-}
-
-type Object struct {
-	RuntimeObject RuntimeObject
-}
-
-func (g *Object) GroupVersionKind() schema.GroupVersionKind {
-	return g.RuntimeObject.GetObjectKind().GroupVersionKind()
-}
-
-func (g *Object) SetGroupVersionKind(schema.GroupVersionKind) {}
-
-func (g *Object) GetNamespace() string {
-	return g.RuntimeObject.GetNamespace()
-}
-
-func (g *Object) GetName() string {
-	return g.RuntimeObject.GetName()
-}
-
-func (g *Object) GetURL() string {
-	return machinery.UrlFromObject(g)
 }

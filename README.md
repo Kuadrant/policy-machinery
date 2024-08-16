@@ -147,6 +147,8 @@ Example:
 
 ```go
 import (
+  "context"
+
   "k8s.io/apimachinery/pkg/runtime/schema"
   "k8s.io/client-go/dynamic"
   "k8s.io/client-go/tools/clientcmd"
@@ -175,17 +177,17 @@ func main() {
 	// create a controller with a built-in gateway api topology
 	controller := controller.NewController(
 		controller.WithClient(client),
-		controller.WithInformer("gateway", controller.For[*gwapiv1.Gateway](gwapiv1.SchemeGroupVersion.WithResource("gateways"), metav1.NamespaceAll)),
-		controller.WithInformer("httproute", controller.For[*gwapiv1.HTTPRoute](gwapiv1.SchemeGroupVersion.WithResource("httproutes"), metav1.NamespaceAll)),
-		controller.WithInformer("mypolicy", controller.For[*mypolicy.MyPolicy](mypolicy.SchemeGroupVersion.WithResource("mypolicies"), metav1.NamespaceAll)),
+		controller.WithRunnable("gateway", controller.Watch(*gwapiv1.Gateway{}, gwapiv1.SchemeGroupVersion.WithResource("gateways"), metav1.NamespaceAll)),
+		controller.WithRunnable("httproute", controller.Watch(*gwapiv1.HTTPRoute{}, gwapiv1.SchemeGroupVersion.WithResource("httproutes"), metav1.NamespaceAll)),
+		controller.WithRunnable("mypolicy", controller.Watch(*mypolicy.MyPolicy{}, mypolicy.SchemeGroupVersion.WithResource("mypolicies"), metav1.NamespaceAll)),
 		controller.WithPolicyKinds(schema.GroupKind{Group: mypolicy.SchemeGroupVersion.Group, Kind: "MyPolicy"}),
-		controller.WithCallback(reconcile),
+		controller.WithReconcile(reconcile),
 	)
 
-	controller.Start()
+	controller.Start(context.Background())
 }
 
-func reconcile(eventType controller.EventType, oldObj, newObj controller.RuntimeObject, topology *machinery.Topology) {
+func reconcile(ctx context.Context, events []ResourceEvent, topology *machinery.Topology) {
   // TODO
 }
 ```

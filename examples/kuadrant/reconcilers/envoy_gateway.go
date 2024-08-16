@@ -2,8 +2,7 @@ package reconcilers
 
 import (
 	"context"
-	"log"
-	"strings"
+	"fmt"
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/samber/lo"
@@ -29,7 +28,10 @@ type EnvoyGatewayProvider struct {
 	Client *dynamic.DynamicClient
 }
 
-func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
+func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
+	logger := controller.LoggerFromContext(ctx).WithName("envoy gateway").WithName("securitypolicy")
+	ctx = controller.LoggerIntoContext(ctx, logger)
+
 	authPaths := pathsFromContext(ctx, authPathsKey)
 	targetables := topology.Targetables()
 	gateways := targetables.Items(func(o machinery.Object) bool {
@@ -38,8 +40,9 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, re
 	})
 	for _, gateway := range gateways {
 		paths := lo.Filter(authPaths, func(path []machinery.Targetable, _ int) bool {
-			if len(path) < 4 { // should never happen
-				log.Fatalf("Unexpected topology path length to build Envoy SecurityPolicy: %s\n", strings.Join(lo.Map(path, machinery.MapTargetableToURLFunc), " → "))
+			if len(path) != 4 { // should never happen
+				logger.Error(fmt.Errorf("unexpected topology path length to build Envoy SecurityPolicy"), "path", lo.Map(path, machinery.MapTargetableToURLFunc))
+				return false
 			}
 			return path[0].GetURL() == gateway.GetURL() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
 				gc, ok := parent.(*machinery.GatewayClass)
@@ -54,12 +57,16 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, re
 	}
 }
 
-func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
-	gateway := resourceEvent.OldObject
-	p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
+func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology) {
+	for _, resourceEvent := range resourceEvents {
+		gateway := resourceEvent.OldObject
+		p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
+	}
 }
 
 func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topology *machinery.Topology, gateway machinery.Targetable) {
+	logger := controller.LoggerFromContext(ctx)
+
 	desiredSecurityPolicy := &egv1alpha1.SecurityPolicy{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: egv1alpha1.GroupVersion.String(),
@@ -101,12 +108,12 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 		o, _ := controller.Destruct(desiredSecurityPolicy)
 		_, err := resource.Create(ctx, o, metav1.CreateOptions{})
 		if err != nil {
-			log.Println("failed to create SecurityPolicy", err)
+			logger.Error(err, "failed to create SecurityPolicy")
 		}
 		return
 	}
 
-	securityPolicy := obj.(*controller.Object).RuntimeObject.(*egv1alpha1.SecurityPolicy)
+	securityPolicy := obj.(*controller.RuntimeObject).Object.(*egv1alpha1.SecurityPolicy)
 
 	if securityPolicy.Spec.ExtAuth != nil &&
 		securityPolicy.Spec.ExtAuth.GRPC != nil &&
@@ -123,7 +130,7 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 	o, _ := controller.Destruct(securityPolicy)
 	_, err := resource.Update(ctx, o, metav1.UpdateOptions{})
 	if err != nil {
-		log.Println("failed to update SecurityPolicy", err)
+		logger.Error(err, "failed to update SecurityPolicy")
 	}
 }
 
@@ -143,32 +150,25 @@ func (p *EnvoyGatewayProvider) deleteSecurityPolicy(ctx context.Context, topolog
 	resource := p.Client.Resource(EnvoyGatewaySecurityPoliciesResource).Namespace(namespace)
 	err := resource.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		log.Println("failed to delete SecurityPolicy", err)
+		controller.LoggerFromContext(ctx).Error(err, "failed to delete SecurityPolicy")
 	}
 }
 
 func LinkGatewayToEnvoyGatewaySecurityPolicyFunc(objs controller.Store) machinery.LinkFunc {
-	gatewayKind := schema.GroupKind{Group: gwapiv1.GroupName, Kind: "Gateway"}
-	gateways := lo.FilterMap(lo.Values(objs[gatewayKind]), func(obj controller.RuntimeObject, _ int) (*gwapiv1.Gateway, bool) {
-		g, ok := obj.(*gwapiv1.Gateway)
-		if !ok {
-			return nil, false
-		}
-		return g, true
-	})
+	gateways := lo.Map(objs.FilterByGroupKind(controller.GatewayKind), controller.ObjectAs[*gwapiv1.Gateway])
 
 	return machinery.LinkFunc{
-		From: gatewayKind,
+		From: controller.GatewayKind,
 		To:   EnvoyGatewaySecurityPolicyKind,
 		Func: func(child machinery.Object) []machinery.Object {
-			o := child.(*controller.Object)
-			sp := o.RuntimeObject.(*egv1alpha1.SecurityPolicy)
+			o := child.(*controller.RuntimeObject)
+			sp := o.Object.(*egv1alpha1.SecurityPolicy)
 			refs := sp.Spec.PolicyTargetReferences.TargetRefs
 			if ref := sp.Spec.PolicyTargetReferences.TargetRef; ref != nil {
 				refs = append(refs, *ref)
 			}
 			refs = lo.Filter(refs, func(ref gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName, _ int) bool {
-				return ref.Group == gwapiv1.GroupName && ref.Kind == gwapiv1.Kind(gatewayKind.Kind)
+				return ref.Group == gwapiv1.GroupName && ref.Kind == gwapiv1.Kind(controller.GatewayKind.Kind)
 			})
 			if len(refs) == 0 {
 				return nil

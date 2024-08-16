@@ -19,7 +19,10 @@ limitations under the License.
 // +groupName=kuadrant.io
 package v1beta3
 
-import "k8s.io/apimachinery/pkg/runtime/schema"
+import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	ctrl "sigs.k8s.io/controller-runtime/pkg/scheme"
+)
 
 // GroupName specifies the group name used to register the objects.
 const GroupName = "kuadrant.io"
@@ -30,6 +33,12 @@ var GroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta3"}
 // SchemeGroupVersion is group version used to register these objects
 // Deprecated: use GroupVersion instead.
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1beta3"}
+
+// SchemeBuilder is used to add go types to the GroupVersionKind scheme
+var SchemeBuilder = &ctrl.Builder{GroupVersion: GroupVersion}
+
+// AddToScheme adds the types in this group-version to the given scheme.
+var	AddToScheme = SchemeBuilder.AddToScheme
 
 // Resource takes an unqualified resource and returns a Group qualified GroupResource
 func Resource(resource string) schema.GroupResource {

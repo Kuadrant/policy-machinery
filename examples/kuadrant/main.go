@@ -11,10 +11,18 @@ import (
 	"github.com/samber/lo"
 	istiov1 "istio.io/client-go/pkg/apis/security/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
+
+	ctrlruntime "sigs.k8s.io/controller-runtime"
+	ctrlruntimemetrics "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	ctrlruntimewebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -24,17 +32,59 @@ import (
 	"github.com/kuadrant/policy-machinery/examples/kuadrant/reconcilers"
 )
 
-var supportedGatewayProviders = []string{reconcilers.EnvoyGatewayProviderName, reconcilers.IstioGatewayProviderName}
+const (
+	// reconciliation modes
+	defaultReconciliationMode = stateReconciliationMode
+	deltaReconciliationMode = "delta"
+	stateReconciliationMode = "state"
+)
+
+var (
+	scheme = runtime.NewScheme()
+
+	supportedReconciliationModes = []string{stateReconciliationMode, deltaReconciliationMode}
+	reconciliationMode = defaultReconciliationMode
+
+	supportedGatewayProviders = []string{reconcilers.EnvoyGatewayProviderName, reconcilers.IstioGatewayProviderName}
+	gatewayProviders []string
+)
+
+func init() {
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1alpha2.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1beta3.AddToScheme(scheme))
+	utilruntime.Must(gwapiv1.AddToScheme(scheme))
+	utilruntime.Must(egv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(istiov1.AddToScheme(scheme))
+}
 
 func main() {
-	var gatewayProviders []string
+	// parse command-line flags
 	for i := range os.Args {
 		switch os.Args[i] {
+		case "--reconciliation-mode":
+			{
+				defer func() {
+					if recover() != nil {
+						log.Fatalf("Invalid reconciliation mode. Supported (one of): %s\n", strings.Join(lo.Map(supportedReconciliationModes, func(mode string, _ int) string {
+							if mode == defaultReconciliationMode {
+								return mode + " (default)"
+							}
+							return mode
+						}), ", "))
+					}
+				}()
+				mode := os.Args[i+1]
+				if !lo.Contains(supportedReconciliationModes, mode) {
+					panic("")
+				}
+				reconciliationMode = mode
+			}
 		case "--gateway-providers":
 			{
 				defer func() {
 					if recover() != nil {
-						log.Fatalf("Invalid gateway provider. Supported: %s\n", strings.Join(supportedGatewayProviders, ","))
+						log.Fatalf("Invalid gateway provider. Supported: %s\n", strings.Join(supportedGatewayProviders, ", "))
 					}
 				}()
 				gatewayProviders = lo.Map(strings.Split(os.Args[i+1], ","), func(gp string, _ int) string {
@@ -47,131 +97,175 @@ func main() {
 		}
 	}
 
+	// create logger
+	logger := controller.CreateAndSetLogger()
+
 	// load kubeconfig
 	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{})
 	config, err := kubeconfig.ClientConfig()
 	if err != nil {
-		log.Fatalf("Error loading kubeconfig: %v", err)
+		logger.Error(err, "error loading kubeconfig")
+		os.Exit(1)
 	}
 
 	// create the client
 	client, err := dynamic.NewForConfig(config)
 	if err != nil {
-		log.Fatalf("Error creating client: %v", err)
+		logger.Error(err, "error creating client")
+		os.Exit(1)
 	}
 
-	controllerOpts := []controller.ControllerOptionFunc{
+	// base controller options
+	controllerOpts := []controller.ControllerOption{
+		controller.WithLogger(logger),
 		controller.WithClient(client),
-		controller.WithInformer("gateway", controller.For[*gwapiv1.Gateway](controller.GatewaysResource, metav1.NamespaceAll)),
-		controller.WithInformer("httproute", controller.For[*gwapiv1.HTTPRoute](controller.HTTPRoutesResource, metav1.NamespaceAll)),
-		controller.WithInformer("dnspolicy", controller.For[*kuadrantv1alpha2.DNSPolicy](kuadrantv1alpha2.DNSPoliciesResource, metav1.NamespaceAll)),
-		controller.WithInformer("tlspolicy", controller.For[*kuadrantv1alpha2.TLSPolicy](kuadrantv1alpha2.TLSPoliciesResource, metav1.NamespaceAll)),
-		controller.WithInformer("authpolicy", controller.For[*kuadrantv1beta3.AuthPolicy](kuadrantv1beta3.AuthPoliciesResource, metav1.NamespaceAll)),
-		controller.WithInformer("ratelimitpolicy", controller.For[*kuadrantv1beta3.RateLimitPolicy](kuadrantv1beta3.RateLimitPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("gateway watcher", buildWatcher(&gwapiv1.Gateway{}, controller.GatewaysResource, metav1.NamespaceAll)),
+		controller.WithRunnable("httproute watcher", buildWatcher(&gwapiv1.HTTPRoute{}, controller.HTTPRoutesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("dnspolicy watcher", buildWatcher(&kuadrantv1alpha2.DNSPolicy{}, kuadrantv1alpha2.DNSPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("tlspolicy watcher", buildWatcher(&kuadrantv1alpha2.TLSPolicy{}, kuadrantv1alpha2.TLSPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("authpolicy watcher", buildWatcher(&kuadrantv1beta3.AuthPolicy{}, kuadrantv1beta3.AuthPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("ratelimitpolicy watcher", buildWatcher(&kuadrantv1beta3.RateLimitPolicy{}, kuadrantv1beta3.RateLimitPoliciesResource, metav1.NamespaceAll)),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha2.DNSPolicyKind,
 			kuadrantv1alpha2.TLSPolicyKind,
 			kuadrantv1beta3.AuthPolicyKind,
 			kuadrantv1beta3.RateLimitPolicyKind,
 		),
-		controller.WithCallback(buildReconciler(gatewayProviders, client)),
+		controller.WithReconcile(buildReconciler(gatewayProviders, client)),
 	}
+
+  // gateway provider specific controller options
 	controllerOpts = append(controllerOpts, controllerOptionsFor(gatewayProviders)...)
 
-	controller.NewController(controllerOpts...).Start()
-}
-
-// buildReconciler builds a reconciler that executes the following workflow:
-//  1. log event
-//  2. save topology to file
-//  3. effective policies
-//  4. (gateway deleted) delete SecurityPolicy / (other events) reconcile SecurityPolicies
-//  4. (gateway deleted) delete AuthorizationPolicy / (other events) reconcile AuthorizationPolicies
-func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) controller.CallbackFunc {
-	effectivePolicyReconciler := &reconcilers.EffectivePoliciesReconciler{Client: client}
-
-	commonAuthPolicyResourceEventMatchers := []controller.ResourceEventMatcher{
-		{Resource: ptr.To(controller.GatewayClassesResource)},
-		{Resource: ptr.To(controller.GatewaysResource), EventType: ptr.To(controller.CreateEvent)},
-		{Resource: ptr.To(controller.GatewaysResource), EventType: ptr.To(controller.UpdateEvent)},
-		{Resource: ptr.To(controller.HTTPRoutesResource)},
-		{Resource: ptr.To(kuadrantv1beta3.AuthPoliciesResource)},
-	}
-
-	for _, gatewayProvider := range gatewayProviders {
-		switch gatewayProvider {
-		case reconcilers.EnvoyGatewayProviderName:
-			envoyGatewayProvider := &reconcilers.EnvoyGatewayProvider{Client: client}
-			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscriber{
-				{
-					ReconcileFunc: envoyGatewayProvider.ReconcileSecurityPolicies,
-					Events:        append(commonAuthPolicyResourceEventMatchers, controller.ResourceEventMatcher{Resource: ptr.To(reconcilers.EnvoyGatewaySecurityPoliciesResource)}),
-				},
-				{
-					ReconcileFunc: envoyGatewayProvider.DeleteSecurityPolicy,
-					Events: []controller.ResourceEventMatcher{
-						{Resource: ptr.To(controller.GatewaysResource), EventType: ptr.To(controller.DeleteEvent)},
-					},
-				},
-			}).Reconcile)
-		case reconcilers.IstioGatewayProviderName:
-			istioGatewayProvider := &reconcilers.IstioGatewayProvider{Client: client}
-			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscriber{
-				{
-					ReconcileFunc: istioGatewayProvider.ReconcileAuthorizationPolicies,
-					Events:        append(commonAuthPolicyResourceEventMatchers, controller.ResourceEventMatcher{Resource: ptr.To(reconcilers.IstioAuthorizationPoliciesResource)}),
-				},
-				{
-					ReconcileFunc: istioGatewayProvider.DeleteAuthorizationPolicy,
-					Events: []controller.ResourceEventMatcher{
-						{Resource: ptr.To(controller.GatewaysResource), EventType: ptr.To(controller.DeleteEvent)},
-					},
-				},
-			}).Reconcile)
+	// managed controller
+	if reconciliationMode == stateReconciliationMode {
+		manager, err := ctrlruntime.NewManager(config, ctrlruntime.Options{
+			Logger: 							  logger,
+			Scheme:                 scheme,
+			Metrics:                ctrlruntimemetrics.Options{BindAddress: ":8080"},
+			WebhookServer:          ctrlruntimewebhook.NewServer(ctrlruntimewebhook.Options{Port: 9443}),
+			HealthProbeBindAddress: ":8081",
+			LeaderElection:         false,
+			LeaderElectionID:       "ad5be859.kuadrant.io",
+		})
+		if err != nil {
+			logger.Error(err, "Error creating manager")
+			os.Exit(1)
 		}
+		controllerOpts = append(controllerOpts, controller.ManagedBy(manager))
 	}
 
-	reconciler := &controller.Workflow{
-		Precondition: func(_ context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
-			// log the event
-			obj := resourceEvent.OldObject
-			if obj == nil {
-				obj = resourceEvent.NewObject
-			}
-			log.Printf("%s %sd: %s/%s\n", obj.GetObjectKind().GroupVersionKind().Kind, resourceEvent.EventType.String(), obj.GetNamespace(), obj.GetName())
-			if resourceEvent.EventType == controller.UpdateEvent {
-				log.Println(cmp.Diff(resourceEvent.OldObject, resourceEvent.NewObject))
-			}
-		},
-		Tasks: []controller.CallbackFunc{
-			effectivePolicyReconciler.Reconcile,
-		},
-		Postcondition: (&reconcilers.TopologyFileReconciler{}).Reconcile, // Graphiz frees the memory that might be simutanously used by the reconcilers, so this needs to run in a precondition
+	// start the controller
+	if err := controller.NewController(controllerOpts...).Start(ctrlruntime.SetupSignalHandler()); err != nil {
+		logger.Error(err, "error starting controller")
+		os.Exit(1)
 	}
-
-	return reconciler.Run
 }
 
-func controllerOptionsFor(gatewayProviders []string) []controller.ControllerOptionFunc {
-	var opts []controller.ControllerOptionFunc
+func buildWatcher[T controller.Object](obj T, resource schema.GroupVersionResource, namespace string, options ...controller.RunnableBuilderOption[T]) controller.RunnableBuilder {
+	switch reconciliationMode {
+	case deltaReconciliationMode:
+		options = append(options, controller.Builder(controller.IncrementalInformer[T]))
+	}
+	return controller.Watch(obj, resource, namespace, options...)
+}
+
+func controllerOptionsFor(gatewayProviders []string) []controller.ControllerOption {
+	var opts []controller.ControllerOption
 
 	// if we care about specificities of gateway controllers, then let's add gateway classes to the topology too
 	if len(gatewayProviders) > 0 {
-		opts = append(opts, controller.WithInformer("gatewayclass", controller.For[*gwapiv1.GatewayClass](controller.GatewayClassesResource, metav1.NamespaceNone)))
+		opts = append(opts, controller.WithRunnable("gatewayclass watcher", buildWatcher(&gwapiv1.GatewayClass{}, controller.GatewayClassesResource, metav1.NamespaceNone)))
 	}
 
 	for _, gatewayProvider := range gatewayProviders {
 		switch gatewayProvider {
 		case reconcilers.EnvoyGatewayProviderName:
-			opts = append(opts, controller.WithInformer("envoygateway/securitypolicy", controller.For[*egv1alpha1.SecurityPolicy](reconcilers.EnvoyGatewaySecurityPoliciesResource, metav1.NamespaceAll)))
+			opts = append(opts, controller.WithRunnable("envoygateway/securitypolicy watcher", buildWatcher(&egv1alpha1.SecurityPolicy{}, reconcilers.EnvoyGatewaySecurityPoliciesResource, metav1.NamespaceAll)))
 			opts = append(opts, controller.WithObjectKinds(reconcilers.EnvoyGatewaySecurityPolicyKind))
 			opts = append(opts, controller.WithObjectLinks(reconcilers.LinkGatewayToEnvoyGatewaySecurityPolicyFunc))
 		case reconcilers.IstioGatewayProviderName:
-			opts = append(opts, controller.WithInformer("istio/authorizationpolicy", controller.For[*istiov1.AuthorizationPolicy](reconcilers.IstioAuthorizationPoliciesResource, metav1.NamespaceAll)))
+			opts = append(opts, controller.WithRunnable("istio/authorizationpolicy watcher", buildWatcher(&istiov1.AuthorizationPolicy{}, reconcilers.IstioAuthorizationPoliciesResource, metav1.NamespaceAll)))
 			opts = append(opts, controller.WithObjectKinds(reconcilers.IstioAuthorizationPolicyKind))
 			opts = append(opts, controller.WithObjectLinks(reconcilers.LinkGatewayToIstioAuthorizationPolicyFunc))
 		}
 	}
 
 	return opts
+}
+
+// buildReconciler builds a reconciler that executes the following workflow:
+//  1. log event
+//  2. save topology to file
+//  2. effective policies
+//  3. (gateway deleted) delete SecurityPolicy / (other events) reconcile SecurityPolicies
+//  3. (gateway deleted) delete AuthorizationPolicy / (other events) reconcile AuthorizationPolicies
+func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) controller.ReconcileFunc {
+	effectivePolicyReconciler := &reconcilers.EffectivePoliciesReconciler{Client: client}
+
+	commonAuthPolicyResourceEventMatchers := []controller.ResourceEventMatcher{
+		{Kind: ptr.To(controller.GatewayClassKind)},
+		{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.CreateEvent)},
+		{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.UpdateEvent)},
+		{Kind: ptr.To(controller.HTTPRouteKind)},
+		{Kind: ptr.To(kuadrantv1beta3.AuthPolicyKind)},
+	}
+
+	for _, gatewayProvider := range gatewayProviders {
+		switch gatewayProvider {
+		case reconcilers.EnvoyGatewayProviderName:
+			envoyGatewayProvider := &reconcilers.EnvoyGatewayProvider{Client: client}
+			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscription{
+				ReconcileFunc: envoyGatewayProvider.ReconcileSecurityPolicies,
+				Events:        append(commonAuthPolicyResourceEventMatchers, controller.ResourceEventMatcher{Kind: ptr.To(reconcilers.EnvoyGatewaySecurityPolicyKind)}),
+			}).Reconcile)
+			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscription{
+				ReconcileFunc: envoyGatewayProvider.DeleteSecurityPolicy,
+				Events: []controller.ResourceEventMatcher{
+					{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.DeleteEvent)},
+				},
+			}).Reconcile)
+		case reconcilers.IstioGatewayProviderName:
+			istioGatewayProvider := &reconcilers.IstioGatewayProvider{Client: client}
+			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscription{
+				ReconcileFunc: istioGatewayProvider.ReconcileAuthorizationPolicies,
+				Events:        append(commonAuthPolicyResourceEventMatchers, controller.ResourceEventMatcher{Kind: ptr.To(reconcilers.IstioAuthorizationPolicyKind)}),
+			}).Reconcile)
+			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscription{
+				ReconcileFunc: istioGatewayProvider.DeleteAuthorizationPolicy,
+				Events: []controller.ResourceEventMatcher{
+					{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.DeleteEvent)},
+				},
+			}).Reconcile)
+		}
+	}
+
+	reconciler := &controller.Workflow{
+		Precondition: func(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology) {
+			logger := controller.LoggerFromContext(ctx).WithName("event logger")
+			for _, event := range resourceEvents {
+				// log the event
+				obj := event.OldObject
+				if obj == nil {
+					obj = event.NewObject
+				}
+				values := []any{
+					"type", event.EventType.String(),
+					"kind", obj.GetObjectKind().GroupVersionKind().Kind,
+					"namespace", obj.GetNamespace(),
+					"name", obj.GetName(),
+				}
+				if event.EventType == controller.UpdateEvent && logger.V(1).Enabled() {
+					values = append(values, "diff", cmp.Diff(event.OldObject, event.NewObject))
+				}
+				logger.Info("new event", values...)
+			}
+		},
+		Tasks: []controller.ReconcileFunc{
+			(&reconcilers.TopologyFileReconciler{}).Reconcile,
+			effectivePolicyReconciler.Reconcile,
+		},
+	}
+
+	return reconciler.Run
 }

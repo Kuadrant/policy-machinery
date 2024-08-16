@@ -1,62 +1,119 @@
 package controller
 
 import (
+	"reflect"
 	"sync"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	"github.com/samber/lo"
+	"github.com/telepresenceio/watchable"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-type RuntimeObject interface {
-	runtime.Object
-	metav1.Object
+type Store map[string]Object
+
+func (s Store) Filter(predicates ...func(Object) bool) []Object {
+	var objects []Object
+	for _, object := range s {
+		if lo.EveryBy(predicates, func(p func(Object) bool) bool { return p(object) }) {
+			objects = append(objects, object)
+		}
+	}
+	return objects
 }
 
-type Store map[schema.GroupKind]map[string]RuntimeObject
+func (s Store) FilterByGroupKind(gk schema.GroupKind) []Object {
+	return s.Filter(func(o Object) bool {
+		return o.GetObjectKind().GroupVersionKind().GroupKind() == gk
+	})
+}
+
+type Cache interface {
+	List() Store
+	Add(obj Object)
+	Delete(obj Object)
+	Replace(Store)
+}
 
 type cacheStore struct {
-	mu    sync.RWMutex
+	sync.RWMutex
 	store Store
 }
 
-func newCacheStore() *cacheStore {
-	return &cacheStore{
-		store: make(Store),
-	}
-}
-
 func (c *cacheStore) List() Store {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.RLock()
+	defer c.RUnlock()
 
-	cm := make(Store, len(c.store))
-	for gk, objs := range c.store {
-		if _, ok := cm[gk]; !ok {
-			cm[gk] = map[string]RuntimeObject{}
-		}
-		for url, obj := range objs {
-			cm[gk][url] = obj
-		}
+	ret := make(Store, len(c.store))
+	for k, v := range c.store {
+		ret[k] = v.DeepCopyObject().(Object)
 	}
-	return cm
+	return ret
 }
 
-func (c *cacheStore) Add(obj RuntimeObject) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *cacheStore) Add(obj Object) {
+	c.Lock()
+	defer c.Unlock()
 
-	gk := obj.GetObjectKind().GroupVersionKind().GroupKind()
-	if _, ok := c.store[gk]; !ok {
-		c.store[gk] = map[string]RuntimeObject{}
-	}
-	c.store[gk][string(obj.GetUID())] = obj
+	c.store[string(obj.GetUID())] = obj
 }
 
-func (c *cacheStore) Delete(obj RuntimeObject) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *cacheStore) Delete(obj Object) {
+	c.Lock()
+	defer c.Unlock()
 
-	gk := obj.GetObjectKind().GroupVersionKind().GroupKind()
-	delete(c.store[gk], string(obj.GetUID()))
+	delete(c.store, string(obj.GetUID()))
+}
+
+func (c *cacheStore) Replace(store Store) {
+	c.Lock()
+	defer c.Unlock()
+
+	c.store = make(Store, len(store))
+	for k, v := range store {
+		c.store[k] = v.DeepCopyObject().(Object)
+	}
+}
+
+type watchableCacheStore struct {
+	watchable.Map[string, watchableCacheEntry]
+}
+
+func (c *watchableCacheStore) List() Store {
+	entries := c.LoadAll()
+	store := make(Store, len(entries))
+	for uid, obj := range entries {
+		store[uid] = obj.Object
+	}
+	return store
+}
+
+func (c *watchableCacheStore) Add(obj Object) {
+	c.Store(string(obj.GetUID()), watchableCacheEntry{obj})
+}
+
+func (c *watchableCacheStore) Delete(obj Object) {
+	c.Map.Delete(string(obj.GetUID()))
+}
+
+func (c *watchableCacheStore) Replace(store Store) {
+	for uid, obj := range store {
+		c.Store(uid, watchableCacheEntry{obj})
+	}
+	for uid := range c.LoadAll() {
+		if _, ok := store[uid]; !ok {
+			c.Map.Delete(uid)
+		}
+	}
+}
+
+type watchableCacheEntry struct {
+	Object
+}
+
+func (e watchableCacheEntry) DeepCopy() watchableCacheEntry {
+	return watchableCacheEntry{e.DeepCopyObject().(Object)}
+}
+
+func (e watchableCacheEntry) Equal(other watchableCacheEntry) bool {
+	return reflect.DeepEqual(e, other)
 }

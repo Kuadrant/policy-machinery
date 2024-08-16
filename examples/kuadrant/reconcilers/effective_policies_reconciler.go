@@ -3,10 +3,8 @@ package reconcilers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"log"
+	"reflect"
 	"sort"
-	"strings"
 	"sync"
 
 	"github.com/samber/lo"
@@ -27,10 +25,10 @@ const authPathsKey = "authPaths"
 // as argument to the subsequent concurrent reconcilers.
 type EffectivePoliciesReconciler struct {
 	Client         *dynamic.DynamicClient
-	ReconcileFuncs []controller.CallbackFunc
+	ReconcileFuncs []controller.ReconcileFunc
 }
 
-func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEvent controller.ResourceEvent, topology *machinery.Topology) {
+func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology) {
 	targetables := topology.Targetables()
 
 	// reconcile policies
@@ -54,10 +52,10 @@ func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEve
 		for _, listener := range listeners {
 			paths := targetables.Paths(gateway, listener)
 			for i := range paths {
-				if p := effectivePolicyForPath[*kuadrantv1alpha2.DNSPolicy](paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1alpha2.DNSPolicy](ctx, paths[i]); p != nil {
 					// TODO: reconcile dns effective policy (i.e. create the DNSRecords for it)
 				}
-				if p := effectivePolicyForPath[*kuadrantv1alpha2.TLSPolicy](paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1alpha2.TLSPolicy](ctx, paths[i]); p != nil {
 					// TODO: reconcile tls effective policy (i.e. create the certificate request for it)
 				}
 			}
@@ -67,11 +65,11 @@ func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEve
 		for _, httpRouteRule := range httpRouteRules {
 			paths := targetables.Paths(gateway, httpRouteRule)
 			for i := range paths {
-				if p := effectivePolicyForPath[*kuadrantv1beta3.AuthPolicy](paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1beta3.AuthPolicy](ctx, paths[i]); p != nil {
 					ctx = pathIntoContext(ctx, authPathsKey, paths[i])
 					// TODO: reconcile auth effective policy (i.e. create the Authorino AuthConfig)
 				}
-				if p := effectivePolicyForPath[*kuadrantv1beta3.RateLimitPolicy](paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1beta3.RateLimitPolicy](ctx, paths[i]); p != nil {
 					// TODO: reconcile rate-limit effective policy (i.e. create the Limitador limits config)
 				}
 			}
@@ -86,12 +84,14 @@ func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEve
 	for _, f := range funcs {
 		go func() {
 			defer waitGroup.Done()
-			f(ctx, resourceEvent, topology)
+			f(ctx, resourceEvents, topology)
 		}()
 	}
 }
 
-func effectivePolicyForPath[T machinery.Policy](path []machinery.Targetable) *T {
+func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []machinery.Targetable) *T {
+	logger := controller.LoggerFromContext(ctx).WithName("effective policy")
+
 	// gather all policies in the path sorted from the least specific to the most specific
 	policies := lo.FlatMap(path, func(targetable machinery.Targetable, _ int) []machinery.Policy {
 		policies := lo.FilterMap(targetable.Policies(), func(p machinery.Policy, _ int) (kuadrantapis.MergeablePolicy, bool) {
@@ -103,12 +103,10 @@ func effectivePolicyForPath[T machinery.Policy](path []machinery.Targetable) *T 
 		return lo.Map(policies, func(p kuadrantapis.MergeablePolicy, _ int) machinery.Policy { return p })
 	})
 
-	pathStr := strings.Join(lo.Map(path, func(t machinery.Targetable, _ int) string {
-		return fmt.Sprintf("%s::%s/%s", t.GroupVersionKind().Kind, t.GetNamespace(), t.GetName())
-	}), " → ")
+	pathURLs := lo.Map(path, machinery.MapTargetableToURLFunc)
 
 	if len(policies) == 0 {
-		log.Printf("No %T for path %s\n", new(T), pathStr)
+		logger.Info("no policies for path", "kind", reflect.TypeOf(new(T)), "path", pathURLs)
 		return nil
 	}
 
@@ -117,8 +115,8 @@ func effectivePolicyForPath[T machinery.Policy](path []machinery.Targetable) *T 
 		return effectivePolicy.Merge(policy)
 	}, policies[len(policies)-1])
 
-	jsonEffectivePolicy, _ := json.MarshalIndent(effectivePolicy, "", "  ")
-	log.Printf("Effective %T for path %s:\n%s\n", new(T), pathStr, jsonEffectivePolicy)
+	jsonEffectivePolicy, _ := json.Marshal(effectivePolicy)
+	logger.Info("effective policy", "kind", reflect.TypeOf(new(T)), "path", pathURLs, "effectivePolicy", string(jsonEffectivePolicy))
 
 	concreteEffectivePolicy, _ := effectivePolicy.(T)
 	return &concreteEffectivePolicy
