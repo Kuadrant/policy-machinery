@@ -236,8 +236,6 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		opts = append(opts, WithLinks(LinkHTTPRouteToHTTPRouteRuleFunc())) // HTTPRoute -> HTTPRouteRule
 
 		if o.ExpandServicePorts {
-			servicePorts := lo.FlatMap(o.Services, ServicePortsFromBackendFunc)
-			opts = append(opts, WithTargetables(servicePorts...))
 			opts = append(opts, WithLinks(
 				LinkHTTPRouteRuleToServicePortFunc(httpRouteRules),   // HTTPRouteRule -> ServicePort
 				LinkHTTPRouteRuleToServiceFunc(httpRouteRules, true), // HTTPRouteRule -> Service
@@ -262,8 +260,6 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		opts = append(opts, WithLinks(LinkGRPCRouteToGRPCRouteRuleFunc())) // GRPCRoute -> GRPCRouteRule
 
 		if o.ExpandServicePorts {
-			servicePorts := lo.FlatMap(o.Services, ServicePortsFromBackendFunc)
-			opts = append(opts, WithTargetables(servicePorts...))
 			opts = append(opts, WithLinks(
 				LinkGRPCRouteRuleToServicePortFunc(grpcRouteRules),   // GRPCRouteRule -> ServicePort
 				LinkGRPCRouteRuleToServiceFunc(grpcRouteRules, true), // GRPCRouteRule -> Service
@@ -288,8 +284,6 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		opts = append(opts, WithLinks(LinkTCPRouteToTCPRouteRuleFunc())) // TCPRoute - TCPRouteRules
 
 		if o.ExpandServicePorts {
-			servicePorts := lo.FlatMap(o.Services, ServicePortsFromBackendFunc)
-			opts = append(opts, WithTargetables(servicePorts...))
 			opts = append(opts, WithLinks(
 				LinkTCPRouteRuleToServicePortFunc(tcpRouteRules),   // TCPRouteRule -> ServicePort
 				LinkTCPRouteRuleToServiceFunc(tcpRouteRules, true), // TCPRoute -> service
@@ -314,8 +308,6 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		opts = append(opts, WithLinks(LinkTLSRouteToTLSRouteRuleFunc()))
 
 		if o.ExpandServicePorts {
-			servicePorts := lo.FlatMap(o.Services, ServicePortsFromBackendFunc)
-			opts = append(opts, WithTargetables(servicePorts...))
 			opts = append(opts, WithLinks(
 				LinkTLSRouteRuleToServicePortFunc(tlsRouteRules),   // TLSRouteRule -> ServicePort
 				LinkTLSRouteRuleToServiceFunc(tlsRouteRules, true), // TLSRouteRule -> Service
@@ -340,8 +332,6 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		opts = append(opts, WithLinks(LinkUDPRouteToUDPRouteRuleFunc()))
 
 		if o.ExpandServicePorts {
-			servicePorts := lo.FlatMap(o.Services, ServicePortsFromBackendFunc)
-			opts = append(opts, WithTargetables(servicePorts...))
 			opts = append(opts, WithLinks(
 				LinkUDPRouteRuleToServicePortFunc(udpRouteRules),   // UDPRouteRule -> ServicePort
 				LinkUDPRouteRuleToServiceFunc(udpRouteRules, true), // UDPRouteRule -> Service
@@ -361,6 +351,8 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 	}
 
 	if o.ExpandServicePorts {
+		servicePorts := lo.FlatMap(o.Services, ServicePortsFromServiceFunc)
+		opts = append(opts, WithTargetables(servicePorts...))
 		opts = append(opts, WithLinks(LinkServiceToServicePortFunc())) // Service -> ServicePort
 	}
 
@@ -432,8 +424,8 @@ func UDPRouteRulesFromUDPRouteFunc(udpRoute *UDPRoute, _ int) []*UDPRouteRule {
 	})
 }
 
-// ServicePortsFromBackendFunc returns a list of targetable service ports from a targetable Service.
-func ServicePortsFromBackendFunc(service *Service, _ int) []*ServicePort {
+// ServicePortsFromServiceFunc returns a list of targetable service ports from a targetable Service.
+func ServicePortsFromServiceFunc(service *Service, _ int) []*ServicePort {
 	return lo.Map(service.Spec.Ports, func(port core.ServicePort, _ int) *ServicePort {
 		return &ServicePort{
 			ServicePort: &port,
