@@ -13,19 +13,19 @@ import (
 )
 
 var (
-	GatewayClassGroupKind  = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GatewayClass"}
-	GatewayGroupKind       = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Gateway"}
-	ListenerGroupKind      = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "Listener"}
-	HTTPRouteGroupKind     = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRoute"}
-	HTTPRouteRuleGroupKind = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "HTTPRouteRule"}
-	GRPCRouteGroupKind     = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRoute"}
-	GRPCRouteRuleGroupKind = schema.GroupKind{Group: gwapiv1.GroupVersion.Group, Kind: "GRPCRouteRule"}
-	TCPRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TCPRoute"}
-	TCPRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TCPRouteRule"}
-	TLSRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TLSRoute"}
-	TLSRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "TLSRouteRule"}
-	UDPRouteGroupKind      = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "UDPRoute"}
-	UDPRouteRuleGroupKind  = schema.GroupKind{Group: gwapiv1alpha2.GroupVersion.Group, Kind: "UDPRouteRule"}
+	GatewayClassGroupKind  = gwapiv1.SchemeGroupVersion.WithKind("GatewayClass").GroupKind()
+	GatewayGroupKind       = gwapiv1.SchemeGroupVersion.WithKind("Gateway").GroupKind()
+	ListenerGroupKind      = gwapiv1.SchemeGroupVersion.WithKind("Listener").GroupKind()
+	HTTPRouteGroupKind     = gwapiv1.SchemeGroupVersion.WithKind("HTTPRoute").GroupKind()
+	HTTPRouteRuleGroupKind = gwapiv1.SchemeGroupVersion.WithKind("HTTPRouteRule").GroupKind()
+	GRPCRouteGroupKind     = gwapiv1.SchemeGroupVersion.WithKind("GRPCRoute").GroupKind()
+	GRPCRouteRuleGroupKind = gwapiv1.SchemeGroupVersion.WithKind("GRPCRouteRule").GroupKind()
+	TCPRouteGroupKind      = gwapiv1alpha2.SchemeGroupVersion.WithKind("TCPRoute").GroupKind()
+	TCPRouteRuleGroupKind  = gwapiv1alpha2.SchemeGroupVersion.WithKind("TCPRouteRule").GroupKind()
+	TLSRouteGroupKind      = gwapiv1alpha2.SchemeGroupVersion.WithKind("TLSRoute").GroupKind()
+	TLSRouteRuleGroupKind  = gwapiv1alpha2.SchemeGroupVersion.WithKind("TLSRouteRule").GroupKind()
+	UDPRouteGroupKind      = gwapiv1alpha2.SchemeGroupVersion.WithKind("UDPRoute").GroupKind()
+	UDPRouteRuleGroupKind  = gwapiv1alpha2.SchemeGroupVersion.WithKind("UDPRouteRule").GroupKind()
 )
 
 const nameSectionNameURLSeparator = '#'

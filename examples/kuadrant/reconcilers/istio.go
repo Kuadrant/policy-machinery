@@ -294,10 +294,10 @@ func hostSubsetOf(superset gwapiv1.Hostname) func(gwapiv1.Hostname, int) bool {
 }
 
 func LinkGatewayToIstioAuthorizationPolicyFunc(objs controller.Store) machinery.LinkFunc {
-	gateways := lo.Map(objs.FilterByGroupKind(controller.GatewayKind), controller.ObjectAs[*gwapiv1.Gateway])
+	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), controller.ObjectAs[*gwapiv1.Gateway])
 
 	return machinery.LinkFunc{
-		From: controller.GatewayKind,
+		From: machinery.GatewayGroupKind,
 		To:   IstioAuthorizationPolicyKind,
 		Func: func(child machinery.Object) []machinery.Object {
 			o := child.(*controller.RuntimeObject)
@@ -307,7 +307,7 @@ func LinkGatewayToIstioAuthorizationPolicyFunc(objs controller.Store) machinery.
 				refs = append(refs, ref)
 			}
 			refs = lo.Filter(refs, func(ref *istiov1beta1.PolicyTargetReference, _ int) bool {
-				return ref.Group == gwapiv1.GroupName && ref.Kind == controller.GatewayKind.Kind
+				return ref.Group == gwapiv1.GroupName && ref.Kind == machinery.GatewayGroupKind.Kind
 			})
 			if len(refs) == 0 {
 				return nil

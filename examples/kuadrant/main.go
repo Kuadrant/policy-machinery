@@ -35,18 +35,18 @@ import (
 const (
 	// reconciliation modes
 	defaultReconciliationMode = stateReconciliationMode
-	deltaReconciliationMode = "delta"
-	stateReconciliationMode = "state"
+	deltaReconciliationMode   = "delta"
+	stateReconciliationMode   = "state"
 )
 
 var (
 	scheme = runtime.NewScheme()
 
 	supportedReconciliationModes = []string{stateReconciliationMode, deltaReconciliationMode}
-	reconciliationMode = defaultReconciliationMode
+	reconciliationMode           = defaultReconciliationMode
 
 	supportedGatewayProviders = []string{reconcilers.EnvoyGatewayProviderName, reconcilers.IstioGatewayProviderName}
-	gatewayProviders []string
+	gatewayProviders          []string
 )
 
 func init() {
@@ -134,13 +134,13 @@ func main() {
 		controller.WithReconcile(buildReconciler(gatewayProviders, client)),
 	}
 
-  // gateway provider specific controller options
+	// gateway provider specific controller options
 	controllerOpts = append(controllerOpts, controllerOptionsFor(gatewayProviders)...)
 
 	// managed controller
 	if reconciliationMode == stateReconciliationMode {
 		manager, err := ctrlruntime.NewManager(config, ctrlruntime.Options{
-			Logger: 							  logger,
+			Logger:                 logger,
 			Scheme:                 scheme,
 			Metrics:                ctrlruntimemetrics.Options{BindAddress: ":8080"},
 			WebhookServer:          ctrlruntimewebhook.NewServer(ctrlruntimewebhook.Options{Port: 9443}),
@@ -204,10 +204,10 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 	effectivePolicyReconciler := &reconcilers.EffectivePoliciesReconciler{Client: client}
 
 	commonAuthPolicyResourceEventMatchers := []controller.ResourceEventMatcher{
-		{Kind: ptr.To(controller.GatewayClassKind)},
-		{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.CreateEvent)},
-		{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.UpdateEvent)},
-		{Kind: ptr.To(controller.HTTPRouteKind)},
+		{Kind: ptr.To(machinery.GatewayClassGroupKind)},
+		{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.CreateEvent)},
+		{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.UpdateEvent)},
+		{Kind: ptr.To(machinery.HTTPRouteGroupKind)},
 		{Kind: ptr.To(kuadrantv1beta3.AuthPolicyKind)},
 	}
 
@@ -222,7 +222,7 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscription{
 				ReconcileFunc: envoyGatewayProvider.DeleteSecurityPolicy,
 				Events: []controller.ResourceEventMatcher{
-					{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.DeleteEvent)},
+					{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.DeleteEvent)},
 				},
 			}).Reconcile)
 		case reconcilers.IstioGatewayProviderName:
@@ -234,7 +234,7 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscription{
 				ReconcileFunc: istioGatewayProvider.DeleteAuthorizationPolicy,
 				Events: []controller.ResourceEventMatcher{
-					{Kind: ptr.To(controller.GatewayKind), EventType: ptr.To(controller.DeleteEvent)},
+					{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.DeleteEvent)},
 				},
 			}).Reconcile)
 		}

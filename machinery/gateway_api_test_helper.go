@@ -174,7 +174,7 @@ func BuildBackendRef(f ...func(*gwapiv1.BackendObjectReference)) gwapiv1.Backend
 func BuildTCPRoute(f ...func(route *gwapiv1alpha2.TCPRoute)) *gwapiv1alpha2.TCPRoute {
 	r := &gwapiv1alpha2.TCPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: gwapiv1.GroupVersion.String(),
+			APIVersion: gwapiv1alpha2.GroupVersion.String(),
 			Kind:       "TCPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -206,7 +206,7 @@ func BuildTCPRoute(f ...func(route *gwapiv1alpha2.TCPRoute)) *gwapiv1alpha2.TCPR
 func BuildTLSRoute(f ...func(route *gwapiv1alpha2.TLSRoute)) *gwapiv1alpha2.TLSRoute {
 	r := &gwapiv1alpha2.TLSRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: gwapiv1.GroupVersion.String(),
+			APIVersion: gwapiv1alpha2.GroupVersion.String(),
 			Kind:       "TLSRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{
@@ -238,7 +238,7 @@ func BuildTLSRoute(f ...func(route *gwapiv1alpha2.TLSRoute)) *gwapiv1alpha2.TLSR
 func BuildUDPRoute(f ...func(route *gwapiv1alpha2.UDPRoute)) *gwapiv1alpha2.UDPRoute {
 	r := &gwapiv1alpha2.UDPRoute{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: gwapiv1.GroupVersion.String(),
+			APIVersion: gwapiv1alpha2.GroupVersion.String(),
 			Kind:       "UDPRoute",
 		},
 		ObjectMeta: metav1.ObjectMeta{

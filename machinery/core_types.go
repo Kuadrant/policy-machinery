@@ -7,8 +7,8 @@ import (
 )
 
 var (
-	ServiceGroupKind     = schema.GroupKind{Kind: "Service"}
-	ServicePortGroupKind = schema.GroupKind{Kind: "ServicePort"}
+	ServiceGroupKind     = core.SchemeGroupVersion.WithKind("Service").GroupKind()
+	ServicePortGroupKind = core.SchemeGroupVersion.WithKind("ServicePort").GroupKind()
 )
 
 // These are wrappers for Core API types so instances can be used as targetables in the topology.

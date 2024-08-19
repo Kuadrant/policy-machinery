@@ -45,7 +45,7 @@ func init() {
 		myObjects := objs.FilterByGroupKind(schema.GroupKind{Group: "test/v1", Kind: "MyObject"})
 		return machinery.LinkFunc{
 			From: schema.GroupKind{Group: "test/v1", Kind: "MyObject"},
-			To:   GatewayKind,
+			To:   machinery.GatewayGroupKind,
 			Func: func(_ machinery.Object) []machinery.Object { return []machinery.Object{&RuntimeObject{myObjects[0]}} },
 		}
 	}
