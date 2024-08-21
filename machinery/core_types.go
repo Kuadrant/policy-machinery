@@ -7,6 +7,7 @@ import (
 )
 
 var (
+	NamespaceGroupKind   = core.SchemeGroupVersion.WithKind("Namespace").GroupKind()
 	ServiceGroupKind     = core.SchemeGroupVersion.WithKind("Service").GroupKind()
 	ServicePortGroupKind = core.SchemeGroupVersion.WithKind("ServicePort").GroupKind()
 )
