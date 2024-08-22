@@ -3,11 +3,32 @@ package machinery
 import (
 	"fmt"
 
-	core "k8s.io/api/core/v1"
+	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gwapiv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
+	gwapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
+)
+
+var (
+	GatewayClassGroupKind     = gwapiv1.SchemeGroupVersion.WithKind("GatewayClass").GroupKind()
+	GatewayGroupKind          = gwapiv1.SchemeGroupVersion.WithKind("Gateway").GroupKind()
+	ListenerGroupKind         = gwapiv1.SchemeGroupVersion.WithKind("Listener").GroupKind()
+	HTTPRouteGroupKind        = gwapiv1.SchemeGroupVersion.WithKind("HTTPRoute").GroupKind()
+	HTTPRouteRuleGroupKind    = gwapiv1.SchemeGroupVersion.WithKind("HTTPRouteRule").GroupKind()
+	GRPCRouteGroupKind        = gwapiv1.SchemeGroupVersion.WithKind("GRPCRoute").GroupKind()
+	GRPCRouteRuleGroupKind    = gwapiv1.SchemeGroupVersion.WithKind("GRPCRouteRule").GroupKind()
+	ReferenceGrantGroupKind   = gwapiv1beta1.SchemeGroupVersion.WithKind("ReferenceGrant").GroupKind()
+	BackendTLSPolicyGroupKind = gwapiv1alpha3.SchemeGroupVersion.WithKind("BackendTLSPolicy").GroupKind()
+	BackendLBPolicyGroupKind  = gwapiv1alpha2.SchemeGroupVersion.WithKind("BackendLBPolicy").GroupKind()
+	TCPRouteGroupKind         = gwapiv1alpha2.SchemeGroupVersion.WithKind("TCPRoute").GroupKind()
+	TCPRouteRuleGroupKind     = gwapiv1alpha2.SchemeGroupVersion.WithKind("TCPRouteRule").GroupKind()
+	TLSRouteGroupKind         = gwapiv1alpha2.SchemeGroupVersion.WithKind("TLSRoute").GroupKind()
+	TLSRouteRuleGroupKind     = gwapiv1alpha2.SchemeGroupVersion.WithKind("TLSRouteRule").GroupKind()
+	UDPRouteGroupKind         = gwapiv1alpha2.SchemeGroupVersion.WithKind("UDPRoute").GroupKind()
+	UDPRouteRuleGroupKind     = gwapiv1alpha2.SchemeGroupVersion.WithKind("UDPRouteRule").GroupKind()
 )
 
 const nameSectionNameURLSeparator = '#'
@@ -156,61 +177,243 @@ func (r *HTTPRouteRule) Policies() []Policy {
 	return r.attachedPolicies
 }
 
-type Service struct {
-	*core.Service
+type GRPCRoute struct {
+	*gwapiv1.GRPCRoute
 
 	attachedPolicies []Policy
 }
 
-var _ Targetable = &Service{}
+var _ Targetable = &GRPCRoute{}
 
-func (s *Service) GetURL() string {
-	return UrlFromObject(s)
+func (r *GRPCRoute) GetURL() string {
+	return UrlFromObject(r)
+}
+func (r *GRPCRoute) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
 }
 
-func (s *Service) SetPolicies(policies []Policy) {
-	s.attachedPolicies = policies
+func (r *GRPCRoute) Policies() []Policy {
+	return r.attachedPolicies
 }
 
-func (s *Service) Policies() []Policy {
-	return s.attachedPolicies
-}
+type GRPCRouteRule struct {
+	*gwapiv1.GRPCRouteRule
 
-type ServicePort struct {
-	*core.ServicePort
-
-	Service          *Service
+	GRPCRoute        *GRPCRoute
+	Name             gwapiv1.SectionName // TODO: Use the `name` field of the GRPCRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
 	attachedPolicies []Policy
 }
 
-var _ Targetable = &ServicePort{}
+var _ Targetable = &GRPCRouteRule{}
 
-func (p *ServicePort) GroupVersionKind() schema.GroupVersionKind {
+func (r *GRPCRouteRule) GroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
-		Kind: "ServicePort",
+		Group:   gwapiv1.GroupName,
+		Version: gwapiv1.GroupVersion.Version,
+		Kind:    "GRPCRouteRule",
 	}
 }
 
-func (p *ServicePort) SetGroupVersionKind(schema.GroupVersionKind) {}
+func (r *GRPCRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
 
-func (p *ServicePort) GetURL() string {
-	return namespacedSectionName(UrlFromObject(p.Service), gwapiv1.SectionName(p.Name))
+func (r *GRPCRouteRule) GetURL() string {
+	return namespacedSectionName(UrlFromObject(r.GRPCRoute), r.Name)
 }
 
-func (p *ServicePort) GetNamespace() string {
-	return p.Service.GetNamespace()
+func (r *GRPCRouteRule) GetNamespace() string {
+	return r.GRPCRoute.GetNamespace()
 }
 
-func (p *ServicePort) GetName() string {
-	return namespacedSectionName(p.Service.Name, gwapiv1.SectionName(p.Name))
+func (r *GRPCRouteRule) GetName() string {
+	return namespacedSectionName(r.GRPCRoute.Name, r.Name)
 }
 
-func (p *ServicePort) SetPolicies(policies []Policy) {
-	p.attachedPolicies = policies
+func (r *GRPCRouteRule) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
 }
 
-func (p *ServicePort) Policies() []Policy {
-	return p.attachedPolicies
+func (r *GRPCRouteRule) Policies() []Policy {
+	return r.attachedPolicies
+}
+
+type TCPRoute struct {
+	*gwapiv1alpha2.TCPRoute
+
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &TCPRoute{}
+
+func (r *TCPRoute) GetURL() string {
+	return UrlFromObject(r)
+}
+
+func (r *TCPRoute) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *TCPRoute) Policies() []Policy {
+	return r.attachedPolicies
+}
+
+type TCPRouteRule struct {
+	*gwapiv1alpha2.TCPRouteRule
+
+	TCPRoute         *TCPRoute
+	Name             gwapiv1.SectionName // TODO: Use the `name` field of the TCPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &TCPRouteRule{}
+
+func (r *TCPRouteRule) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gwapiv1alpha2.GroupName,
+		Version: gwapiv1alpha2.GroupVersion.Version,
+		Kind:    "TCPRouteRule",
+	}
+}
+
+func (r *TCPRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (r *TCPRouteRule) GetURL() string {
+	return namespacedSectionName(UrlFromObject(r.TCPRoute), r.Name)
+}
+
+func (r *TCPRouteRule) GetNamespace() string {
+	return r.TCPRoute.GetNamespace()
+}
+
+func (r *TCPRouteRule) GetName() string {
+	return namespacedSectionName(r.TCPRoute.Name, r.Name)
+}
+
+func (r *TCPRouteRule) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *TCPRouteRule) Policies() []Policy {
+	return r.attachedPolicies
+}
+
+type TLSRoute struct {
+	*gwapiv1alpha2.TLSRoute
+
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &TLSRoute{}
+
+func (r *TLSRoute) GetURL() string {
+	return UrlFromObject(r)
+}
+
+func (r *TLSRoute) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *TLSRoute) Policies() []Policy {
+	return r.attachedPolicies
+}
+
+type TLSRouteRule struct {
+	*gwapiv1alpha2.TLSRouteRule
+
+	TLSRoute         *TLSRoute
+	Name             gwapiv1.SectionName // TODO: Use the `name` field of the TLSRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &TLSRouteRule{}
+
+func (r *TLSRouteRule) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gwapiv1alpha2.GroupName,
+		Version: gwapiv1alpha2.GroupVersion.Version,
+		Kind:    "TLSRouteRule",
+	}
+}
+
+func (r *TLSRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (r *TLSRouteRule) GetURL() string {
+	return namespacedSectionName(UrlFromObject(r.TLSRoute), r.Name)
+}
+
+func (r *TLSRouteRule) GetNamespace() string {
+	return r.TLSRoute.GetNamespace()
+}
+
+func (r *TLSRouteRule) GetName() string {
+	return namespacedSectionName(r.TLSRoute.Name, r.Name)
+}
+
+func (r *TLSRouteRule) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *TLSRouteRule) Policies() []Policy {
+	return r.attachedPolicies
+}
+
+type UDPRoute struct {
+	*gwapiv1alpha2.UDPRoute
+
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &UDPRoute{}
+
+func (r *UDPRoute) GetURL() string {
+	return UrlFromObject(r)
+}
+
+func (r *UDPRoute) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *UDPRoute) Policies() []Policy {
+	return r.attachedPolicies
+}
+
+type UDPRouteRule struct {
+	*gwapiv1alpha2.UDPRouteRule
+
+	UDPRoute         *UDPRoute
+	Name             gwapiv1.SectionName // TODO: Use the `name` field of the UDPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	attachedPolicies []Policy
+}
+
+var _ Targetable = &UDPRouteRule{}
+
+func (r *UDPRouteRule) GroupVersionKind() schema.GroupVersionKind {
+	return schema.GroupVersionKind{
+		Group:   gwapiv1alpha2.GroupName,
+		Version: gwapiv1alpha2.GroupVersion.Version,
+		Kind:    "UDPRouteRule",
+	}
+}
+
+func (r *UDPRouteRule) SetGroupVersionKind(schema.GroupVersionKind) {}
+
+func (r *UDPRouteRule) GetURL() string {
+	return namespacedSectionName(UrlFromObject(r.UDPRoute), r.Name)
+}
+
+func (r *UDPRouteRule) GetNamespace() string {
+	return r.UDPRoute.GetNamespace()
+}
+
+func (r *UDPRouteRule) GetName() string {
+	return namespacedSectionName(r.UDPRoute.Name, r.Name)
+}
+
+func (r *UDPRouteRule) SetPolicies(policies []Policy) {
+	r.attachedPolicies = policies
+}
+
+func (r *UDPRouteRule) Policies() []Policy {
+	return r.attachedPolicies
 }
 
 // These are Gateway API target reference types that implement the PolicyTargetReference interface, so policies'
@@ -313,6 +516,82 @@ func (t LocalPolicyTargetReferenceWithSectionName) GetName() string {
 		return string(t.LocalPolicyTargetReference.Name)
 	}
 	return namespacedSectionName(string(t.LocalPolicyTargetReference.Name), *t.SectionName)
+}
+
+// These are wrappers for Gateway API types so instances can be used as objects in the topology.
+
+type ReferenceGrant struct {
+	*gwapiv1beta1.ReferenceGrant
+}
+
+var _ Object = &ReferenceGrant{}
+
+func (o *ReferenceGrant) GetURL() string {
+	return UrlFromObject(o)
+}
+
+// These are wrappers for Gateway API types so instances can be used as policies in the topology.
+
+type BackendTLSPolicy struct {
+	*gwapiv1alpha3.BackendTLSPolicy
+}
+
+var _ Policy = &BackendTLSPolicy{}
+
+func (p *BackendTLSPolicy) GetURL() string {
+	return UrlFromObject(p)
+}
+
+func (p *BackendTLSPolicy) GetTargetRefs() []PolicyTargetReference {
+	return lo.Map(p.Spec.TargetRefs, func(item gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName, _ int) PolicyTargetReference {
+		return LocalPolicyTargetReferenceWithSectionName{
+			LocalPolicyTargetReferenceWithSectionName: item,
+			PolicyNamespace: p.Namespace,
+		}
+	})
+}
+
+func (p *BackendTLSPolicy) GetMergeStrategy() MergeStrategy {
+	return DefaultMergeStrategy
+}
+
+func (p *BackendTLSPolicy) Merge(other Policy) Policy {
+	source, ok := other.(*BackendTLSPolicy)
+	if !ok {
+		return p
+	}
+	return source.GetMergeStrategy()(source, p)
+}
+
+type BackendLBPolicy struct {
+	*gwapiv1alpha2.BackendLBPolicy
+}
+
+var _ Policy = &BackendLBPolicy{}
+
+func (p *BackendLBPolicy) GetURL() string {
+	return UrlFromObject(p)
+}
+
+func (p *BackendLBPolicy) GetTargetRefs() []PolicyTargetReference {
+	return lo.Map(p.Spec.TargetRefs, func(item gwapiv1alpha2.LocalPolicyTargetReference, _ int) PolicyTargetReference {
+		return LocalPolicyTargetReference{
+			LocalPolicyTargetReference: item,
+			PolicyNamespace:            p.Namespace,
+		}
+	})
+}
+
+func (p *BackendLBPolicy) GetMergeStrategy() MergeStrategy {
+	return DefaultMergeStrategy
+}
+
+func (p *BackendLBPolicy) Merge(other Policy) Policy {
+	source, ok := other.(*BackendLBPolicy)
+	if !ok {
+		return p
+	}
+	return source.GetMergeStrategy()(source, p)
 }
 
 func namespacedSectionName(namespace string, sectionName gwapiv1.SectionName) string {

@@ -24,10 +24,10 @@ type gatewayAPITopologyBuilder struct {
 }
 
 func (t *gatewayAPITopologyBuilder) Build(objs Store) *machinery.Topology {
-	gatewayClasses := lo.Map(objs.FilterByGroupKind(GatewayClassKind), ObjectAs[*gwapiv1.GatewayClass])
-	gateways := lo.Map(objs.FilterByGroupKind(GatewayKind), ObjectAs[*gwapiv1.Gateway])
-	httpRoutes := lo.Map(objs.FilterByGroupKind(HTTPRouteKind), ObjectAs[*gwapiv1.HTTPRoute])
-	services := lo.Map(objs.FilterByGroupKind(ServiceKind), ObjectAs[*core.Service])
+	gatewayClasses := lo.Map(objs.FilterByGroupKind(machinery.GatewayClassGroupKind), ObjectAs[*gwapiv1.GatewayClass])
+	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), ObjectAs[*gwapiv1.Gateway])
+	httpRoutes := lo.Map(objs.FilterByGroupKind(machinery.HTTPRouteGroupKind), ObjectAs[*gwapiv1.HTTPRoute])
+	services := lo.Map(objs.FilterByGroupKind(machinery.ServiceGroupKind), ObjectAs[*core.Service])
 
 	linkFuncs := lo.Map(t.objectLinks, func(f LinkFunc, _ int) machinery.LinkFunc {
 		return f(objs)

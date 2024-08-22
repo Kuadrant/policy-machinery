@@ -88,16 +88,8 @@ func BuildHTTPRoute(f ...func(*gwapiv1.HTTPRoute)) *gwapiv1.HTTPRoute {
 }
 
 func BuildHTTPBackendRef(f ...func(*gwapiv1.BackendObjectReference)) gwapiv1.HTTPBackendRef {
-	bor := &gwapiv1.BackendObjectReference{
-		Name: "my-service",
-	}
-	for _, fn := range f {
-		fn(bor)
-	}
 	return gwapiv1.HTTPBackendRef{
-		BackendRef: gwapiv1.BackendRef{
-			BackendObjectReference: *bor,
-		},
+		BackendRef: BuildBackendRef(f...),
 	}
 }
 
@@ -129,53 +121,203 @@ func BuildService(f ...func(*core.Service)) *core.Service {
 	return s
 }
 
+func BuildGRPCRoute(f ...func(*gwapiv1.GRPCRoute)) *gwapiv1.GRPCRoute {
+	r := &gwapiv1.GRPCRoute{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: gwapiv1.GroupVersion.String(),
+			Kind:       "GRPCRoute",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-grpc-route",
+			Namespace: "my-namespace",
+		},
+		Spec: gwapiv1.GRPCRouteSpec{
+			CommonRouteSpec: gwapiv1.CommonRouteSpec{
+				ParentRefs: []gwapiv1.ParentReference{
+					{
+						Name: "my-gateway",
+					},
+				},
+			},
+			Rules: []gwapiv1.GRPCRouteRule{
+				{
+					BackendRefs: []gwapiv1.GRPCBackendRef{BuildGRPCBackendRef()},
+				},
+			},
+		},
+	}
+	for _, fn := range f {
+		fn(r)
+	}
+
+	return r
+}
+
+func BuildGRPCBackendRef(f ...func(*gwapiv1.BackendObjectReference)) gwapiv1.GRPCBackendRef {
+	return gwapiv1.GRPCBackendRef{
+		BackendRef: BuildBackendRef(f...),
+	}
+}
+
+func BuildBackendRef(f ...func(*gwapiv1.BackendObjectReference)) gwapiv1.BackendRef {
+	bor := &gwapiv1.BackendObjectReference{
+		Name: "my-service",
+	}
+	for _, fn := range f {
+		fn(bor)
+	}
+	return gwapiv1.BackendRef{
+		BackendObjectReference: *bor,
+	}
+}
+
+func BuildTCPRoute(f ...func(route *gwapiv1alpha2.TCPRoute)) *gwapiv1alpha2.TCPRoute {
+	r := &gwapiv1alpha2.TCPRoute{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: gwapiv1alpha2.GroupVersion.String(),
+			Kind:       "TCPRoute",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-tcp-route",
+			Namespace: "my-namespace",
+		},
+		Spec: gwapiv1alpha2.TCPRouteSpec{
+			CommonRouteSpec: gwapiv1.CommonRouteSpec{
+				ParentRefs: []gwapiv1.ParentReference{
+					{
+						Name: "my-gateway",
+					},
+				},
+			},
+			Rules: []gwapiv1alpha2.TCPRouteRule{
+				{
+					BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
+				},
+			},
+		},
+	}
+	for _, fn := range f {
+		fn(r)
+	}
+
+	return r
+}
+
+func BuildTLSRoute(f ...func(route *gwapiv1alpha2.TLSRoute)) *gwapiv1alpha2.TLSRoute {
+	r := &gwapiv1alpha2.TLSRoute{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: gwapiv1alpha2.GroupVersion.String(),
+			Kind:       "TLSRoute",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-tls-route",
+			Namespace: "my-namespace",
+		},
+		Spec: gwapiv1alpha2.TLSRouteSpec{
+			CommonRouteSpec: gwapiv1.CommonRouteSpec{
+				ParentRefs: []gwapiv1.ParentReference{
+					{
+						Name: "my-gateway",
+					},
+				},
+			},
+			Rules: []gwapiv1alpha2.TLSRouteRule{
+				{
+					BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
+				},
+			},
+		},
+	}
+	for _, fn := range f {
+		fn(r)
+	}
+
+	return r
+}
+
+func BuildUDPRoute(f ...func(route *gwapiv1alpha2.UDPRoute)) *gwapiv1alpha2.UDPRoute {
+	r := &gwapiv1alpha2.UDPRoute{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: gwapiv1alpha2.GroupVersion.String(),
+			Kind:       "UDPRoute",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "my-udp-route",
+			Namespace: "my-namespace",
+		},
+		Spec: gwapiv1alpha2.UDPRouteSpec{
+			CommonRouteSpec: gwapiv1.CommonRouteSpec{
+				ParentRefs: []gwapiv1.ParentReference{
+					{
+						Name: "my-gateway",
+					},
+				},
+			},
+			Rules: []gwapiv1alpha2.UDPRouteRule{
+				{
+					BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
+				},
+			},
+		},
+	}
+	for _, fn := range f {
+		fn(r)
+	}
+
+	return r
+}
+
 type GatewayAPIResources struct {
 	GatewayClasses []*gwapiv1.GatewayClass
 	Gateways       []*gwapiv1.Gateway
 	HTTPRoutes     []*gwapiv1.HTTPRoute
+	GRPCRoutes     []*gwapiv1.GRPCRoute
+	TCPRoutes      []*gwapiv1alpha2.TCPRoute
+	TLSRoutes      []*gwapiv1alpha2.TLSRoute
+	UDPRoutes      []*gwapiv1alpha2.UDPRoute
 	Services       []*core.Service
 }
 
 // BuildComplexGatewayAPITopology returns a set of Gateway API resources organized :
 //
-//	                                            ┌────────────────┐                                                                        ┌────────────────┐
-//	                                            │ gatewayclass-1 │                                                                        │ gatewayclass-2 │
-//	                                            └────────────────┘                                                                        └────────────────┘
-//	                                                    ▲                                                                                         ▲
-//	                                                    │                                                                                         │
-//	                          ┌─────────────────────────┼──────────────────────────┐                                                 ┌────────────┴─────────────┐
-//	                          │                         │                          │                                                 │                          │
-//	          ┌───────────────┴───────────────┐ ┌───────┴────────┐ ┌───────────────┴───────────────┐                  ┌──────────────┴────────────────┐ ┌───────┴────────┐
-//	          │           gateway-1           │ │   gateway-2    │ │           gateway-3           │                  │           gateway-4           │ │   gateway-5    │
-//	          │                               │ │                │ │                               │                  │                               │ │                │
-//	          │ ┌────────────┐ ┌────────────┐ │ │ ┌────────────┐ │ │ ┌────────────┐ ┌────────────┐ │                  │ ┌────────────┐ ┌────────────┐ │ │ ┌────────────┐ │
-//	          │ │ listener-1 │ │ listener-2 │ │ │ │ listener-1 │ │ │ │ listener-1 │ │ listener-2 │ │                  │ │ listener-1 │ │ listener-2 │ │ │ │ listener-1 │ │
-//	          │ └────────────┘ └────────────┘ │ │ └────────────┘ │ │ └────────────┘ └────────────┘ │                  │ └────────────┘ └────────────┘ │ │ └────────────┘ │
-//	          │                        ▲      │ │      ▲         │ │                               │                  │                               │ │                │
-//	          └────────────────────────┬──────┘ └──────┬─────────┘ └───────────────────────────────┘                  └───────────────────────────────┘ └────────────────┘
-//	                      ▲            │               │     ▲                    ▲            ▲                          ▲           ▲                          ▲
-//	                      │            │               │     │                    │            │                          │           │                          │
-//	                      │            └───────┬───────┘     │                    │            └────────────┬─────────────┘           │                          │
-//	                      │                    │             │                    │                         │                         │                          │
-//	          ┌───────────┴───────────┐ ┌──────┴─────┐ ┌─────┴──────┐ ┌───────────┴───────────┐ ┌───────────┴───────────┐ ┌───────────┴───────────┐        ┌─────┴──────┐
-//	          │        route-1        │ │  route-2   │ │  route-3   │ │        route-4        │ │        route-5        │ │        route-6        │        │   route-7  │
-//	          │                       │ │            │ │            │ │                       │ │                       │ │                       │        │            │
-//	          │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ │ │ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │        │ ┌────────┐ │
-//	          │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ │ │ rule-1 │ │ │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ rule-2 │ │        │ │ rule-1 │ │
-//	          │ └────┬───┘ └────┬───┘ │ │ └────┬───┘ │ │ └───┬────┘ │ │ └─┬──────┘ └───┬────┘ │ │ └───┬────┘ └────┬───┘ │ │ └─┬────┬─┘ └────┬───┘ │        │ └────┬───┘ │
-//	          │      │          │     │ │      │     │ │     │      │ │   │            │      │ │     │           │     │ │   │    │        │     │        │      │     │
-//	          └──────┼──────────┼─────┘ └──────┼─────┘ └─────┼──────┘ └───┼────────────┼──────┘ └─────┼───────────┼─────┘ └───┼────┼────────┼─────┘        └──────┼─────┘
-//	                 │          │              │             │            │            │              │           │           │    │        │                     │
-//	                 │          │              └─────────────┤            │            │              └───────────┴───────────┘    │        │                     │
-//	                 ▼          ▼                            │            │            │                          ▼                ▼        │                     ▼
-//	┌───────────────────────┐ ┌────────────┐          ┌──────┴────────────┴───┐  ┌─────┴──────┐             ┌────────────┐        ┌─────────┴──┐           ┌────────────┐
-//	│                       │ │            │          │      ▼            ▼   │  │     ▼      │             │            │        │         ▼  │           │            │
-//	│ ┌────────┐ ┌────────┐ │ │ ┌────────┐ │          │ ┌────────┐ ┌────────┐ │  │ ┌────────┐ │             │ ┌────────┐ │        │ ┌────────┐ │           │ ┌────────┐ │
-//	│ │ port-1 │ │ port-2 │ │ │ │ port-1 │ │          │ │ port-1 │ │ port-2 │ │  │ │ port-1 │ │             │ │ port-1 │ │        │ │ port-1 │ │           │ │ port-1 │ │
-//	│ └────────┘ └────────┘ │ │ └────────┘ │          │ └────────┘ └────────┘ │  │ └────────┘ │             │ └────────┘ │        │ └────────┘ │           │ └────────┘ │
-//	│                       │ │            │          │                       │  │            │             │            │        │            │           │            │
-//	│       service-1       │ │  service-2 │          │       service-3       │  │  service-4 │             │  service-5 │        │  service-6 │           │  service-7 │
-//	└───────────────────────┘ └────────────┘          └───────────────────────┘  └────────────┘             └────────────┘        └────────────┘           └────────────┘
+//	                                          ┌────────────────┐                                                                        ┌────────────────┐
+//	                                          │ gatewayclass-1 │                                                                        │ gatewayclass-2 │
+//	                                          └────────────────┘                                                                        └────────────────┘
+//	                                                  ▲                                                                                         ▲
+//	                                                  │                                                                                         │
+//	                        ┌─────────────────────────┼──────────────────────────┐                                                 ┌────────────┴─────────────┐
+//	                        │                         │                          │                                                 │                          │
+//	        ┌───────────────┴───────────────┐ ┌───────┴────────┐ ┌───────────────┴───────────────┐                  ┌──────────────┴────────────────┐ ┌───────┴────────┐
+//	        │           gateway-1           │ │   gateway-2    │ │           gateway-3           │                  │           gateway-4           │ │   gateway-5    │
+//	        │                               │ │                │ │                               │                  │                               │ │                │
+//	        │ ┌────────────┐ ┌────────────┐ │ │ ┌────────────┐ │ │ ┌────────────┐ ┌────────────┐ │                  │ ┌────────────┐ ┌────────────┐ │ │ ┌────────────┐ │
+//	        │ │ listener-1 │ │ listener-2 │ │ │ │ listener-1 │ │ │ │ listener-1 │ │ listener-2 │ │                  │ │ listener-1 │ │ listener-2 │ │ │ │ listener-1 │ │
+//	        │ └────────────┘ └────────────┘ │ │ └────────────┘ │ │ └────────────┘ └────────────┘ │                  │ └────────────┘ └────────────┘ │ │ └────────────┘ │
+//	        │                        ▲      │ │      ▲         │ │                               │                  │                               │ │                │
+//	        └────────────────────────┬──────┘ └──────┬─────────┘ └───────────────────────────────┘                  └───────────────────────────────┘ └────────────────┘
+//	                    ▲            │               │       ▲                    ▲            ▲                            ▲           ▲                        ▲
+//	                    │            │               │       │                    │            │                            │           │                        │
+//	                    │            └───────┬───────┘       │                    │            └──────────────┬─────────────┘           │                        │
+//	                    │                    │               │                    │                           │                         │                        │
+//	        ┌───────────┴───────────┐ ┌──────┴───────┐ ┌─────┴────────┐ ┌─────────┴─────────────┐ ┌───────────┴───────────┐ ┌───────────┴───────────┐      ┌─────┴────────┐
+//	        │     http-route-1      │ │ http-route-2 │ │ http-route-3 │ │     udp-route-1       │ │      tls-route-1      │ │     tcp-route-1       │      │ grpc-route-1 │
+//	        │                       │ │              │ │              │ │                       │ │                       │ │                       │      │              │
+//	        │ ┌────────┐ ┌────────┐ │ │ ┌────────┐   │ │  ┌────────┐  │ │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │ │ ┌────────┐ ┌────────┐ │      │ ┌────────┐   │
+//	        │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │   │ │  │ rule-1 │  │ │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ rule-2 │ │ │ │ rule-1 │ │ rule-2 │ │      │ │ rule-1 │   │
+//	        │ └────┬───┘ └─────┬──┘ │ │ └────┬───┘   │ │  └───┬────┘  │ │ └─┬──────┘ └───┬────┘ │ │ └───┬────┘ └────┬───┘ │ │ └─┬────┬─┘ └────┬───┘ │      │ └────┬───┘   │
+//	        │      │           │    │ │      │       │ │      │       │ │   │            │      │ │     │           │     │ │   │    │        │     │      │      │       │
+//	        └──────┼───────────┼────┘ └──────┼───────┘ └──────┼───────┘ └───┼────────────┼──────┘ └─────┼───────────┼─────┘ └───┼────┼────────┼─────┘      └──────┼───────┘
+//	               │           │             │                │             │            │              │           │           │    │        │                   │
+//	               │           │             └────────────────┤             │            │              └───────────┴───────────┘    │        │                   │
+//	               ▼           ▼                              │             │            │                          ▼                ▼        │                   ▼
+//	┌───────────────────────┐ ┌────────────┐          ┌───────┴─────────────┴───┐  ┌─────┴──────┐             ┌────────────┐        ┌─────────┴──┐          ┌────────────┐
+//	│                       │ │            │          │       ▼             ▼   │  │     ▼      │             │            │        │         ▼  │          │            │
+//	│ ┌────────┐ ┌────────┐ │ │ ┌────────┐ │          │   ┌────────┐ ┌────────┐ │  │ ┌────────┐ │             │ ┌────────┐ │        │ ┌────────┐ │          │ ┌────────┐ │
+//	│ │ port-1 │ │ port-2 │ │ │ │ port-1 │ │          │   │ port-1 │ │ port-2 │ │  │ │ port-1 │ │             │ │ port-1 │ │        │ │ port-1 │ │          │ │ port-1 │ │
+//	│ └────────┘ └────────┘ │ │ └────────┘ │          │   └────────┘ └────────┘ │  │ └────────┘ │             │ └────────┘ │        │ └────────┘ │          │ └────────┘ │
+//	│                       │ │            │          │                         │  │            │             │            │        │            │          │            │
+//	│       service-1       │ │  service-2 │          │         service-3       │  │  service-4 │             │  service-5 │        │  service-6 │          │  service-7 │
+//	└───────────────────────┘ └────────────┘          └─────────────────────────┘  └────────────┘             └────────────┘        └────────────┘          └────────────┘
 func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) GatewayAPIResources {
 	t := GatewayAPIResources{
 		GatewayClasses: []*gwapiv1.GatewayClass{
@@ -226,7 +368,7 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 		},
 		HTTPRoutes: []*gwapiv1.HTTPRoute{
 			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-1"
+				r.Name = "http-route-1"
 				r.Spec.ParentRefs[0].Name = "gateway-1"
 				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
 					{ // rule-1
@@ -242,7 +384,7 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 				}
 			}),
 			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-2"
+				r.Name = "http-route-2"
 				r.Spec.ParentRefs = []gwapiv1.ParentReference{
 					{
 						Name:        "gateway-1",
@@ -259,75 +401,11 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 				})
 			}),
 			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-3"
+				r.Name = "http-route-3"
 				r.Spec.ParentRefs[0].Name = "gateway-2"
 				r.Spec.Rules[0].BackendRefs[0] = BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
 					backendRef.Name = "service-3"
 					backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
-				})
-			}),
-			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-4"
-				r.Spec.ParentRefs[0].Name = "gateway-3"
-				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
-					{ // rule-1
-						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-							backendRef.Name = "service-3"
-							backendRef.Port = ptr.To(gwapiv1.PortNumber(443)) // port-2
-						})},
-					},
-					{ // rule-2
-						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-							backendRef.Name = "service-4"
-							backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
-						})},
-					},
-				}
-			}),
-			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-5"
-				r.Spec.ParentRefs[0].Name = "gateway-3"
-				r.Spec.ParentRefs = append(r.Spec.ParentRefs, gwapiv1.ParentReference{Name: "gateway-4"})
-				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
-					{ // rule-1
-						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-							backendRef.Name = "service-5"
-						})},
-					},
-					{ // rule-2
-						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-							backendRef.Name = "service-5"
-						})},
-					},
-				}
-			}),
-			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-6"
-				r.Spec.ParentRefs[0].Name = "gateway-4"
-				r.Spec.Rules = []gwapiv1.HTTPRouteRule{
-					{ // rule-1
-						BackendRefs: []gwapiv1.HTTPBackendRef{
-							BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-5"
-							}),
-							BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-								backendRef.Name = "service-6"
-							}),
-						},
-					},
-					{ // rule-2
-						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-							backendRef.Name = "service-6"
-							backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
-						})},
-					},
-				}
-			}),
-			BuildHTTPRoute(func(r *gwapiv1.HTTPRoute) {
-				r.Name = "route-7"
-				r.Spec.ParentRefs[0].Name = "gateway-5"
-				r.Spec.Rules[0].BackendRefs[0] = BuildHTTPBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
-					backendRef.Name = "service-7"
 				})
 			}),
 		},
@@ -367,6 +445,78 @@ func BuildComplexGatewayAPITopology(funcs ...func(*GatewayAPIResources)) Gateway
 			BuildService(func(s *core.Service) {
 				s.Name = "service-7"
 				s.Spec.Ports[0].Name = "port-1"
+			}),
+		},
+		GRPCRoutes: []*gwapiv1.GRPCRoute{
+			BuildGRPCRoute(func(r *gwapiv1.GRPCRoute) {
+				r.Name = "grpc-route-1"
+				r.Spec.ParentRefs[0].Name = "gateway-5"
+				r.Spec.Rules[0].BackendRefs[0] = BuildGRPCBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+					backendRef.Name = "service-7"
+				})
+			}),
+		},
+		TCPRoutes: []*gwapiv1alpha2.TCPRoute{
+			BuildTCPRoute(func(r *gwapiv1alpha2.TCPRoute) {
+				r.Name = "tcp-route-1"
+				r.Spec.ParentRefs[0].Name = "gateway-4"
+				r.Spec.Rules = []gwapiv1alpha2.TCPRouteRule{
+					{ // rule-1
+						BackendRefs: []gwapiv1.BackendRef{
+							BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+								backendRef.Name = "service-5"
+							}),
+							BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+								backendRef.Name = "service-6"
+							}),
+						},
+					},
+					{ // rule-2
+						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-6"
+							backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
+						})},
+					},
+				}
+			}),
+		},
+		TLSRoutes: []*gwapiv1alpha2.TLSRoute{
+			BuildTLSRoute(func(r *gwapiv1alpha2.TLSRoute) {
+				r.Name = "tls-route-1"
+				r.Spec.ParentRefs[0].Name = "gateway-3"
+				r.Spec.ParentRefs = append(r.Spec.ParentRefs, gwapiv1.ParentReference{Name: "gateway-4"})
+				r.Spec.Rules = []gwapiv1alpha2.TLSRouteRule{
+					{ // rule-1
+						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-5"
+						})},
+					},
+					{ // rule-2
+						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-5"
+						})},
+					},
+				}
+			}),
+		},
+		UDPRoutes: []*gwapiv1alpha2.UDPRoute{
+			BuildUDPRoute(func(r *gwapiv1alpha2.UDPRoute) {
+				r.Name = "udp-route-1"
+				r.Spec.ParentRefs[0].Name = "gateway-3"
+				r.Spec.Rules = []gwapiv1alpha2.UDPRouteRule{
+					{ // rule-1
+						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-3"
+							backendRef.Port = ptr.To(gwapiv1.PortNumber(443)) // port-2
+						})},
+					},
+					{ // rule-2
+						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef(func(backendRef *gwapiv1.BackendObjectReference) {
+							backendRef.Name = "service-4"
+							backendRef.Port = ptr.To(gwapiv1.PortNumber(80)) // port-1
+						})},
+					},
+				}
 			}),
 		},
 	}
