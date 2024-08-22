@@ -47,7 +47,7 @@ func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Contex
 				logger.Error(fmt.Errorf("unexpected topology path length to build Istio AuthorizationPolicy"), "path", lo.Map(path, machinery.MapTargetableToURLFunc))
 				return false
 			}
-			return path[0].GetURL() == gateway.GetURL() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
+			return path[0].GetIdentity() == gateway.GetIdentity() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
 				gc, ok := parent.(*machinery.GatewayClass)
 				return ok && gc.Spec.ControllerName == "istio.io/gateway-controller"
 			})

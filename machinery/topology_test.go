@@ -44,8 +44,8 @@ func TestTopologyRoots(t *testing.T) {
 	}
 	rootURLs := lo.Map(roots, MapTargetableToURLFunc)
 	for _, apple := range apples {
-		if !lo.Contains(rootURLs, apple.GetURL()) {
-			t.Errorf("expected root %s not found", apple.GetURL())
+		if !lo.Contains(rootURLs, apple.GetIdentity()) {
+			t.Errorf("expected root %s not found", apple.GetIdentity())
 		}
 	}
 }
@@ -76,11 +76,11 @@ func TestTopologyParents(t *testing.T) {
 		t.Errorf("expected %d parent, got %d", expected, len(parents))
 	}
 	parentURLs := lo.Map(parents, MapTargetableToURLFunc)
-	if !lo.Contains(parentURLs, apple1.GetURL()) {
-		t.Errorf("expected parent %s not found", apple1.GetURL())
+	if !lo.Contains(parentURLs, apple1.GetIdentity()) {
+		t.Errorf("expected parent %s not found", apple1.GetIdentity())
 	}
-	if !lo.Contains(parentURLs, apple2.GetURL()) {
-		t.Errorf("expected parent %s not found", apple2.GetURL())
+	if !lo.Contains(parentURLs, apple2.GetIdentity()) {
+		t.Errorf("expected parent %s not found", apple2.GetIdentity())
 	}
 	// orange-2
 	parents = topology.Targetables().Parents(orange2)
@@ -88,8 +88,8 @@ func TestTopologyParents(t *testing.T) {
 		t.Errorf("expected %d parent, got %d", expected, len(parents))
 	}
 	parentURLs = lo.Map(parents, MapTargetableToURLFunc)
-	if !lo.Contains(parentURLs, apple2.GetURL()) {
-		t.Errorf("expected parent %s not found", apple2.GetURL())
+	if !lo.Contains(parentURLs, apple2.GetIdentity()) {
+		t.Errorf("expected parent %s not found", apple2.GetIdentity())
 	}
 }
 
@@ -119,8 +119,8 @@ func TestTopologyChildren(t *testing.T) {
 		t.Errorf("expected %d child, got %d", expected, len(children))
 	}
 	childURLs := lo.Map(children, MapTargetableToURLFunc)
-	if !lo.Contains(childURLs, orange1.GetURL()) {
-		t.Errorf("expected child %s not found", orange1.GetURL())
+	if !lo.Contains(childURLs, orange1.GetIdentity()) {
+		t.Errorf("expected child %s not found", orange1.GetIdentity())
 	}
 	// apple-2
 	children = topology.Targetables().Children(apple2)
@@ -128,11 +128,11 @@ func TestTopologyChildren(t *testing.T) {
 		t.Errorf("expected %d child, got %d", expected, len(children))
 	}
 	childURLs = lo.Map(children, MapTargetableToURLFunc)
-	if !lo.Contains(childURLs, orange1.GetURL()) {
-		t.Errorf("expected child %s not found", orange1.GetURL())
+	if !lo.Contains(childURLs, orange1.GetIdentity()) {
+		t.Errorf("expected child %s not found", orange1.GetIdentity())
 	}
-	if !lo.Contains(childURLs, orange2.GetURL()) {
-		t.Errorf("expected child %s not found", orange2.GetURL())
+	if !lo.Contains(childURLs, orange2.GetIdentity()) {
+		t.Errorf("expected child %s not found", orange2.GetIdentity())
 	}
 }
 

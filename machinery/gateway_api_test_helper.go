@@ -539,8 +539,8 @@ type TestPolicySpec struct {
 
 var _ Policy = &TestPolicy{}
 
-func (p *TestPolicy) GetURL() string {
-	return UrlFromObject(p)
+func (p *TestPolicy) GetIdentity() string {
+	return IdentityFromObject(p)
 }
 
 func (p *TestPolicy) GetTargetRefs() []PolicyTargetReference {

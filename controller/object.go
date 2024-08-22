@@ -32,8 +32,8 @@ func (o *RuntimeObject) GetName() string {
 	return o.Object.GetName()
 }
 
-func (o *RuntimeObject) GetURL() string {
-	return machinery.UrlFromObject(o)
+func (o *RuntimeObject) GetIdentity() string {
+	return machinery.IdentityFromObject(o)
 }
 
 // ObjectAs casts an Object generically into any kind

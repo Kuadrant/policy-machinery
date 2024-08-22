@@ -46,8 +46,8 @@ func (p *TLSPolicy) GetName() string {
 	return p.Name
 }
 
-func (p *TLSPolicy) GetURL() string {
-	return machinery.UrlFromObject(p)
+func (p *TLSPolicy) GetIdentity() string {
+	return machinery.IdentityFromObject(p)
 }
 
 func (p *TLSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {

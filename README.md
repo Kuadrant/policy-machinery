@@ -45,8 +45,8 @@ type MyPolicySpec struct {
   TargetRef gwapiv1alpha2.LocalPolicyTargetReference
 }
 
-func (p *MyPolicy) GetURL() string {
-	return machinery.UrlFromObject(p)
+func (p *MyPolicy) GetIdentity() string {
+	return machinery.IdentityFromObject(p)
 }
 
 func (p *MyPolicy) GetTargetRefs() []machinery.PolicyTargetReference {

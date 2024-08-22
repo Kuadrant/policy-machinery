@@ -56,8 +56,8 @@ func (p *RateLimitPolicy) GetName() string {
 	return p.Name
 }
 
-func (p *RateLimitPolicy) GetURL() string {
-	return machinery.UrlFromObject(p)
+func (p *RateLimitPolicy) GetIdentity() string {
+	return machinery.IdentityFromObject(p)
 }
 
 func (p *RateLimitPolicy) GetTargetRefs() []machinery.PolicyTargetReference {

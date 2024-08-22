@@ -44,7 +44,7 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ 
 				logger.Error(fmt.Errorf("unexpected topology path length to build Envoy SecurityPolicy"), "path", lo.Map(path, machinery.MapTargetableToURLFunc))
 				return false
 			}
-			return path[0].GetURL() == gateway.GetURL() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
+			return path[0].GetIdentity() == gateway.GetIdentity() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
 				gc, ok := parent.(*machinery.GatewayClass)
 				return ok && gc.Spec.ControllerName == "gateway.envoyproxy.io/gatewayclass-controller"
 			})

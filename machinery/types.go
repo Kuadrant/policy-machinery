@@ -15,10 +15,10 @@ type Object interface {
 
 	GetNamespace() string
 	GetName() string
-	GetURL() string
+	GetIdentity() string
 }
 
-func UrlFromObject(obj Object) string {
+func IdentityFromObject(obj Object) string {
 	name := strings.TrimPrefix(namespacedName(obj.GetNamespace(), obj.GetName()), string(k8stypes.Separator))
 	return fmt.Sprintf("%s%s%s", strings.ToLower(obj.GroupVersionKind().GroupKind().String()), string(kindNameURLSeparator), name)
 }
@@ -40,7 +40,7 @@ type Targetable interface {
 }
 
 func MapTargetableToURLFunc(t Targetable, _ int) string {
-	return t.GetURL()
+	return t.GetIdentity()
 }
 
 // Policy targets objects and can be merged with another Policy based on a given MergeStrategy.

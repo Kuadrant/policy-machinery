@@ -7,6 +7,7 @@ import (
 	gwapi "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	jsonpatch "github.com/evanphx/json-patch"
+
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
@@ -19,8 +20,8 @@ type ColorPolicy struct {
 
 var _ machinery.Policy = &ColorPolicy{}
 
-func (p *ColorPolicy) GetURL() string {
-	return machinery.UrlFromObject(p)
+func (p *ColorPolicy) GetIdentity() string {
+	return machinery.IdentityFromObject(p)
 }
 
 func (p *ColorPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
