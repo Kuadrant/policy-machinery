@@ -16,6 +16,7 @@ type TopologyOptions struct {
 	Policies    []Policy
 	Objects     []Object
 	Links       []LinkFunc
+	EnsureDag   bool
 }
 
 type LinkFunc struct {
@@ -62,12 +63,19 @@ func WithLinks(links ...LinkFunc) TopologyOptionsFunc {
 	}
 }
 
+// WithoutEnsureDAG allows the creation of a topology that may contain loops
+func WithoutEnsureDAG() TopologyOptionsFunc {
+	return func(o *TopologyOptions) {
+		o.EnsureDag = false
+	}
+}
+
 // NewTopology returns a network of targetable resources, attached policies, and other kinds of objects.
 // The topology is represented as a directed acyclic graph (DAG) with the structure given by link functions.
 // The links between policies to targteables are inferred from the policies' target references.
 // The targetables, policies, objects and link functions are provided as options.
 func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
-	o := &TopologyOptions{}
+	o := &TopologyOptions{EnsureDag: true}
 	for _, f := range options {
 		f(o)
 	}
@@ -89,7 +97,7 @@ func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
 		return t
 	})
 
-	graph := dot.NewGraph(dot.Directed, dot.Strict)
+	graph := dot.NewGraph(dot.Directed)
 
 	addObjectsToGraph(graph, o.Objects)
 	addTargetablesToGraph(graph, targetables)
@@ -112,9 +120,8 @@ func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
 
 	addPoliciesToGraph(graph, policies)
 
-	var err error
-	if !validate(graph) {
-		err = errors.New("loop detected in graph check linking functions")
+	if o.EnsureDag && !validate(graph) {
+		return nil, errors.New("loop detected in graph check linking functions")
 	}
 
 	return &Topology{
@@ -122,7 +129,7 @@ func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
 		objects:     lo.SliceToMap(o.Objects, associateLocator[Object]),
 		targetables: lo.SliceToMap(targetables, associateLocator[Targetable]),
 		policies:    lo.SliceToMap(policies, associateLocator[Policy]),
-	}, err
+	}, nil
 }
 
 // Topology models a network of related targetables and respective policies attached to them.

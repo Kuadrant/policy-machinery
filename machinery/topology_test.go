@@ -433,6 +433,45 @@ func TestTopologyHasLoops(t *testing.T) {
 	}
 }
 
+func TestTopologyHasLoopsAndAllowed(t *testing.T) {
+	apples := []*Apple{{Name: "apple-1"}, {Name: "apple-3"}}
+	oranges := []*Orange{
+		{Name: "orange-1", AppleParents: []string{"apple-1"}},
+		{Name: "orange-3", AppleParents: []string{"apple-3", "apple-1"}},
+		{Name: "orange-4", AppleParents: []string{"apple-3"}},
+	}
+	peaches := []*Peach{
+		{Name: "peach-2", OrangeParents: []string{"orange-1"}},
+		{Name: "peach-1", OrangeParents: []string{"orange-1"}, ChildApples: []string{"apple-1"}},
+		{Name: "peach-2", OrangeParents: []string{"orange-3", "orange-4"}},
+	}
+
+	lemons := []*Lemon{
+		{Name: "lemon-1", PeachParents: []string{"peach-1"}},
+	}
+	topology, err := NewTopology(
+		WithTargetables(lemons...),
+		WithTargetables(apples...),
+		WithTargetables(peaches...),
+		WithTargetables(oranges...),
+		WithLinks(
+			LinkPeachesToLemons(peaches),
+			LinkApplesToOranges(apples),
+			LinkPeachesToApples(peaches),
+			LinkOrangesToPeaches(oranges),
+		),
+		WithoutEnsureDAG(),
+	)
+	if err != nil {
+		t.Errorf("Expected no error, got: %s", err.Error())
+	}
+
+	if topology == nil {
+		t.Errorf("Expected topology, got nil")
+	}
+
+}
+
 func TestTopologyHasNoLoops(t *testing.T) {
 	apples := []*Apple{{Name: "apple-1"}, {Name: "apple-2"}, {Name: "apple-3"}}
 	oranges := []*Orange{
