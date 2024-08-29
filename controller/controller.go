@@ -222,19 +222,13 @@ func (c *Controller) add(obj Object) {
 	defer c.Unlock()
 
 	c.cache.Add(obj)
-	c.propagate([]ResourceEvent{{obj.GetObjectKind().GroupVersionKind().GroupKind(), CreateEvent, nil, obj}})
 }
 
-func (c *Controller) update(oldObj, newObj Object) {
+func (c *Controller) update(_, newObj Object) {
 	c.Lock()
 	defer c.Unlock()
 
-	if oldObj.GetGeneration() == newObj.GetGeneration() {
-		return
-	}
-
 	c.cache.Add(newObj)
-	c.propagate([]ResourceEvent{{newObj.GetObjectKind().GroupVersionKind().GroupKind(), UpdateEvent, oldObj, newObj}})
 }
 
 func (c *Controller) delete(obj Object) {
@@ -242,7 +236,6 @@ func (c *Controller) delete(obj Object) {
 	defer c.Unlock()
 
 	c.cache.Delete(obj)
-	c.propagate([]ResourceEvent{{obj.GetObjectKind().GroupVersionKind().GroupKind(), DeleteEvent, obj, nil}})
 }
 
 func (c *Controller) propagate(resourceEvents []ResourceEvent) {
