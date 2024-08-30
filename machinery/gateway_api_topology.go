@@ -638,7 +638,7 @@ func findListenerFromParentRefFunc(gateways []*Gateway, listeners []*Listener, r
 		}
 		if parentRef.SectionName != nil {
 			listener, ok := lo.Find(listeners, func(l *Listener) bool {
-				return l.Gateway.GetIdentity() == gateway.GetIdentity() && l.Name == *parentRef.SectionName
+				return l.Gateway.GetLocator() == gateway.GetLocator() && l.Name == *parentRef.SectionName
 			})
 			if !ok {
 				return nil
@@ -646,7 +646,7 @@ func findListenerFromParentRefFunc(gateways []*Gateway, listeners []*Listener, r
 			return []Object{listener}
 		}
 		return lo.FilterMap(listeners, func(l *Listener, _ int) (Object, bool) {
-			return l, l.Gateway.GetIdentity() == gateway.GetIdentity()
+			return l, l.Gateway.GetLocator() == gateway.GetLocator()
 		})
 	}
 }

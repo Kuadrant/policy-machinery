@@ -44,8 +44,8 @@ func (p *DNSPolicy) GetName() string {
 	return p.Name
 }
 
-func (p *DNSPolicy) GetIdentity() string {
-	return machinery.IdentityFromObject(p)
+func (p *DNSPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(p)
 }
 
 func (p *DNSPolicy) GetTargetRefs() []machinery.PolicyTargetReference {

@@ -20,8 +20,8 @@ type ColorPolicy struct {
 
 var _ machinery.Policy = &ColorPolicy{}
 
-func (p *ColorPolicy) GetIdentity() string {
-	return machinery.IdentityFromObject(p)
+func (p *ColorPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(p)
 }
 
 func (p *ColorPolicy) GetTargetRefs() []machinery.PolicyTargetReference {

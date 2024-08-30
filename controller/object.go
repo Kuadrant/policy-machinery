@@ -32,8 +32,8 @@ func (o *RuntimeObject) GetName() string {
 	return o.Object.GetName()
 }
 
-func (o *RuntimeObject) GetIdentity() string {
-	return machinery.IdentityFromObject(o)
+func (o *RuntimeObject) GetLocator() string {
+	return machinery.LocatorFromObject(o)
 }
 
 // ObjectAs casts an Object generically into any kind

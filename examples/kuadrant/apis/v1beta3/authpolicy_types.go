@@ -49,8 +49,8 @@ func (p *AuthPolicy) GetName() string {
 	return p.Name
 }
 
-func (p *AuthPolicy) GetIdentity() string {
-	return machinery.IdentityFromObject(p)
+func (p *AuthPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(p)
 }
 
 func (p *AuthPolicy) GetTargetRefs() []machinery.PolicyTargetReference {

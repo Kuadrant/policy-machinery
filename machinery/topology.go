@@ -76,15 +76,15 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 	for i := range policies {
 		policy := policies[i]
 		for _, targetRef := range policy.GetTargetRefs() {
-			if policiesByTargetRef[targetRef.GetIdentity()] == nil {
-				policiesByTargetRef[targetRef.GetIdentity()] = make([]Policy, 0)
+			if policiesByTargetRef[targetRef.GetLocator()] == nil {
+				policiesByTargetRef[targetRef.GetLocator()] = make([]Policy, 0)
 			}
-			policiesByTargetRef[targetRef.GetIdentity()] = append(policiesByTargetRef[targetRef.GetIdentity()], policy)
+			policiesByTargetRef[targetRef.GetLocator()] = append(policiesByTargetRef[targetRef.GetLocator()], policy)
 		}
 	}
 
 	targetables := lo.Map(o.Targetables, func(t Targetable, _ int) Targetable {
-		t.SetPolicies(policiesByTargetRef[t.GetIdentity()])
+		t.SetPolicies(policiesByTargetRef[t.GetLocator()])
 		return t
 	})
 
@@ -113,9 +113,9 @@ func NewTopology(options ...TopologyOptionsFunc) *Topology {
 
 	return &Topology{
 		graph:       graph,
-		objects:     lo.SliceToMap(o.Objects, associateURL[Object]),
-		targetables: lo.SliceToMap(targetables, associateURL[Targetable]),
-		policies:    lo.SliceToMap(policies, associateURL[Policy]),
+		objects:     lo.SliceToMap(o.Objects, associateLocator[Object]),
+		targetables: lo.SliceToMap(targetables, associateLocator[Targetable]),
+		policies:    lo.SliceToMap(policies, associateLocator[Policy]),
 	}
 }
 
@@ -161,7 +161,7 @@ func (t *Topology) ToDot() string {
 func addObjectsToGraph[T Object](graph *dot.Graph, objects []T) []dot.Node {
 	return lo.Map(objects, func(object T, _ int) dot.Node {
 		name := strings.TrimPrefix(namespacedName(object.GetNamespace(), object.GetName()), string(k8stypes.Separator))
-		n := graph.Node(string(object.GetIdentity()))
+		n := graph.Node(string(object.GetLocator()))
 		n.Label(fmt.Sprintf("%s\n%s", object.GroupVersionKind().Kind, name))
 		n.Attr("shape", "ellipse")
 		return n
@@ -186,7 +186,7 @@ func addPoliciesToGraph[T Policy](graph *dot.Graph, policies []T) {
 		)
 		// Policy -> Target edges
 		for _, targetRef := range policies[i].GetTargetRefs() {
-			targetNode, found := graph.FindNodeById(string(targetRef.GetIdentity()))
+			targetNode, found := graph.FindNodeById(string(targetRef.GetLocator()))
 			if !found {
 				continue
 			}
@@ -198,16 +198,16 @@ func addPoliciesToGraph[T Policy](graph *dot.Graph, policies []T) {
 }
 
 func addEdgeToGraph(graph *dot.Graph, name string, parent, child Object) {
-	p, foundParent := graph.FindNodeById(string(parent.GetIdentity()))
-	c, foundChild := graph.FindNodeById(string(child.GetIdentity()))
+	p, foundParent := graph.FindNodeById(string(parent.GetLocator()))
+	c, foundChild := graph.FindNodeById(string(child.GetLocator()))
 	if foundParent && foundChild {
 		edge := graph.Edge(p, c)
 		edge.Attr("comment", name)
 	}
 }
 
-func associateURL[T Object](obj T) (string, T) {
-	return obj.GetIdentity(), obj
+func associateLocator[T Object](obj T) (string, T) {
+	return obj.GetLocator(), obj
 }
 
 type collection[T Object] struct {
@@ -269,7 +269,7 @@ func (c *collection[T]) Parents(item Object) []T {
 	var parents []T
 	for from, edges := range c.topology.graph.EdgesMap() {
 		if !lo.ContainsBy(edges, func(edge dot.Edge) bool {
-			return edge.To().ID() == item.GetIdentity()
+			return edge.To().ID() == item.GetLocator()
 		}) {
 			continue
 		}
@@ -284,7 +284,7 @@ func (c *collection[T]) Parents(item Object) []T {
 
 // Children returns all children of a given item in the collection.
 func (c *collection[T]) Children(item Object) []T {
-	return lo.FilterMap(c.topology.graph.EdgesMap()[item.GetIdentity()], func(edge dot.Edge, _ int) (T, bool) {
+	return lo.FilterMap(c.topology.graph.EdgesMap()[item.GetLocator()], func(edge dot.Edge, _ int) (T, bool) {
 		child, found := c.items[edge.To().ID()]
 		return child, found
 	})
@@ -305,13 +305,13 @@ func (c *collection[T]) Paths(from, to Object) [][]T {
 
 // dfs performs a depth-first search to find all paths from a source item to a destination item in the collection.
 func (c *collection[T]) dfs(current, to Object, path []T, paths *[][]T, visited map[string]bool) {
-	currentURL := current.GetIdentity()
-	if visited[currentURL] {
+	currentLocator := current.GetLocator()
+	if visited[currentLocator] {
 		return
 	}
-	path = append(path, c.items[currentURL])
-	visited[currentURL] = true
-	if currentURL == to.GetIdentity() {
+	path = append(path, c.items[currentLocator])
+	visited[currentLocator] = true
+	if currentLocator == to.GetLocator() {
 		pathCopy := make([]T, len(path))
 		copy(pathCopy, path)
 		*paths = append(*paths, pathCopy)
@@ -321,5 +321,5 @@ func (c *collection[T]) dfs(current, to Object, path []T, paths *[][]T, visited 
 		}
 	}
 	path = path[:len(path)-1]
-	visited[currentURL] = false
+	visited[currentLocator] = false
 }
