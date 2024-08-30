@@ -1,4 +1,5 @@
-// go:+build unit || integration
+//go:build unit || integration
+
 package controller
 
 import (
@@ -10,6 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/rest/fake"
 
 	ctrlruntimemanager "sigs.k8s.io/controller-runtime/pkg/manager"
@@ -62,10 +64,11 @@ func init() {
 	}
 	testScheme = runtime.NewScheme()
 	corev1.AddToScheme(testScheme)
-	testManager, _ = ctrlruntimemanager.New(nil, ctrlruntimemanager.Options{ // TODO: config
-		Logger: testLogger,
-		Scheme: testScheme,
-	})
+	var err error
+	testManager, err = ctrlruntimemanager.New(&rest.Config{}, ctrlruntimemanager.Options{})
+	if err != nil {
+		panic(err)
+	}
 	testServiceWatcher = Watch(&corev1.Service{}, ServicesResource, "foo")
 	testConfigMapWatcher = Watch(&corev1.ConfigMap{}, ConfigMapsResource, metav1.NamespaceAll, FilterResourcesByLabel[*corev1.ConfigMap]("app=foo"))
 }
