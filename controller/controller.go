@@ -248,12 +248,14 @@ func (c *Controller) subscribe() {
 	if !ok {
 		return
 	}
+	recent := make(Store)
 	subscription := cache.Subscribe(context.TODO())
 	go func() {
 		for snapshot := range subscription {
 			c.Lock()
 
 			c.propagate(lo.FlatMap(snapshot.Updates, func(update watchable.Update[string, watchableCacheEntry], _ int) []ResourceEvent {
+				key := update.Key
 				obj := update.Value
 
 				event := ResourceEvent{
@@ -263,9 +265,16 @@ func (c *Controller) subscribe() {
 				if update.Delete {
 					event.EventType = DeleteEvent
 					event.OldObject = obj
+					delete(recent, key)
 				} else {
-					event.EventType = CreateEvent // what about UpdateEvent?
+					if oldObj, ok := recent[key]; ok {
+						event.EventType = UpdateEvent
+						event.OldObject = oldObj
+					} else {
+						event.EventType = CreateEvent
+					}
 					event.NewObject = obj
+					recent[key] = obj
 				}
 
 				return []ResourceEvent{event}
