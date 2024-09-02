@@ -16,7 +16,7 @@ type TopologyOptions struct {
 	Policies    []Policy
 	Objects     []Object
 	Links       []LinkFunc
-	EnsureDag   bool
+	AllowLoops  bool
 }
 
 type LinkFunc struct {
@@ -63,10 +63,10 @@ func WithLinks(links ...LinkFunc) TopologyOptionsFunc {
 	}
 }
 
-// WithoutEnsureDAG allows the creation of a topology that may contain loops
-func WithoutEnsureDAG() TopologyOptionsFunc {
+// AllowLoops allows the creation of a topology that may contain loops
+func AllowLoops() TopologyOptionsFunc {
 	return func(o *TopologyOptions) {
-		o.EnsureDag = false
+		o.AllowLoops = true
 	}
 }
 
@@ -75,7 +75,7 @@ func WithoutEnsureDAG() TopologyOptionsFunc {
 // The links between policies to targteables are inferred from the policies' target references.
 // The targetables, policies, objects and link functions are provided as options.
 func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
-	o := &TopologyOptions{EnsureDag: true}
+	o := &TopologyOptions{}
 	for _, f := range options {
 		f(o)
 	}
@@ -120,7 +120,7 @@ func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
 
 	addPoliciesToGraph(graph, policies)
 
-	if o.EnsureDag && !validate(graph) {
+	if !o.AllowLoops && !isDAG(graph) {
 		return nil, errors.New("loop detected in graph check linking functions")
 	}
 
@@ -219,8 +219,8 @@ func addEdgeToGraph(graph *dot.Graph, name string, parent, child Object) {
 	}
 }
 
-// validate returns true if loops are detected in a given graph
-func validate(g *dot.Graph) bool {
+// isDAG returns true if no loops are detected in a given graph
+func isDAG(g *dot.Graph) bool {
 	// Based on Kahn's algorithm
 	// https://en.wikipedia.org/wiki/Topological_sorting#Kahn's_algorithm
 	type node struct {
@@ -234,14 +234,15 @@ func validate(g *dot.Graph) bool {
 	}
 
 	// build simplified graph
+	nodes := g.FindNodes()
 	build := func(g *dot.Graph) *graph {
 		graph_ := &graph{
-			nodes: make([]*node, 0),
+			nodes: make([]*node, len(nodes)),
 		}
 
 		nodeIndex := make(map[string]*node)
 
-		for _, n := range g.FindNodes() {
+		for _, n := range nodes {
 			nodeIndex[n.ID()] = &node{
 				id:       n.ID(),
 				parents:  make(map[string]interface{}),
@@ -249,7 +250,7 @@ func validate(g *dot.Graph) bool {
 			}
 		}
 
-		for _, n := range g.FindNodes() {
+		for index, n := range nodes {
 			simpleNode := nodeIndex[n.ID()]
 			if simpleNode == nil {
 				panic("it should never happen")
@@ -267,7 +268,7 @@ func validate(g *dot.Graph) bool {
 				simpleNode.children = append(simpleNode.children, nodeIndex[edge.To().ID()])
 			}
 
-			graph_.nodes = append(graph_.nodes, simpleNode)
+			graph_.nodes[index] = simpleNode
 		}
 
 		return graph_

@@ -460,7 +460,7 @@ func TestTopologyHasLoopsAndAllowed(t *testing.T) {
 			LinkPeachesToApples(peaches),
 			LinkOrangesToPeaches(oranges),
 		),
-		WithoutEnsureDAG(),
+		AllowLoops(),
 	)
 	if err != nil {
 		t.Errorf("Expected no error, got: %s", err.Error())
