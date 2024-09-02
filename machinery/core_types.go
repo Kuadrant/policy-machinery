@@ -22,8 +22,8 @@ type Namespace struct {
 
 var _ Targetable = &Namespace{}
 
-func (n *Namespace) GetURL() string {
-	return UrlFromObject(n)
+func (n *Namespace) GetLocator() string {
+	return LocatorFromObject(n)
 }
 
 func (n *Namespace) SetPolicies(policies []Policy) {
@@ -42,8 +42,8 @@ type Service struct {
 
 var _ Targetable = &Service{}
 
-func (s *Service) GetURL() string {
-	return UrlFromObject(s)
+func (s *Service) GetLocator() string {
+	return LocatorFromObject(s)
 }
 
 func (s *Service) SetPolicies(policies []Policy) {
@@ -71,8 +71,8 @@ func (p *ServicePort) GroupVersionKind() schema.GroupVersionKind {
 
 func (p *ServicePort) SetGroupVersionKind(schema.GroupVersionKind) {}
 
-func (p *ServicePort) GetURL() string {
-	return namespacedSectionName(UrlFromObject(p.Service), gwapiv1.SectionName(p.Name))
+func (p *ServicePort) GetLocator() string {
+	return namespacedSectionName(LocatorFromObject(p.Service), gwapiv1.SectionName(p.Name))
 }
 
 func (p *ServicePort) GetNamespace() string {

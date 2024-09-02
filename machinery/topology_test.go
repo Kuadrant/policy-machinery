@@ -42,10 +42,10 @@ func TestTopologyRoots(t *testing.T) {
 	if expected := len(apples); len(roots) != expected {
 		t.Errorf("expected %d roots, got %d", expected, len(roots))
 	}
-	rootURLs := lo.Map(roots, MapTargetableToURLFunc)
+	rootLocators := lo.Map(roots, MapTargetableToLocatorFunc)
 	for _, apple := range apples {
-		if !lo.Contains(rootURLs, apple.GetURL()) {
-			t.Errorf("expected root %s not found", apple.GetURL())
+		if !lo.Contains(rootLocators, apple.GetLocator()) {
+			t.Errorf("expected root %s not found", apple.GetLocator())
 		}
 	}
 }
@@ -75,21 +75,21 @@ func TestTopologyParents(t *testing.T) {
 	if expected := 2; len(parents) != expected {
 		t.Errorf("expected %d parent, got %d", expected, len(parents))
 	}
-	parentURLs := lo.Map(parents, MapTargetableToURLFunc)
-	if !lo.Contains(parentURLs, apple1.GetURL()) {
-		t.Errorf("expected parent %s not found", apple1.GetURL())
+	parentLocators := lo.Map(parents, MapTargetableToLocatorFunc)
+	if !lo.Contains(parentLocators, apple1.GetLocator()) {
+		t.Errorf("expected parent %s not found", apple1.GetLocator())
 	}
-	if !lo.Contains(parentURLs, apple2.GetURL()) {
-		t.Errorf("expected parent %s not found", apple2.GetURL())
+	if !lo.Contains(parentLocators, apple2.GetLocator()) {
+		t.Errorf("expected parent %s not found", apple2.GetLocator())
 	}
 	// orange-2
 	parents = topology.Targetables().Parents(orange2)
 	if expected := 1; len(parents) != expected {
 		t.Errorf("expected %d parent, got %d", expected, len(parents))
 	}
-	parentURLs = lo.Map(parents, MapTargetableToURLFunc)
-	if !lo.Contains(parentURLs, apple2.GetURL()) {
-		t.Errorf("expected parent %s not found", apple2.GetURL())
+	parentLocators = lo.Map(parents, MapTargetableToLocatorFunc)
+	if !lo.Contains(parentLocators, apple2.GetLocator()) {
+		t.Errorf("expected parent %s not found", apple2.GetLocator())
 	}
 }
 
@@ -118,21 +118,21 @@ func TestTopologyChildren(t *testing.T) {
 	if expected := 1; len(children) != expected {
 		t.Errorf("expected %d child, got %d", expected, len(children))
 	}
-	childURLs := lo.Map(children, MapTargetableToURLFunc)
-	if !lo.Contains(childURLs, orange1.GetURL()) {
-		t.Errorf("expected child %s not found", orange1.GetURL())
+	childLocators := lo.Map(children, MapTargetableToLocatorFunc)
+	if !lo.Contains(childLocators, orange1.GetLocator()) {
+		t.Errorf("expected child %s not found", orange1.GetLocator())
 	}
 	// apple-2
 	children = topology.Targetables().Children(apple2)
 	if expected := 2; len(children) != expected {
 		t.Errorf("expected %d child, got %d", expected, len(children))
 	}
-	childURLs = lo.Map(children, MapTargetableToURLFunc)
-	if !lo.Contains(childURLs, orange1.GetURL()) {
-		t.Errorf("expected child %s not found", orange1.GetURL())
+	childLocators = lo.Map(children, MapTargetableToLocatorFunc)
+	if !lo.Contains(childLocators, orange1.GetLocator()) {
+		t.Errorf("expected child %s not found", orange1.GetLocator())
 	}
-	if !lo.Contains(childURLs, orange2.GetURL()) {
-		t.Errorf("expected child %s not found", orange2.GetURL())
+	if !lo.Contains(childLocators, orange2.GetLocator()) {
+		t.Errorf("expected child %s not found", orange2.GetLocator())
 	}
 }
 
@@ -208,10 +208,10 @@ func TestTopologyPaths(t *testing.T) {
 				t.Errorf("expected %d paths, got %d", len(tc.expectedPaths), len(paths))
 			}
 			expectedPaths := lo.Map(tc.expectedPaths, func(expectedPath []Targetable, _ int) string {
-				return strings.Join(lo.Map(expectedPath, MapTargetableToURLFunc), "→")
+				return strings.Join(lo.Map(expectedPath, MapTargetableToLocatorFunc), "→")
 			})
 			for _, path := range paths {
-				pathString := strings.Join(lo.Map(path, MapTargetableToURLFunc), "→")
+				pathString := strings.Join(lo.Map(path, MapTargetableToLocatorFunc), "→")
 				if !lo.Contains(expectedPaths, pathString) {
 					t.Errorf("expected path %v not found", pathString)
 				}

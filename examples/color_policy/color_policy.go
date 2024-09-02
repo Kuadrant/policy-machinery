@@ -16,8 +16,8 @@ type ColorPolicy struct {
 
 var _ machinery.Policy = &ColorPolicy{}
 
-func (p *ColorPolicy) GetURL() string {
-	return machinery.UrlFromObject(p)
+func (p *ColorPolicy) GetLocator() string {
+	return machinery.LocatorFromObject(p)
 }
 
 func (p *ColorPolicy) GetTargetRefs() []machinery.PolicyTargetReference {

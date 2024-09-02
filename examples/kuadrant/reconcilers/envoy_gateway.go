@@ -41,10 +41,10 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ 
 	for _, gateway := range gateways {
 		paths := lo.Filter(authPaths, func(path []machinery.Targetable, _ int) bool {
 			if len(path) != 4 { // should never happen
-				logger.Error(fmt.Errorf("unexpected topology path length to build Envoy SecurityPolicy"), "path", lo.Map(path, machinery.MapTargetableToURLFunc))
+				logger.Error(fmt.Errorf("unexpected topology path length to build Envoy SecurityPolicy"), "path", lo.Map(path, machinery.MapTargetableToLocatorFunc))
 				return false
 			}
-			return path[0].GetURL() == gateway.GetURL() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
+			return path[0].GetLocator() == gateway.GetLocator() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
 				gc, ok := parent.(*machinery.GatewayClass)
 				return ok && gc.Spec.ControllerName == "gateway.envoyproxy.io/gatewayclass-controller"
 			})

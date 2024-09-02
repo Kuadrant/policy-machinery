@@ -8,19 +8,19 @@ import (
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
-const kindNameURLSeparator = ':'
+const kindNameLocatorSeparator = ':'
 
 type Object interface {
 	schema.ObjectKind
 
 	GetNamespace() string
 	GetName() string
-	GetURL() string
+	GetLocator() string
 }
 
-func UrlFromObject(obj Object) string {
+func LocatorFromObject(obj Object) string {
 	name := strings.TrimPrefix(namespacedName(obj.GetNamespace(), obj.GetName()), string(k8stypes.Separator))
-	return fmt.Sprintf("%s%s%s", strings.ToLower(obj.GroupVersionKind().GroupKind().String()), string(kindNameURLSeparator), name)
+	return fmt.Sprintf("%s%s%s", strings.ToLower(obj.GroupVersionKind().GroupKind().String()), string(kindNameLocatorSeparator), name)
 }
 
 func AsObject[T Object](t T, _ int) Object {
@@ -39,8 +39,8 @@ type Targetable interface {
 	Policies() []Policy
 }
 
-func MapTargetableToURLFunc(t Targetable, _ int) string {
-	return t.GetURL()
+func MapTargetableToLocatorFunc(t Targetable, _ int) string {
+	return t.GetLocator()
 }
 
 // Policy targets objects and can be merged with another Policy based on a given MergeStrategy.

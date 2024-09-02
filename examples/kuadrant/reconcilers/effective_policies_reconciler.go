@@ -103,10 +103,10 @@ func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []mach
 		return lo.Map(policies, func(p kuadrantapis.MergeablePolicy, _ int) machinery.Policy { return p })
 	})
 
-	pathURLs := lo.Map(path, machinery.MapTargetableToURLFunc)
+	pathLocators := lo.Map(path, machinery.MapTargetableToLocatorFunc)
 
 	if len(policies) == 0 {
-		logger.Info("no policies for path", "kind", reflect.TypeOf(new(T)), "path", pathURLs)
+		logger.Info("no policies for path", "kind", reflect.TypeOf(new(T)), "path", pathLocators)
 		return nil
 	}
 
@@ -116,7 +116,7 @@ func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []mach
 	}, policies[len(policies)-1])
 
 	jsonEffectivePolicy, _ := json.Marshal(effectivePolicy)
-	logger.Info("effective policy", "kind", reflect.TypeOf(new(T)), "path", pathURLs, "effectivePolicy", string(jsonEffectivePolicy))
+	logger.Info("effective policy", "kind", reflect.TypeOf(new(T)), "path", pathLocators, "effectivePolicy", string(jsonEffectivePolicy))
 
 	concreteEffectivePolicy, _ := effectivePolicy.(T)
 	return &concreteEffectivePolicy

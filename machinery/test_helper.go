@@ -56,8 +56,8 @@ func (a *Apple) GetNamespace() string {
 	return ""
 }
 
-func (a *Apple) GetURL() string {
-	return UrlFromObject(a)
+func (a *Apple) GetLocator() string {
+	return LocatorFromObject(a)
 }
 
 func (a *Apple) GroupVersionKind() schema.GroupVersionKind {
@@ -97,8 +97,8 @@ func (o *Orange) GetNamespace() string {
 	return o.Namespace
 }
 
-func (o *Orange) GetURL() string {
-	return UrlFromObject(o)
+func (o *Orange) GetLocator() string {
+	return LocatorFromObject(o)
 }
 
 func (o *Orange) GroupVersionKind() schema.GroupVersionKind {
@@ -133,8 +133,8 @@ func (b *Banana) GetNamespace() string {
 	return ""
 }
 
-func (b *Banana) GetURL() string {
-	return UrlFromObject(b)
+func (b *Banana) GetLocator() string {
+	return LocatorFromObject(b)
 }
 
 func (b *Banana) GroupVersionKind() schema.GroupVersionKind {
@@ -204,8 +204,8 @@ func (i *Info) GetName() string {
 	return i.Name
 }
 
-func (i *Info) GetURL() string {
-	return UrlFromObject(i)
+func (i *Info) GetLocator() string {
+	return LocatorFromObject(i)
 }
 
 func LinkInfoFrom(kind string, objects []Object) LinkFunc {
@@ -215,7 +215,7 @@ func LinkInfoFrom(kind string, objects []Object) LinkFunc {
 		Func: func(child Object) []Object {
 			info := child.(*Info)
 			return lo.Filter(objects, func(obj Object, _ int) bool {
-				return obj.GetURL() == info.Ref
+				return obj.GetLocator() == info.Ref
 			})
 		},
 	}
@@ -234,8 +234,8 @@ type FruitPolicySpec struct {
 
 var _ Policy = &FruitPolicy{}
 
-func (p *FruitPolicy) GetURL() string {
-	return UrlFromObject(p)
+func (p *FruitPolicy) GetLocator() string {
+	return LocatorFromObject(p)
 }
 
 func (p *FruitPolicy) GetTargetRefs() []PolicyTargetReference {
@@ -286,8 +286,8 @@ func (t FruitPolicyTargetReference) SetGroupVersionKind(gvk schema.GroupVersionK
 	t.Kind = gvk.Kind
 }
 
-func (t FruitPolicyTargetReference) GetURL() string {
-	return UrlFromObject(t)
+func (t FruitPolicyTargetReference) GetLocator() string {
+	return LocatorFromObject(t)
 }
 
 func (t FruitPolicyTargetReference) GetNamespace() string {
