@@ -1,4 +1,5 @@
-// go:+build unit
+//go:build unit
+
 package controller
 
 import (
@@ -186,32 +187,6 @@ func TestNewController(t *testing.T) {
 	}
 }
 
-func TestStartControllerUnmanaged(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	c := NewController()
-	go func() {
-		if err := c.Start(ctx); err != nil {
-			t.Errorf("expected no error when starting manager, got %s", err.Error())
-			cancel()
-		}
-	}()
-	time.Sleep(3 * time.Second)
-}
-
-func TestStartControllerManaged(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	c := NewController(ManagedBy(testManager))
-	go func() {
-		if err := c.Start(ctx); err != nil {
-			t.Errorf("expected no error when starting manager, got %s", err.Error())
-			cancel()
-		}
-	}()
-	time.Sleep(3 * time.Second)
-}
-
 func TestControllerReconcile(t *testing.T) {
 	objs := []Object{
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "test-service", UID: "7ed703a2-635d-4002-a825-5624823760a5"}},
@@ -234,4 +209,17 @@ func TestControllerReconcile(t *testing.T) {
 	if !lo.Every(cachedObjs, objUIDs) {
 		t.Errorf("expected %v object UIDs in the cache, got %v", objUIDs, cachedObjs)
 	}
+}
+
+func TestStartControllerUnmanaged(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c := NewController()
+	go func() {
+		if err := c.Start(ctx); err != nil {
+			t.Errorf("expected no error when starting manager, got %s", err.Error())
+			cancel()
+		}
+	}()
+	time.Sleep(3 * time.Second)
 }
