@@ -398,16 +398,15 @@ func TestTopologyWithRuntimeObjects(t *testing.T) {
 	SaveToOutputDir(t, topology.ToDot(), "../tests/out", ".dot")
 }
 func TestTopologyHasLoops(t *testing.T) {
-	apples := []*Apple{{Name: "apple-1"}, {Name: "apple-3"}}
+	apples := []*Apple{{Name: "apple-1"}, {Name: "apple-2"}}
 	oranges := []*Orange{
 		{Name: "orange-1", AppleParents: []string{"apple-1"}},
-		{Name: "orange-3", AppleParents: []string{"apple-3", "apple-1"}},
-		{Name: "orange-4", AppleParents: []string{"apple-3"}},
+		{Name: "orange-2", AppleParents: []string{"apple-1", "apple-2"}},
+		{Name: "orange-3", AppleParents: []string{"apple-2"}},
 	}
 	peaches := []*Peach{
-		{Name: "peach-2", OrangeParents: []string{"orange-1"}},
 		{Name: "peach-1", OrangeParents: []string{"orange-1"}, ChildApples: []string{"apple-1"}},
-		{Name: "peach-2", OrangeParents: []string{"orange-3", "orange-4"}},
+		{Name: "peach-2", OrangeParents: []string{"orange-1", "orange-2", "orange-3"}},
 	}
 
 	lemons := []*Lemon{
@@ -434,16 +433,15 @@ func TestTopologyHasLoops(t *testing.T) {
 }
 
 func TestTopologyHasLoopsAndAllowed(t *testing.T) {
-	apples := []*Apple{{Name: "apple-1"}, {Name: "apple-3"}}
+	apples := []*Apple{{Name: "apple-1"}, {Name: "apple-2"}}
 	oranges := []*Orange{
 		{Name: "orange-1", AppleParents: []string{"apple-1"}},
-		{Name: "orange-3", AppleParents: []string{"apple-3", "apple-1"}},
-		{Name: "orange-4", AppleParents: []string{"apple-3"}},
+		{Name: "orange-2", AppleParents: []string{"apple-1", "apple-2"}},
+		{Name: "orange-3", AppleParents: []string{"apple-2"}},
 	}
 	peaches := []*Peach{
-		{Name: "peach-2", OrangeParents: []string{"orange-1"}},
 		{Name: "peach-1", OrangeParents: []string{"orange-1"}, ChildApples: []string{"apple-1"}},
-		{Name: "peach-2", OrangeParents: []string{"orange-3", "orange-4"}},
+		{Name: "peach-2", OrangeParents: []string{"orange-1", "orange-2", "orange-3"}},
 	}
 
 	lemons := []*Lemon{
@@ -482,8 +480,7 @@ func TestTopologyHasNoLoops(t *testing.T) {
 	}
 	peaches := []*Peach{
 		{Name: "peach-1", OrangeParents: []string{"orange-1"}},
-		{Name: "peach-2", OrangeParents: []string{"orange-1"}},
-		{Name: "peach-2", OrangeParents: []string{"orange-3", "orange-4"}},
+		{Name: "peach-2", OrangeParents: []string{"orange-1", "orange-3", "orange-4"}},
 	}
 
 	lemons := []*Lemon{

@@ -341,8 +341,8 @@ func (o *Peach) GetNamespace() string {
 	return o.Namespace
 }
 
-func (o *Peach) GetURL() string {
-	return UrlFromObject(o)
+func (o *Peach) GetLocator() string {
+	return LocatorFromObject(o)
 }
 
 func (o *Peach) GroupVersionKind() schema.GroupVersionKind {
@@ -407,8 +407,8 @@ func (o *Lemon) GetNamespace() string {
 	return o.Namespace
 }
 
-func (o *Lemon) GetURL() string {
-	return UrlFromObject(o)
+func (o *Lemon) GetLocator() string {
+	return LocatorFromObject(o)
 }
 
 func (o *Lemon) GroupVersionKind() schema.GroupVersionKind {
