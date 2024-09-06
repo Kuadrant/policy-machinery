@@ -23,15 +23,16 @@ import (
 )
 
 type ControllerOptions struct {
-	name        string
-	logger      logr.Logger
-	client      *dynamic.DynamicClient
-	manager     ctrlruntime.Manager
-	runnables   map[string]RunnableBuilder
-	reconcile   ReconcileFunc
-	policyKinds []schema.GroupKind
-	objectKinds []schema.GroupKind
-	objectLinks []LinkFunc
+	name               string
+	logger             logr.Logger
+	client             *dynamic.DynamicClient
+	manager            ctrlruntime.Manager
+	runnables          map[string]RunnableBuilder
+	reconcile          ReconcileFunc
+	policyKinds        []schema.GroupKind
+	objectKinds        []schema.GroupKind
+	objectLinks        []LinkFunc
+	allowTopologyLoops bool
 }
 
 type ControllerOption func(*ControllerOptions)
@@ -94,6 +95,12 @@ func ManagedBy(manager ctrlruntime.Manager) ControllerOption {
 	}
 }
 
+func AllowLoops() ControllerOption {
+	return func(o *ControllerOptions) {
+		o.allowTopologyLoops = true
+	}
+}
+
 func NewController(f ...ControllerOption) *Controller {
 	opts := &ControllerOptions{
 		name:      "controller",
@@ -107,14 +114,15 @@ func NewController(f ...ControllerOption) *Controller {
 	}
 
 	controller := &Controller{
-		name:      opts.name,
-		logger:    opts.logger,
-		client:    opts.client,
-		manager:   opts.manager,
-		cache:     &watchableCacheStore{},
-		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks),
-		runnables: map[string]Runnable{},
-		reconcile: opts.reconcile,
+		name:               opts.name,
+		logger:             opts.logger,
+		client:             opts.client,
+		manager:            opts.manager,
+		cache:              &watchableCacheStore{},
+		topology:           newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks),
+		runnables:          map[string]Runnable{},
+		reconcile:          opts.reconcile,
+		allowTopologyLoops: opts.allowTopologyLoops,
 	}
 
 	for name, builder := range opts.runnables {
@@ -129,16 +137,17 @@ type WatchFunc func(ctrlruntime.Manager) ctrlruntimesrc.Source
 
 type Controller struct {
 	sync.Mutex
-	name       string
-	logger     logr.Logger
-	client     *dynamic.DynamicClient
-	manager    ctrlruntime.Manager
-	cache      Cache
-	topology   *gatewayAPITopologyBuilder
-	runnables  map[string]Runnable
-	listFuncs  []ListFunc
-	watchFuncs []WatchFunc
-	reconcile  ReconcileFunc
+	name               string
+	logger             logr.Logger
+	client             *dynamic.DynamicClient
+	manager            ctrlruntime.Manager
+	cache              Cache
+	topology           *gatewayAPITopologyBuilder
+	runnables          map[string]Runnable
+	listFuncs          []ListFunc
+	watchFuncs         []WatchFunc
+	reconcile          ReconcileFunc
+	allowTopologyLoops bool
 }
 
 // Start starts the runnables and blocks until the context is cancelled
@@ -239,8 +248,12 @@ func (c *Controller) delete(obj Object) {
 }
 
 func (c *Controller) propagate(resourceEvents []ResourceEvent) {
-	topology, err := c.topology.Build(c.cache.List())
-	if err != nil {
+	opts := make([]machinery.GatewayAPITopologyOptionsFunc, 0)
+	if c.allowTopologyLoops {
+		opts = append(opts, machinery.AllowTopologyLoops())
+	}
+	topology, err := c.topology.Build(c.cache.List(), opts...)
+	if !c.allowTopologyLoops && err != nil {
 		panic(err)
 	}
 	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology)

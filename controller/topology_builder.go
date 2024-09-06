@@ -23,7 +23,7 @@ type gatewayAPITopologyBuilder struct {
 	objectLinks []LinkFunc
 }
 
-func (t *gatewayAPITopologyBuilder) Build(objs Store) (*machinery.Topology, error) {
+func (t *gatewayAPITopologyBuilder) Build(objs Store, options ...machinery.GatewayAPITopologyOptionsFunc) (*machinery.Topology, error) {
 	gatewayClasses := lo.Map(objs.FilterByGroupKind(machinery.GatewayClassGroupKind), ObjectAs[*gwapiv1.GatewayClass])
 	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), ObjectAs[*gwapiv1.Gateway])
 	httpRoutes := lo.Map(objs.FilterByGroupKind(machinery.HTTPRouteGroupKind), ObjectAs[*gwapiv1.HTTPRoute])
@@ -43,6 +43,8 @@ func (t *gatewayAPITopologyBuilder) Build(objs Store) (*machinery.Topology, erro
 		machinery.ExpandServicePorts(),
 		machinery.WithGatewayAPITopologyLinks(linkFuncs...),
 	}
+
+	opts = append(opts, options...)
 
 	for i := range t.policyKinds {
 		policyKind := t.policyKinds[i]

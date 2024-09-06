@@ -93,6 +93,11 @@ func TestControllerOptions(t *testing.T) {
 	if opts.reconcile == nil {
 		t.Errorf("expected reconcile func, got nil")
 	}
+
+	AllowLoops()(opts)
+	if opts.allowTopologyLoops == false {
+		t.Errorf("expected allowTopologyLoops true, got false")
+	}
 }
 
 func TestNewController(t *testing.T) {
