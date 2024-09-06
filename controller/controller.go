@@ -113,16 +113,19 @@ func NewController(f ...ControllerOption) *Controller {
 		fn(opts)
 	}
 
+	allowTopologyLoops := false
+	if opts.allowTopologyLoops {
+		allowTopologyLoops = true
+	}
 	controller := &Controller{
-		name:               opts.name,
-		logger:             opts.logger,
-		client:             opts.client,
-		manager:            opts.manager,
-		cache:              &watchableCacheStore{},
-		topology:           newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks),
-		runnables:          map[string]Runnable{},
-		reconcile:          opts.reconcile,
-		allowTopologyLoops: opts.allowTopologyLoops,
+		name:      opts.name,
+		logger:    opts.logger,
+		client:    opts.client,
+		manager:   opts.manager,
+		cache:     &watchableCacheStore{},
+		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks, allowTopologyLoops),
+		runnables: map[string]Runnable{},
+		reconcile: opts.reconcile,
 	}
 
 	for name, builder := range opts.runnables {
@@ -137,17 +140,16 @@ type WatchFunc func(ctrlruntime.Manager) ctrlruntimesrc.Source
 
 type Controller struct {
 	sync.Mutex
-	name               string
-	logger             logr.Logger
-	client             *dynamic.DynamicClient
-	manager            ctrlruntime.Manager
-	cache              Cache
-	topology           *gatewayAPITopologyBuilder
-	runnables          map[string]Runnable
-	listFuncs          []ListFunc
-	watchFuncs         []WatchFunc
-	reconcile          ReconcileFunc
-	allowTopologyLoops bool
+	name       string
+	logger     logr.Logger
+	client     *dynamic.DynamicClient
+	manager    ctrlruntime.Manager
+	cache      Cache
+	topology   *gatewayAPITopologyBuilder
+	runnables  map[string]Runnable
+	listFuncs  []ListFunc
+	watchFuncs []WatchFunc
+	reconcile  ReconcileFunc
 }
 
 // Start starts the runnables and blocks until the context is cancelled
@@ -248,12 +250,8 @@ func (c *Controller) delete(obj Object) {
 }
 
 func (c *Controller) propagate(resourceEvents []ResourceEvent) {
-	opts := make([]machinery.GatewayAPITopologyOptionsFunc, 0)
-	if c.allowTopologyLoops {
-		opts = append(opts, machinery.AllowTopologyLoops())
-	}
-	topology, err := c.topology.Build(c.cache.List(), opts...)
-	if !c.allowTopologyLoops && err != nil {
+	topology, err := c.topology.Build(c.cache.List())
+	if !c.topology.allowTopologyLoops && err != nil {
 		panic(err)
 	}
 	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology)
