@@ -12,7 +12,7 @@ const topologyFile = "topology.dot"
 
 type TopologyFileReconciler struct{}
 
-func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
+func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, err error) {
 	logger := controller.LoggerFromContext(ctx).WithName("topology file")
 
 	file, err := os.Create(topologyFile)

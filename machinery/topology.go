@@ -120,8 +120,9 @@ func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
 
 	addPoliciesToGraph(graph, policies)
 
+	var err error
 	if !o.AllowLoops && !isDAG(graph) {
-		return nil, errors.New("loop detected in graph check linking functions")
+		err = errors.New("loop detected in the graph, check linking functions")
 	}
 
 	return &Topology{
@@ -129,7 +130,7 @@ func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
 		objects:     lo.SliceToMap(o.Objects, associateLocator[Object]),
 		targetables: lo.SliceToMap(targetables, associateLocator[Targetable]),
 		policies:    lo.SliceToMap(policies, associateLocator[Policy]),
-	}, nil
+	}, err
 }
 
 // Topology models a network of related targetables and respective policies attached to them.

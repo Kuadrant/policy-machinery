@@ -15,10 +15,10 @@ type Workflow struct {
 	Postcondition ReconcileFunc
 }
 
-func (d *Workflow) Run(ctx context.Context, resourceEvents []ResourceEvent, topology *machinery.Topology) {
+func (d *Workflow) Run(ctx context.Context, resourceEvents []ResourceEvent, topology *machinery.Topology, err error) {
 	// run precondition reconcile function
 	if d.Precondition != nil {
-		d.Precondition(ctx, resourceEvents, topology)
+		d.Precondition(ctx, resourceEvents, topology, err)
 	}
 
 	// dispatch the event to concurrent tasks
@@ -28,13 +28,13 @@ func (d *Workflow) Run(ctx context.Context, resourceEvents []ResourceEvent, topo
 	for _, f := range funcs {
 		go func() {
 			defer waitGroup.Done()
-			f(ctx, resourceEvents, topology)
+			f(ctx, resourceEvents, topology, err)
 		}()
 	}
 	waitGroup.Wait()
 
 	// run precondition reconcile function
 	if d.Postcondition != nil {
-		d.Postcondition(ctx, resourceEvents, topology)
+		d.Postcondition(ctx, resourceEvents, topology, err)
 	}
 }

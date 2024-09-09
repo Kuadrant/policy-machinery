@@ -31,7 +31,7 @@ type IstioGatewayProvider struct {
 	Client *dynamic.DynamicClient
 }
 
-func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
+func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, err error) {
 	logger := controller.LoggerFromContext(ctx).WithName("istio").WithName("authorizationpolicy")
 	ctx = controller.LoggerIntoContext(ctx, logger)
 
@@ -60,7 +60,7 @@ func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Contex
 	}
 }
 
-func (p *IstioGatewayProvider) DeleteAuthorizationPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology) {
+func (p *IstioGatewayProvider) DeleteAuthorizationPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error) {
 	for _, resourceEvent := range resourceEvents {
 		gateway := resourceEvent.OldObject
 		p.deleteAuthorizationPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)

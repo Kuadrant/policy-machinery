@@ -61,7 +61,7 @@ func WithRunnable(name string, builder RunnableBuilder) ControllerOption {
 	}
 }
 
-type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology)
+type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology, error)
 
 func WithReconcile(reconcile ReconcileFunc) ControllerOption {
 	return func(o *ControllerOptions) {
@@ -106,24 +106,20 @@ func NewController(f ...ControllerOption) *Controller {
 		name:      "controller",
 		logger:    logr.Discard(),
 		runnables: map[string]RunnableBuilder{},
-		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology) {
+		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error) {
 		},
 	}
 	for _, fn := range f {
 		fn(opts)
 	}
 
-	allowTopologyLoops := false
-	if opts.allowTopologyLoops {
-		allowTopologyLoops = true
-	}
 	controller := &Controller{
 		name:      opts.name,
 		logger:    opts.logger,
 		client:    opts.client,
 		manager:   opts.manager,
 		cache:     &watchableCacheStore{},
-		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks, allowTopologyLoops),
+		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks, opts.allowTopologyLoops),
 		runnables: map[string]Runnable{},
 		reconcile: opts.reconcile,
 	}
@@ -251,10 +247,8 @@ func (c *Controller) delete(obj Object) {
 
 func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 	topology, err := c.topology.Build(c.cache.List())
-	if !c.topology.allowTopologyLoops && err != nil {
-		panic(err)
-	}
-	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology)
+	c.logger.Error(err, "error building topology")
+	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology, err)
 }
 
 func (c *Controller) subscribe() {

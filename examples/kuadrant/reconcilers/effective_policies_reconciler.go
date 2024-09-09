@@ -28,7 +28,7 @@ type EffectivePoliciesReconciler struct {
 	ReconcileFuncs []controller.ReconcileFunc
 }
 
-func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology) {
+func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error) {
 	targetables := topology.Targetables()
 
 	// reconcile policies
@@ -84,7 +84,7 @@ func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEve
 	for _, f := range funcs {
 		go func() {
 			defer waitGroup.Done()
-			f(ctx, resourceEvents, topology)
+			f(ctx, resourceEvents, topology, err)
 		}()
 	}
 }
