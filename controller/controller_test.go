@@ -25,7 +25,7 @@ func TestControllerOptions(t *testing.T) {
 		name:      "controller",
 		logger:    logr.Discard(),
 		runnables: map[string]RunnableBuilder{},
-		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology) {
+		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error) {
 		},
 	}
 
@@ -92,6 +92,11 @@ func TestControllerOptions(t *testing.T) {
 	WithReconcile(testReconcileFunc)(opts)
 	if opts.reconcile == nil {
 		t.Errorf("expected reconcile func, got nil")
+	}
+
+	AllowLoops()(opts)
+	if opts.allowTopologyLoops == false {
+		t.Errorf("expected allowTopologyLoops true, got false")
 	}
 }
 

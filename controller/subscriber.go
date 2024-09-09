@@ -16,7 +16,7 @@ type Subscription struct {
 	Events        []ResourceEventMatcher
 }
 
-func (s Subscription) Reconcile(ctx context.Context, resourceEvents []ResourceEvent, topology *machinery.Topology) {
+func (s Subscription) Reconcile(ctx context.Context, resourceEvents []ResourceEvent, topology *machinery.Topology, err error) {
 	matchingEvents := lo.Filter(resourceEvents, func(resourceEvent ResourceEvent, _ int) bool {
 		return lo.ContainsBy(s.Events, func(m ResourceEventMatcher) bool {
 			obj := resourceEvent.OldObject
@@ -30,6 +30,6 @@ func (s Subscription) Reconcile(ctx context.Context, resourceEvents []ResourceEv
 		})
 	})
 	if len(matchingEvents) > 0 && s.ReconcileFunc != nil {
-		s.ReconcileFunc(ctx, matchingEvents, topology)
+		s.ReconcileFunc(ctx, matchingEvents, topology, err)
 	}
 }

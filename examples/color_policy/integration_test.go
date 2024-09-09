@@ -141,13 +141,17 @@ func TestKuadrantMergeBasedOnTopology(t *testing.T) {
 		}),
 	}
 
-	topology := machinery.NewGatewayAPITopology(
+	topology, err := machinery.NewGatewayAPITopology(
 		machinery.WithGateways(gateway),
 		machinery.WithHTTPRoutes(httpRoutes...),
 		machinery.ExpandHTTPRouteRules(),
 		machinery.WithServices(services...),
 		machinery.WithGatewayAPITopologyPolicies(policies...),
 	)
+
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	machinery.SaveToOutputDir(t, topology.ToDot(), "../../tests/out", ".dot")
 

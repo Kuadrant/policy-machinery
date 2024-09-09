@@ -30,6 +30,8 @@ type GatewayAPITopologyOptions struct {
 	ExpandTLSRouteRules    bool
 	ExpandUDPRouteRules    bool
 	ExpandServicePorts     bool
+
+	allowTopologyLoops bool
 }
 
 type GatewayAPITopologyOptionsFunc func(*GatewayAPITopologyOptions)
@@ -178,6 +180,13 @@ func ExpandServicePorts() GatewayAPITopologyOptionsFunc {
 	}
 }
 
+// AllowTopologyLoops adds AllowLoops to the options to initialize a new Gateway API topology.
+func AllowTopologyLoops() GatewayAPITopologyOptionsFunc {
+	return func(o *GatewayAPITopologyOptions) {
+		o.allowTopologyLoops = true
+	}
+}
+
 // NewGatewayAPITopology returns a topology of Gateway API objects and attached policies.
 //
 // The links between the targetables are established based on the relationships defined by Gateway API.
@@ -188,7 +197,7 @@ func ExpandServicePorts() GatewayAPITopologyOptionsFunc {
 // The links will then be established accordingly. E.g.:
 //   - Without expanding Gateway listeners (default): Gateway -> HTTPRoute links.
 //   - Expanding Gateway listeners: Gateway -> Listener and Listener -> HTTPRoute links.
-func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
+func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) (*Topology, error) {
 	o := &GatewayAPITopologyOptions{}
 	for _, f := range options {
 		f(o)
@@ -354,6 +363,10 @@ func NewGatewayAPITopology(options ...GatewayAPITopologyOptionsFunc) *Topology {
 		servicePorts := lo.FlatMap(o.Services, ServicePortsFromServiceFunc)
 		opts = append(opts, WithTargetables(servicePorts...))
 		opts = append(opts, WithLinks(LinkServiceToServicePortFunc())) // Service -> ServicePort
+	}
+
+	if o.allowTopologyLoops {
+		opts = append(opts, AllowLoops())
 	}
 
 	return NewTopology(opts...)

@@ -28,7 +28,7 @@ type EnvoyGatewayProvider struct {
 	Client *dynamic.DynamicClient
 }
 
-func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology) {
+func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, err error) {
 	logger := controller.LoggerFromContext(ctx).WithName("envoy gateway").WithName("securitypolicy")
 	ctx = controller.LoggerIntoContext(ctx, logger)
 
@@ -57,7 +57,7 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ 
 	}
 }
 
-func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology) {
+func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error) {
 	for _, resourceEvent := range resourceEvents {
 		gateway := resourceEvent.OldObject
 		p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)

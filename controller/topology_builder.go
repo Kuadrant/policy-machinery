@@ -9,21 +9,23 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 )
 
-func newGatewayAPITopologyBuilder(policyKinds, objectKinds []schema.GroupKind, objectLinks []LinkFunc) *gatewayAPITopologyBuilder {
+func newGatewayAPITopologyBuilder(policyKinds, objectKinds []schema.GroupKind, objectLinks []LinkFunc, allowTopologyLoops bool) *gatewayAPITopologyBuilder {
 	return &gatewayAPITopologyBuilder{
-		policyKinds: policyKinds,
-		objectKinds: objectKinds,
-		objectLinks: objectLinks,
+		policyKinds:        policyKinds,
+		objectKinds:        objectKinds,
+		objectLinks:        objectLinks,
+		allowTopologyLoops: allowTopologyLoops,
 	}
 }
 
 type gatewayAPITopologyBuilder struct {
-	policyKinds []schema.GroupKind
-	objectKinds []schema.GroupKind
-	objectLinks []LinkFunc
+	policyKinds        []schema.GroupKind
+	objectKinds        []schema.GroupKind
+	objectLinks        []LinkFunc
+	allowTopologyLoops bool
 }
 
-func (t *gatewayAPITopologyBuilder) Build(objs Store) *machinery.Topology {
+func (t *gatewayAPITopologyBuilder) Build(objs Store) (*machinery.Topology, error) {
 	gatewayClasses := lo.Map(objs.FilterByGroupKind(machinery.GatewayClassGroupKind), ObjectAs[*gwapiv1.GatewayClass])
 	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), ObjectAs[*gwapiv1.Gateway])
 	httpRoutes := lo.Map(objs.FilterByGroupKind(machinery.HTTPRouteGroupKind), ObjectAs[*gwapiv1.HTTPRoute])
@@ -42,6 +44,10 @@ func (t *gatewayAPITopologyBuilder) Build(objs Store) *machinery.Topology {
 		machinery.ExpandHTTPRouteRules(),
 		machinery.ExpandServicePorts(),
 		machinery.WithGatewayAPITopologyLinks(linkFuncs...),
+	}
+
+	if t.allowTopologyLoops {
+		opts = append(opts, machinery.AllowTopologyLoops())
 	}
 
 	for i := range t.policyKinds {

@@ -97,7 +97,7 @@ func TestGatewayAPITopology(t *testing.T) {
 			udpRoutes := lo.Map(tc.targetables.UDPRoutes, func(updRoute *gwapiv1alpha2.UDPRoute, _ int) *UDPRoute { return &UDPRoute{UDPRoute: updRoute} })
 			services := lo.Map(tc.targetables.Services, func(service *core.Service, _ int) *Service { return &Service{Service: service} })
 
-			topology := NewTopology(
+			topology, err := NewTopology(
 				WithTargetables(gatewayClasses...),
 				WithTargetables(gateways...),
 				WithTargetables(httpRoutes...),
@@ -121,6 +121,10 @@ func TestGatewayAPITopology(t *testing.T) {
 				),
 				WithPolicies(tc.policies...),
 			)
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %s", err)
+			}
 
 			links := make(map[string][]string)
 			for _, root := range topology.Targetables().Roots() {
@@ -273,7 +277,7 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			topology := NewGatewayAPITopology(
+			topology, err := NewGatewayAPITopology(
 				WithGatewayClasses(tc.targetables.GatewayClasses...),
 				WithGateways(tc.targetables.Gateways...),
 				ExpandGatewayListeners(),
@@ -291,6 +295,10 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 				ExpandServicePorts(),
 				WithGatewayAPITopologyPolicies(tc.policies...),
 			)
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %s", err)
+			}
 
 			links := make(map[string][]string)
 			for _, root := range topology.Targetables().Roots() {

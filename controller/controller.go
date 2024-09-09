@@ -23,15 +23,16 @@ import (
 )
 
 type ControllerOptions struct {
-	name        string
-	logger      logr.Logger
-	client      *dynamic.DynamicClient
-	manager     ctrlruntime.Manager
-	runnables   map[string]RunnableBuilder
-	reconcile   ReconcileFunc
-	policyKinds []schema.GroupKind
-	objectKinds []schema.GroupKind
-	objectLinks []LinkFunc
+	name               string
+	logger             logr.Logger
+	client             *dynamic.DynamicClient
+	manager            ctrlruntime.Manager
+	runnables          map[string]RunnableBuilder
+	reconcile          ReconcileFunc
+	policyKinds        []schema.GroupKind
+	objectKinds        []schema.GroupKind
+	objectLinks        []LinkFunc
+	allowTopologyLoops bool
 }
 
 type ControllerOption func(*ControllerOptions)
@@ -60,7 +61,7 @@ func WithRunnable(name string, builder RunnableBuilder) ControllerOption {
 	}
 }
 
-type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology)
+type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology, error)
 
 func WithReconcile(reconcile ReconcileFunc) ControllerOption {
 	return func(o *ControllerOptions) {
@@ -94,12 +95,18 @@ func ManagedBy(manager ctrlruntime.Manager) ControllerOption {
 	}
 }
 
+func AllowLoops() ControllerOption {
+	return func(o *ControllerOptions) {
+		o.allowTopologyLoops = true
+	}
+}
+
 func NewController(f ...ControllerOption) *Controller {
 	opts := &ControllerOptions{
 		name:      "controller",
 		logger:    logr.Discard(),
 		runnables: map[string]RunnableBuilder{},
-		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology) {
+		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error) {
 		},
 	}
 	for _, fn := range f {
@@ -112,7 +119,7 @@ func NewController(f ...ControllerOption) *Controller {
 		client:    opts.client,
 		manager:   opts.manager,
 		cache:     &watchableCacheStore{},
-		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks),
+		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks, opts.allowTopologyLoops),
 		runnables: map[string]Runnable{},
 		reconcile: opts.reconcile,
 	}
@@ -239,8 +246,9 @@ func (c *Controller) delete(obj Object) {
 }
 
 func (c *Controller) propagate(resourceEvents []ResourceEvent) {
-	topology := c.topology.Build(c.cache.List())
-	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology)
+	topology, err := c.topology.Build(c.cache.List())
+	c.logger.Error(err, "error building topology")
+	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology, err)
 }
 
 func (c *Controller) subscribe() {
