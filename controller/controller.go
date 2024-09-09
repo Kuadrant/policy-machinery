@@ -61,7 +61,7 @@ func WithRunnable(name string, builder RunnableBuilder) ControllerOption {
 	}
 }
 
-type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology, error)
+type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology, *sync.Map, error)
 
 func WithReconcile(reconcile ReconcileFunc) ControllerOption {
 	return func(o *ControllerOptions) {
@@ -106,7 +106,7 @@ func NewController(f ...ControllerOption) *Controller {
 		name:      "controller",
 		logger:    logr.Discard(),
 		runnables: map[string]RunnableBuilder{},
-		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error) {
+		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, *sync.Map, error) {
 		},
 	}
 	for _, fn := range f {
@@ -250,7 +250,7 @@ func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 	if err != nil {
 		c.logger.Error(err, "error building topology")
 	}
-	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology, err)
+	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology, &sync.Map{}, err)
 }
 
 func (c *Controller) subscribe() {

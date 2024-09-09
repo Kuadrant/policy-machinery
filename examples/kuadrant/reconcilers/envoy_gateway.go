@@ -3,6 +3,7 @@ package reconcilers
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/samber/lo"
@@ -28,11 +29,14 @@ type EnvoyGatewayProvider struct {
 	Client *dynamic.DynamicClient
 }
 
-func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, err error) {
+func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, state *sync.Map, err error) {
 	logger := controller.LoggerFromContext(ctx).WithName("envoy gateway").WithName("securitypolicy")
 	ctx = controller.LoggerIntoContext(ctx, logger)
 
-	authPaths := pathsFromContext(ctx, authPathsKey)
+	var authPaths [][]machinery.Targetable
+	if untypedAuthPaths, ok := state.Load(authPathsKey); ok {
+		authPaths = untypedAuthPaths.([][]machinery.Targetable)
+	}
 	targetables := topology.Targetables()
 	gateways := targetables.Items(func(o machinery.Object) bool {
 		_, ok := o.(*machinery.Gateway)
@@ -57,7 +61,7 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ 
 	}
 }
 
-func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error) {
+func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, _ *sync.Map, err error) {
 	for _, resourceEvent := range resourceEvents {
 		gateway := resourceEvent.OldObject
 		p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)

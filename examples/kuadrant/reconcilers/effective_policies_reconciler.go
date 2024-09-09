@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/samber/lo"
-	"k8s.io/client-go/dynamic"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -20,15 +19,7 @@ import (
 
 const authPathsKey = "authPaths"
 
-// EffectivePoliciesReconciler works exactly like a controller.Workflow where the precondition reconcile function
-// reconciles the effective policies for the given topology paths, occasionally modifying the context that is passed
-// as argument to the subsequent concurrent reconcilers.
-type EffectivePoliciesReconciler struct {
-	Client         *dynamic.DynamicClient
-	ReconcileFuncs []controller.ReconcileFunc
-}
-
-func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error) {
+func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, state *sync.Map, err error) {
 	targetables := topology.Targetables()
 
 	// reconcile policies
@@ -46,6 +37,8 @@ func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEve
 		_, ok := o.(*machinery.HTTPRouteRule)
 		return ok
 	})
+
+	var authPaths [][]machinery.Targetable
 
 	for _, gateway := range gateways {
 		// reconcile Gateway -> Listener policies
@@ -66,7 +59,7 @@ func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEve
 			paths := targetables.Paths(gateway, httpRouteRule)
 			for i := range paths {
 				if p := effectivePolicyForPath[*kuadrantv1beta3.AuthPolicy](ctx, paths[i]); p != nil {
-					ctx = pathIntoContext(ctx, authPathsKey, paths[i])
+					authPaths = append(authPaths, paths[i])
 					// TODO: reconcile auth effective policy (i.e. create the Authorino AuthConfig)
 				}
 				if p := effectivePolicyForPath[*kuadrantv1beta3.RateLimitPolicy](ctx, paths[i]); p != nil {
@@ -76,17 +69,7 @@ func (r *EffectivePoliciesReconciler) Reconcile(ctx context.Context, resourceEve
 		}
 	}
 
-	// dispatch the event to subsequent reconcilers
-	funcs := r.ReconcileFuncs
-	waitGroup := &sync.WaitGroup{}
-	defer waitGroup.Wait()
-	waitGroup.Add(len(funcs))
-	for _, f := range funcs {
-		go func() {
-			defer waitGroup.Done()
-			f(ctx, resourceEvents, topology, err)
-		}()
-	}
+	state.Store(authPathsKey, authPaths)
 }
 
 func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []machinery.Targetable) *T {
@@ -120,19 +103,4 @@ func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []mach
 
 	concreteEffectivePolicy, _ := effectivePolicy.(T)
 	return &concreteEffectivePolicy
-}
-
-func pathIntoContext(ctx context.Context, key string, path []machinery.Targetable) context.Context {
-	if p := ctx.Value(key); p != nil {
-		return context.WithValue(ctx, key, append(p.([][]machinery.Targetable), path))
-	}
-	return context.WithValue(ctx, key, [][]machinery.Targetable{path})
-}
-
-func pathsFromContext(ctx context.Context, key string) [][]machinery.Targetable {
-	var paths [][]machinery.Targetable
-	if p := ctx.Value(key); p != nil {
-		paths = p.([][]machinery.Targetable)
-	}
-	return paths
 }
