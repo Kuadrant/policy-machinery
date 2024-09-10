@@ -26,7 +26,7 @@ func TestControllerOptions(t *testing.T) {
 		name:      "controller",
 		logger:    logr.Discard(),
 		runnables: map[string]RunnableBuilder{},
-		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, *sync.Map, error) {
+		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map) {
 		},
 	}
 

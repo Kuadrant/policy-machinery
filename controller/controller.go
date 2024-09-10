@@ -61,7 +61,11 @@ func WithRunnable(name string, builder RunnableBuilder) ControllerOption {
 	}
 }
 
-type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology, *sync.Map, error)
+// ReconcileFunc is a function that reconciles a particular state of the world.
+// It receives a list of recent events, an immutable copy of the topology as known by the caller after the events,
+// an optional error detected before the reconciliation, and a thread-safe map to store transient state across
+// chained calls to multiple ReconcileFuncs.
+type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map)
 
 func WithReconcile(reconcile ReconcileFunc) ControllerOption {
 	return func(o *ControllerOptions) {
@@ -106,7 +110,7 @@ func NewController(f ...ControllerOption) *Controller {
 		name:      "controller",
 		logger:    logr.Discard(),
 		runnables: map[string]RunnableBuilder{},
-		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, *sync.Map, error) {
+		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map) {
 		},
 	}
 	for _, fn := range f {
@@ -250,7 +254,7 @@ func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 	if err != nil {
 		c.logger.Error(err, "error building topology")
 	}
-	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology, &sync.Map{}, err)
+	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology, err, &sync.Map{})
 }
 
 func (c *Controller) subscribe() {

@@ -19,7 +19,7 @@ import (
 
 const authPathsKey = "authPaths"
 
-func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, state *sync.Map, err error) {
+func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) {
 	targetables := topology.Targetables()
 
 	// reconcile policies

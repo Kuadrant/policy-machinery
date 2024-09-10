@@ -52,7 +52,7 @@ func init() {
 			Func: func(_ machinery.Object) []machinery.Object { return []machinery.Object{&RuntimeObject{myObjects[0]}} },
 		}
 	}
-	testReconcileFunc = func(_ context.Context, events []ResourceEvent, topology *machinery.Topology, _ *sync.Map, err error) {
+	testReconcileFunc = func(_ context.Context, events []ResourceEvent, topology *machinery.Topology, err error, _ *sync.Map) {
 		for _, event := range events {
 			testLogger.Info("reconcile",
 				"kind", event.Kind,
