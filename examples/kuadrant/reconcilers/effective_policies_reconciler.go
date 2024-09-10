@@ -19,7 +19,7 @@ import (
 
 const authPathsKey = "authPaths"
 
-func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) {
+func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
 	targetables := topology.Targetables()
 
 	// reconcile policies
@@ -70,6 +70,8 @@ func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller
 	}
 
 	state.Store(authPathsKey, authPaths)
+
+	return nil
 }
 
 func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []machinery.Targetable) *T {
