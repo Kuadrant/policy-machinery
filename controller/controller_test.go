@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func TestControllerOptions(t *testing.T) {
 		name:      "controller",
 		logger:    logr.Discard(),
 		runnables: map[string]RunnableBuilder{},
-		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error) {
+		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map) {
 		},
 	}
 

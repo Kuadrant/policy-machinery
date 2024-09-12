@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"sync"
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/google/go-cmp/cmp"
@@ -201,7 +202,9 @@ func controllerOptionsFor(gatewayProviders []string) []controller.ControllerOpti
 //  3. (gateway deleted) delete SecurityPolicy / (other events) reconcile SecurityPolicies
 //  3. (gateway deleted) delete AuthorizationPolicy / (other events) reconcile AuthorizationPolicies
 func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) controller.ReconcileFunc {
-	effectivePolicyReconciler := &reconcilers.EffectivePoliciesReconciler{Client: client}
+	effectivePolicyReconciler := &controller.Workflow{
+		Precondition: reconcilers.ReconcileEffectivePolicies,
+	}
 
 	commonAuthPolicyResourceEventMatchers := []controller.ResourceEventMatcher{
 		{Kind: ptr.To(machinery.GatewayClassGroupKind)},
@@ -215,11 +218,11 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 		switch gatewayProvider {
 		case reconcilers.EnvoyGatewayProviderName:
 			envoyGatewayProvider := &reconcilers.EnvoyGatewayProvider{Client: client}
-			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscription{
+			effectivePolicyReconciler.Tasks = append(effectivePolicyReconciler.Tasks, (&controller.Subscription{
 				ReconcileFunc: envoyGatewayProvider.ReconcileSecurityPolicies,
 				Events:        append(commonAuthPolicyResourceEventMatchers, controller.ResourceEventMatcher{Kind: ptr.To(reconcilers.EnvoyGatewaySecurityPolicyKind)}),
 			}).Reconcile)
-			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscription{
+			effectivePolicyReconciler.Tasks = append(effectivePolicyReconciler.Tasks, (&controller.Subscription{
 				ReconcileFunc: envoyGatewayProvider.DeleteSecurityPolicy,
 				Events: []controller.ResourceEventMatcher{
 					{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.DeleteEvent)},
@@ -227,11 +230,11 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 			}).Reconcile)
 		case reconcilers.IstioGatewayProviderName:
 			istioGatewayProvider := &reconcilers.IstioGatewayProvider{Client: client}
-			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscription{
+			effectivePolicyReconciler.Tasks = append(effectivePolicyReconciler.Tasks, (&controller.Subscription{
 				ReconcileFunc: istioGatewayProvider.ReconcileAuthorizationPolicies,
 				Events:        append(commonAuthPolicyResourceEventMatchers, controller.ResourceEventMatcher{Kind: ptr.To(reconcilers.IstioAuthorizationPolicyKind)}),
 			}).Reconcile)
-			effectivePolicyReconciler.ReconcileFuncs = append(effectivePolicyReconciler.ReconcileFuncs, (&controller.Subscription{
+			effectivePolicyReconciler.Tasks = append(effectivePolicyReconciler.Tasks, (&controller.Subscription{
 				ReconcileFunc: istioGatewayProvider.DeleteAuthorizationPolicy,
 				Events: []controller.ResourceEventMatcher{
 					{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.DeleteEvent)},
@@ -241,7 +244,7 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 	}
 
 	reconciler := &controller.Workflow{
-		Precondition: func(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error) {
+		Precondition: func(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, _ *sync.Map) {
 			logger := controller.LoggerFromContext(ctx).WithName("event logger")
 			for _, event := range resourceEvents {
 				// log the event
@@ -263,7 +266,7 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 		},
 		Tasks: []controller.ReconcileFunc{
 			(&reconcilers.TopologyFileReconciler{}).Reconcile,
-			effectivePolicyReconciler.Reconcile,
+			effectivePolicyReconciler.Run,
 		},
 	}
 

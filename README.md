@@ -148,6 +148,7 @@ Example:
 ```go
 import (
   "context"
+  "sync"
 
   "k8s.io/apimachinery/pkg/runtime/schema"
   "k8s.io/client-go/dynamic"
@@ -187,7 +188,7 @@ func main() {
 	controller.Start(context.Background())
 }
 
-func reconcile(ctx context.Context, events []ResourceEvent, topology *machinery.Topology) {
+func reconcile(ctx context.Context, events []ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) {
   // TODO
 }
 ```

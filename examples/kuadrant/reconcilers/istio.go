@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/samber/lo"
 	istioapiv1 "istio.io/api/security/v1"
@@ -31,11 +32,14 @@ type IstioGatewayProvider struct {
 	Client *dynamic.DynamicClient
 }
 
-func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, err error) {
+func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) {
 	logger := controller.LoggerFromContext(ctx).WithName("istio").WithName("authorizationpolicy")
 	ctx = controller.LoggerIntoContext(ctx, logger)
 
-	authPaths := pathsFromContext(ctx, authPathsKey)
+	var authPaths [][]machinery.Targetable
+	if untypedAuthPaths, ok := state.Load(authPathsKey); ok {
+		authPaths = untypedAuthPaths.([][]machinery.Targetable)
+	}
 	targetables := topology.Targetables()
 	gateways := targetables.Items(func(o machinery.Object) bool {
 		_, ok := o.(*machinery.Gateway)
@@ -60,7 +64,7 @@ func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Contex
 	}
 }
 
-func (p *IstioGatewayProvider) DeleteAuthorizationPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error) {
+func (p *IstioGatewayProvider) DeleteAuthorizationPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, _ *sync.Map) {
 	for _, resourceEvent := range resourceEvents {
 		gateway := resourceEvent.OldObject
 		p.deleteAuthorizationPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
