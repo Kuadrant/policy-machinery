@@ -13,7 +13,6 @@ import (
 )
 
 func TestWorkflow(t *testing.T) {
-
 	reconcileFuncFor := func(flag *bool, err error) ReconcileFunc {
 		return func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map) error {
 			*flag = true
@@ -21,7 +20,7 @@ func TestWorkflow(t *testing.T) {
 		}
 	}
 
-	var preconditionCalled, task1Called, task2Called, postconditionCalled bool
+	var preconditionCalled, task1Called, task2Called, postconditionCalled, errorHandled bool
 
 	precondition := reconcileFuncFor(&preconditionCalled, nil)
 	preconditionWithError := reconcileFuncFor(&preconditionCalled, fmt.Errorf("precondition error"))
@@ -32,6 +31,16 @@ func TestWorkflow(t *testing.T) {
 	postcondition := reconcileFuncFor(&postconditionCalled, nil)
 	postconditionWithError := reconcileFuncFor(&postconditionCalled, fmt.Errorf("postcondition error"))
 
+	handleErrorAndSupress := func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map) error {
+		errorHandled = true
+		return nil
+	}
+
+	handleErrorAndRaise := func(_ context.Context, _ []ResourceEvent, _ *machinery.Topology, err error, _ *sync.Map) error {
+		errorHandled = true
+		return err
+	}
+
 	testCases := []struct {
 		name                        string
 		workflow                    *Workflow
@@ -40,6 +49,7 @@ func TestWorkflow(t *testing.T) {
 		expectedTask2Called         bool
 		expectedPostconditionCalled bool
 		possibleErrs                []error
+		expectedErrorHandled        bool
 	}{
 		{
 			name:     "empty workflow",
@@ -134,6 +144,28 @@ func TestWorkflow(t *testing.T) {
 			expectedPostconditionCalled: true,
 			possibleErrs:                []error{fmt.Errorf("postcondition error")},
 		},
+		{
+			name: "handle error and suppress",
+			workflow: &Workflow{
+				Precondition:  preconditionWithError,
+				Postcondition: postconditionWithError,
+				ErrorHandler:  handleErrorAndSupress,
+			},
+			expectedPreconditionCalled:  true,
+			expectedPostconditionCalled: true,
+			expectedErrorHandled:        true,
+		},
+		{
+			name: "handle error and raise",
+			workflow: &Workflow{
+				Precondition:  preconditionWithError,
+				Postcondition: postconditionWithError,
+				ErrorHandler:  handleErrorAndRaise,
+			},
+			expectedPreconditionCalled: true,
+			expectedErrorHandled:       true,
+			possibleErrs:               []error{fmt.Errorf("precondition error")},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -143,6 +175,7 @@ func TestWorkflow(t *testing.T) {
 			task1Called = false
 			task2Called = false
 			postconditionCalled = false
+			errorHandled = false
 
 			err := tc.workflow.Run(context.Background(), nil, nil, nil, nil)
 			possibleErrs := lo.Map(tc.possibleErrs, func(err error, _ int) string { return err.Error() })
@@ -167,6 +200,9 @@ func TestWorkflow(t *testing.T) {
 			}
 			if len(possibleErrs) > 0 && err != nil && !lo.ContainsBy(possibleErrs, func(possibleErr string) bool { return possibleErr == err.Error() }) {
 				t.Errorf("expected error of the following errors (%v), got %v", strings.Join(possibleErrs, " / "), err)
+			}
+			if tc.expectedErrorHandled != errorHandled {
+				t.Errorf("expected error handler called: %t, got %t", tc.expectedErrorHandled, errorHandled)
 			}
 		})
 	}
