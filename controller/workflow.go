@@ -14,7 +14,7 @@ import (
 // a list of concurrent reconciliation tasks, and runs an optional postcondition reconciliation function.
 //
 // If any of the reconciliation functions returns an error, the error is handled by an optional error handler.
-// The error passed to the error handler func is conflated with any ocasional error carried over into the call
+// The error passed to the error handler func is conflated with any occasional error carried over into the call
 // to the workflow in the first place. It is up to the error handler to decide how to handle the error and whether
 // to supress it or raise it again. Supressed errors cause the workflow to continue running, while raised errors
 // interrupt the workflow. If the error handler is nil, the error is raised.
