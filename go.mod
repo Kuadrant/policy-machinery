@@ -9,6 +9,7 @@ require (
 	github.com/samber/lo v1.39.0
 	github.com/telepresenceio/watchable v0.0.0-20220726211108-9bb86f92afa7
 	go.uber.org/zap v1.26.0
+	golang.org/x/sync v0.8.0
 	k8s.io/api v0.30.2
 	k8s.io/apimachinery v0.30.2
 	k8s.io/client-go v0.30.2

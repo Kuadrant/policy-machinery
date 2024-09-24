@@ -52,7 +52,7 @@ func init() {
 			Func: func(_ machinery.Object) []machinery.Object { return []machinery.Object{&RuntimeObject{myObjects[0]}} },
 		}
 	}
-	testReconcileFunc = func(_ context.Context, events []ResourceEvent, topology *machinery.Topology, err error, _ *sync.Map) {
+	testReconcileFunc = func(_ context.Context, events []ResourceEvent, topology *machinery.Topology, err error, _ *sync.Map) error {
 		for _, event := range events {
 			testLogger.Info("reconcile",
 				"kind", event.Kind,
@@ -62,6 +62,7 @@ func init() {
 				"objects", len(topology.Objects().Items()),
 			)
 		}
+		return nil
 	}
 	testScheme = runtime.NewScheme()
 	corev1.AddToScheme(testScheme)

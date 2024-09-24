@@ -65,7 +65,8 @@ func WithRunnable(name string, builder RunnableBuilder) ControllerOption {
 // It receives a list of recent events, an immutable copy of the topology as known by the caller after the events,
 // an optional error detected before the reconciliation, and a thread-safe map to store transient state across
 // chained calls to multiple ReconcileFuncs.
-type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map)
+// If a ReconcileFunc returns an error, a chained sequence of ReconcileFuncs must be interrupted.
+type ReconcileFunc func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map) error
 
 func WithReconcile(reconcile ReconcileFunc) ControllerOption {
 	return func(o *ControllerOptions) {
@@ -110,7 +111,8 @@ func NewController(f ...ControllerOption) *Controller {
 		name:      "controller",
 		logger:    logr.Discard(),
 		runnables: map[string]RunnableBuilder{},
-		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map) {
+		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map) error {
+			return nil
 		},
 	}
 	for _, fn := range f {
@@ -254,7 +256,9 @@ func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 	if err != nil {
 		c.logger.Error(err, "error building topology")
 	}
-	c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology, err, &sync.Map{})
+	if err := c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology, err, &sync.Map{}); err != nil {
+		c.logger.Error(err, "reconciliation error")
+	}
 }
 
 func (c *Controller) subscribe() {
