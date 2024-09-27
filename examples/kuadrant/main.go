@@ -19,6 +19,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/utils/ptr"
+	ctrlruntimepredicate "sigs.k8s.io/controller-runtime/pkg/predicate"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	ctrlruntime "sigs.k8s.io/controller-runtime"
@@ -120,12 +121,41 @@ func main() {
 	controllerOpts := []controller.ControllerOption{
 		controller.WithLogger(logger),
 		controller.WithClient(client),
-		controller.WithRunnable("gateway watcher", buildWatcher(&gwapiv1.Gateway{}, controller.GatewaysResource, metav1.NamespaceAll)),
-		controller.WithRunnable("httproute watcher", buildWatcher(&gwapiv1.HTTPRoute{}, controller.HTTPRoutesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("dnspolicy watcher", buildWatcher(&kuadrantv1alpha2.DNSPolicy{}, kuadrantv1alpha2.DNSPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("tlspolicy watcher", buildWatcher(&kuadrantv1alpha2.TLSPolicy{}, kuadrantv1alpha2.TLSPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("authpolicy watcher", buildWatcher(&kuadrantv1beta3.AuthPolicy{}, kuadrantv1beta3.AuthPoliciesResource, metav1.NamespaceAll)),
-		controller.WithRunnable("ratelimitpolicy watcher", buildWatcher(&kuadrantv1beta3.RateLimitPolicy{}, kuadrantv1beta3.RateLimitPoliciesResource, metav1.NamespaceAll)),
+		controller.WithRunnable("gateway watcher", buildWatcher(
+			&gwapiv1.Gateway{},
+			controller.GatewaysResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates[*gwapiv1.Gateway](&ctrlruntimepredicate.TypedGenerationChangedPredicate[*gwapiv1.Gateway]{})),
+		),
+		controller.WithRunnable("httproute watcher", buildWatcher(
+			&gwapiv1.HTTPRoute{},
+			controller.HTTPRoutesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates[*gwapiv1.HTTPRoute](&ctrlruntimepredicate.TypedGenerationChangedPredicate[*gwapiv1.HTTPRoute]{})),
+		),
+		controller.WithRunnable("dnspolicy watcher", buildWatcher(
+			&kuadrantv1alpha2.DNSPolicy{},
+			kuadrantv1alpha2.DNSPoliciesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates[*kuadrantv1alpha2.DNSPolicy](&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha2.DNSPolicy]{})),
+		),
+		controller.WithRunnable("tlspolicy watcher", buildWatcher(
+			&kuadrantv1alpha2.TLSPolicy{},
+			kuadrantv1alpha2.TLSPoliciesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates[*kuadrantv1alpha2.TLSPolicy](&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha2.TLSPolicy]{})),
+		),
+		controller.WithRunnable("authpolicy watcher", buildWatcher(
+			&kuadrantv1beta3.AuthPolicy{},
+			kuadrantv1beta3.AuthPoliciesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates[*kuadrantv1beta3.AuthPolicy](&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta3.AuthPolicy]{})),
+		),
+		controller.WithRunnable("ratelimitpolicy watcher", buildWatcher(
+			&kuadrantv1beta3.RateLimitPolicy{},
+			kuadrantv1beta3.RateLimitPoliciesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates[*kuadrantv1beta3.RateLimitPolicy](&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta3.RateLimitPolicy]{}))),
 		controller.WithPolicyKinds(
 			kuadrantv1alpha2.DNSPolicyKind,
 			kuadrantv1alpha2.TLSPolicyKind,
@@ -182,11 +212,21 @@ func controllerOptionsFor(gatewayProviders []string) []controller.ControllerOpti
 	for _, gatewayProvider := range gatewayProviders {
 		switch gatewayProvider {
 		case reconcilers.EnvoyGatewayProviderName:
-			opts = append(opts, controller.WithRunnable("envoygateway/securitypolicy watcher", buildWatcher(&egv1alpha1.SecurityPolicy{}, reconcilers.EnvoyGatewaySecurityPoliciesResource, metav1.NamespaceAll)))
+			opts = append(opts, controller.WithRunnable("envoygateway/securitypolicy watcher", buildWatcher(
+				&egv1alpha1.SecurityPolicy{},
+				reconcilers.EnvoyGatewaySecurityPoliciesResource,
+				metav1.NamespaceAll,
+				controller.WithPredicates[*egv1alpha1.SecurityPolicy](&ctrlruntimepredicate.TypedGenerationChangedPredicate[*egv1alpha1.SecurityPolicy]{}))),
+			)
 			opts = append(opts, controller.WithObjectKinds(reconcilers.EnvoyGatewaySecurityPolicyKind))
 			opts = append(opts, controller.WithObjectLinks(reconcilers.LinkGatewayToEnvoyGatewaySecurityPolicyFunc))
 		case reconcilers.IstioGatewayProviderName:
-			opts = append(opts, controller.WithRunnable("istio/authorizationpolicy watcher", buildWatcher(&istiov1.AuthorizationPolicy{}, reconcilers.IstioAuthorizationPoliciesResource, metav1.NamespaceAll)))
+			opts = append(opts, controller.WithRunnable("istio/authorizationpolicy watcher", buildWatcher(
+				&istiov1.AuthorizationPolicy{},
+				reconcilers.IstioAuthorizationPoliciesResource,
+				metav1.NamespaceAll,
+				controller.WithPredicates[*istiov1.AuthorizationPolicy](&ctrlruntimepredicate.TypedGenerationChangedPredicate[*istiov1.AuthorizationPolicy]{}))),
+			)
 			opts = append(opts, controller.WithObjectKinds(reconcilers.IstioAuthorizationPolicyKind))
 			opts = append(opts, controller.WithObjectLinks(reconcilers.LinkGatewayToIstioAuthorizationPolicyFunc))
 		}
