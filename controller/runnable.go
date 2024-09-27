@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/samber/lo"
@@ -198,14 +199,20 @@ type stateReconciler struct {
 	listFunc   ListFunc
 	watchFunc  WatchFunc
 	synced     bool
+	sync.RWMutex
 }
 
 func (r *stateReconciler) Run(_ <-chan struct{}) {
+	r.Lock()
+	defer r.Unlock()
 	r.controller.listAndWatch(r.listFunc, r.watchFunc)
 	r.synced = true
 }
 
 func (r *stateReconciler) HasSynced() bool {
+	r.RLock()
+	defer r.RUnlock()
+
 	return r.synced
 }
 
