@@ -301,6 +301,9 @@ func (c *Controller) subscribe(ctx context.Context) {
 					OldObject: oldObj,
 				}
 				_, exists := newObjs[uid]
+				if !exists {
+					delete(oldObjs, uid)
+				}
 				return event, !exists
 			})
 
