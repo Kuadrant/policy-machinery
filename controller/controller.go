@@ -161,7 +161,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	stopCh := make(chan struct{})
 
 	// subscribe to cache
-	c.subscribe()
+	c.subscribe(ctx)
 
 	// start runnables
 	for name := range c.runnables {
@@ -263,9 +263,9 @@ func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 	}
 }
 
-func (c *Controller) subscribe() {
+func (c *Controller) subscribe(ctx context.Context) {
 	oldObjs := make(Store)
-	subscription := c.cache.SubscribeSubset(context.TODO(), func(storeId string, _ Store) bool {
+	subscription := c.cache.SubscribeSubset(ctx, func(storeId string, _ Store) bool {
 		return storeId == resourceStoreId
 	})
 	go func() {
