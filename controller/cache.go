@@ -27,93 +27,50 @@ func (s Store) FilterByGroupKind(gk schema.GroupKind) []Object {
 	})
 }
 
-type Cache interface {
-	List() Store
-	Add(obj Object)
-	Delete(obj Object)
-	Replace(Store)
+func (s Store) DeepCopy() Store {
+	return lo.SliceToMap(lo.Keys(s), func(uid string) (string, Object) {
+		return uid, s[uid].DeepCopyObject().(Object)
+	})
 }
 
-type cacheStore struct {
+func (s Store) Equal(other Store) bool {
+	return len(s) == len(other) && lo.EveryBy(lo.Keys(s), func(uid string) bool {
+		otherObj, ok := other[uid]
+		return ok && reflect.DeepEqual(s[uid], otherObj)
+	})
+}
+
+type CacheStore struct {
 	sync.RWMutex
-	store Store
+	watchable.Map[string, Store]
 }
 
-func (c *cacheStore) List() Store {
+func (c *CacheStore) List(storeId string) Store {
 	c.RLock()
 	defer c.RUnlock()
-
-	ret := make(Store, len(c.store))
-	for k, v := range c.store {
-		ret[k] = v.DeepCopyObject().(Object)
-	}
-	return ret
-}
-
-func (c *cacheStore) Add(obj Object) {
-	c.Lock()
-	defer c.Unlock()
-
-	c.store[string(obj.GetUID())] = obj
-}
-
-func (c *cacheStore) Delete(obj Object) {
-	c.Lock()
-	defer c.Unlock()
-
-	delete(c.store, string(obj.GetUID()))
-}
-
-func (c *cacheStore) Replace(store Store) {
-	c.Lock()
-	defer c.Unlock()
-
-	c.store = make(Store, len(store))
-	for k, v := range store {
-		c.store[k] = v.DeepCopyObject().(Object)
-	}
-}
-
-type watchableCacheStore struct {
-	watchable.Map[string, watchableCacheEntry]
-}
-
-func (c *watchableCacheStore) List() Store {
-	entries := c.LoadAll()
-	store := make(Store, len(entries))
-	for uid, obj := range entries {
-		store[uid] = obj.Object
-	}
+	store, _ := c.Load(storeId)
 	return store
 }
 
-func (c *watchableCacheStore) Add(obj Object) {
-	c.Store(string(obj.GetUID()), watchableCacheEntry{obj})
+func (c *CacheStore) Add(storeId string, obj Object) {
+	c.Lock()
+	defer c.Unlock()
+	uid := string(obj.GetUID())
+	store, _ := c.Load(storeId)
+	store[uid] = obj
+	c.Store(storeId, store)
 }
 
-func (c *watchableCacheStore) Delete(obj Object) {
-	c.Map.Delete(string(obj.GetUID()))
+func (c *CacheStore) Delete(storeId string, obj Object) {
+	c.Lock()
+	defer c.Unlock()
+	store, _ := c.Load(storeId)
+	delete(store, string(obj.GetUID()))
+	c.Store(storeId, store)
 }
 
-func (c *watchableCacheStore) Replace(store Store) {
-	for uid, obj := range store {
-		c.Store(uid, watchableCacheEntry{obj})
-	}
-	for uid := range c.LoadAll() {
-		if _, ok := store[uid]; !ok {
-			c.Map.Delete(uid)
-		}
-	}
-}
-
-type watchableCacheEntry struct {
-	Object
-}
-
-func (e watchableCacheEntry) DeepCopy() watchableCacheEntry {
-	return watchableCacheEntry{e.DeepCopyObject().(Object)}
-}
-
-func (e watchableCacheEntry) Equal(other watchableCacheEntry) bool {
-	return reflect.DeepEqual(e, other)
+func (c *CacheStore) Replace(storeId string, store Store) {
+	c.Lock()
+	defer c.Unlock()
+	c.Store(storeId, store)
 }

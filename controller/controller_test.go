@@ -173,11 +173,6 @@ func TestNewController(t *testing.T) {
 			if c.manager != tc.expected.manager {
 				t.Errorf("expected manager %v, got %v", tc.expected.manager, c.manager)
 			}
-			switch c.cache.(type) {
-			case *watchableCacheStore:
-			default:
-				t.Errorf("expected cache type *watchableCacheStore, got %T", c.cache)
-			}
 			if len(c.topology.policyKinds) != len(tc.expected.policyKinds) || !lo.Every(c.topology.policyKinds, tc.expected.policyKinds) {
 				t.Errorf("expected policyKinds %v, got %v", tc.expected.policyKinds, c.topology.policyKinds)
 			}
@@ -200,7 +195,7 @@ func TestControllerReconcile(t *testing.T) {
 		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "test-configmap", UID: "aed148b1-285a-48ab-8839-fe99475bc6fc"}},
 	}
 	objUIDs := lo.Map(objs, func(o Object, _ int) string { return string(o.GetUID()) })
-	cache := &cacheStore{store: make(Store)}
+	cache := &CacheStore{}
 	controller := &Controller{
 		logger: testLogger,
 		cache:  cache,
@@ -209,7 +204,7 @@ func TestControllerReconcile(t *testing.T) {
 		},
 	}
 	controller.Reconcile(context.TODO(), ctrlruntimereconcile.Request{})
-	cachedObjs := lo.Keys(cache.List())
+	cachedObjs := lo.Keys(cache.List(resourceStoreId))
 	if len(cachedObjs) != 2 {
 		t.Errorf("expected 2 objects, got %d", len(cachedObjs))
 	}

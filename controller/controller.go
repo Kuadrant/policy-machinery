@@ -3,12 +3,12 @@ package controller
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/samber/lo"
-	"github.com/telepresenceio/watchable"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
@@ -21,6 +21,8 @@ import (
 
 	"github.com/kuadrant/policy-machinery/machinery"
 )
+
+const resourceStoreId = "resources"
 
 type ControllerOptions struct {
 	name               string
@@ -124,7 +126,7 @@ func NewController(f ...ControllerOption) *Controller {
 		logger:    opts.logger,
 		client:    opts.client,
 		manager:   opts.manager,
-		cache:     &watchableCacheStore{},
+		cache:     &CacheStore{},
 		topology:  newGatewayAPITopologyBuilder(opts.policyKinds, opts.objectKinds, opts.objectLinks, opts.allowTopologyLoops),
 		runnables: map[string]Runnable{},
 		reconcile: opts.reconcile,
@@ -146,7 +148,7 @@ type Controller struct {
 	logger     logr.Logger
 	client     *dynamic.DynamicClient
 	manager    ctrlruntime.Manager
-	cache      Cache
+	cache      *CacheStore
 	topology   *gatewayAPITopologyBuilder
 	runnables  map[string]Runnable
 	listFuncs  []ListFunc
@@ -159,7 +161,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	stopCh := make(chan struct{})
 
 	// subscribe to cache
-	c.subscribe()
+	c.subscribe(ctx)
 
 	// start runnables
 	for name := range c.runnables {
@@ -217,7 +219,7 @@ func (c *Controller) Reconcile(ctx context.Context, _ ctrlruntimereconcile.Reque
 			store[string(object.GetUID())] = object
 		}
 	}
-	c.cache.Replace(store)
+	c.cache.Replace(resourceStoreId, store)
 
 	return ctrlruntimereconcile.Result{}, nil
 }
@@ -234,25 +236,25 @@ func (c *Controller) add(obj Object) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.cache.Add(obj)
+	c.cache.Add(resourceStoreId, obj)
 }
 
 func (c *Controller) update(_, newObj Object) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.cache.Add(newObj)
+	c.cache.Add(resourceStoreId, newObj)
 }
 
 func (c *Controller) delete(obj Object) {
 	c.Lock()
 	defer c.Unlock()
 
-	c.cache.Delete(obj)
+	c.cache.Delete(resourceStoreId, obj)
 }
 
 func (c *Controller) propagate(resourceEvents []ResourceEvent) {
-	topology, err := c.topology.Build(c.cache.List())
+	topology, err := c.topology.Build(c.cache.List(resourceStoreId))
 	if err != nil {
 		c.logger.Error(err, "error building topology")
 	}
@@ -261,42 +263,53 @@ func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 	}
 }
 
-func (c *Controller) subscribe() {
-	cache, ok := c.cache.(*watchableCacheStore) // should we add Subscribe(ctx) to the Cache interface or remove the interface altogether?
-	if !ok {
-		return
-	}
-	recent := make(Store)
-	subscription := cache.Subscribe(context.TODO())
+func (c *Controller) subscribe(ctx context.Context) {
+	oldObjs := make(Store)
+	subscription := c.cache.SubscribeSubset(ctx, func(storeId string, _ Store) bool {
+		return storeId == resourceStoreId
+	})
 	go func() {
 		for snapshot := range subscription {
 			c.Lock()
 
-			c.propagate(lo.FlatMap(snapshot.Updates, func(update watchable.Update[string, watchableCacheEntry], _ int) []ResourceEvent {
-				key := update.Key
-				obj := update.Value
+			newObjs := snapshot.State[resourceStoreId]
 
+			events := lo.FilterMap(lo.Keys(newObjs), func(uid string, _ int) (ResourceEvent, bool) {
+				newObj := newObjs[uid]
 				event := ResourceEvent{
-					Kind: obj.GetObjectKind().GroupVersionKind().GroupKind(),
+					Kind:      newObj.GetObjectKind().GroupVersionKind().GroupKind(),
+					NewObject: newObj,
 				}
-
-				if update.Delete {
-					event.EventType = DeleteEvent
-					event.OldObject = obj
-					delete(recent, key)
-				} else {
-					if oldObj, ok := recent[key]; ok {
-						event.EventType = UpdateEvent
-						event.OldObject = oldObj
-					} else {
-						event.EventType = CreateEvent
-					}
-					event.NewObject = obj
-					recent[key] = obj
+				if oldObj, exists := oldObjs[uid]; !exists {
+					event.EventType = CreateEvent
+					oldObjs[uid] = newObj
+					return event, true
+				} else if !reflect.DeepEqual(oldObj, newObj) {
+					event.EventType = UpdateEvent
+					event.OldObject = oldObj
+					oldObjs[uid] = newObj
+					return event, true
 				}
+				return event, false
+			})
 
-				return []ResourceEvent{event}
-			}))
+			deleteEvents := lo.FilterMap(lo.Keys(oldObjs), func(uid string, _ int) (ResourceEvent, bool) {
+				oldObj := oldObjs[uid]
+				event := ResourceEvent{
+					EventType: DeleteEvent,
+					Kind:      oldObj.GetObjectKind().GroupVersionKind().GroupKind(),
+					OldObject: oldObj,
+				}
+				_, exists := newObjs[uid]
+				if !exists {
+					delete(oldObjs, uid)
+				}
+				return event, !exists
+			})
+
+			events = append(events, deleteEvents...)
+
+			c.propagate(events)
 
 			c.Unlock()
 		}
