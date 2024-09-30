@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/samber/lo"
@@ -35,6 +36,7 @@ type RunnableBuilder func(controller *Controller) Runnable
 type RunnableBuilderOptions[T Object] struct {
 	LabelSelector string
 	FieldSelector string
+	Predicates    []ctrlruntimepredicate.TypedPredicate[T]
 	Builder       func(obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder
 }
 
@@ -49,6 +51,12 @@ func FilterResourcesByLabel[T Object](selector string) RunnableBuilderOption[T] 
 func FilterResourcesByField[T Object](selector string) RunnableBuilderOption[T] {
 	return func(o *RunnableBuilderOptions[T]) {
 		o.FieldSelector = selector
+	}
+}
+
+func WithPredicates[T Object](predicates ...ctrlruntimepredicate.TypedPredicate[T]) RunnableBuilderOption[T] {
+	return func(o *RunnableBuilderOptions[T]) {
+		o.Predicates = append(o.Predicates, predicates...)
 	}
 }
 
@@ -156,9 +164,7 @@ func StateReconciler[T Object](obj T, resource schema.GroupVersionResource, name
 				})
 			},
 			watchFunc: func(manager ctrlruntime.Manager) ctrlruntimesrc.Source {
-				predicates := []ctrlruntimepredicate.TypedPredicate[T]{
-					&ctrlruntimepredicate.TypedGenerationChangedPredicate[T]{},
-				}
+				var predicates []ctrlruntimepredicate.TypedPredicate[T]
 				if o.LabelSelector != "" {
 					predicates = append(predicates, ctrlruntimepredicate.NewTypedPredicateFuncs(func(obj T) bool {
 						return ToLabelSelector(o.LabelSelector).Matches(labels.Set(obj.GetLabels()))
@@ -172,6 +178,12 @@ func StateReconciler[T Object](obj T, resource schema.GroupVersionResource, name
 						}))))
 					}))
 				}
+
+				// Add custom predicates passed via options
+				if len(o.Predicates) > 0 {
+					predicates = append(predicates, o.Predicates...)
+				}
+
 				return ctrlruntimesrc.Kind(manager.GetCache(), obj, ctrlruntimehandler.TypedEnqueueRequestsFromMapFunc(TypedEnqueueRequestsMapFunc[T]), predicates...)
 			},
 		}
@@ -187,14 +199,20 @@ type stateReconciler struct {
 	listFunc   ListFunc
 	watchFunc  WatchFunc
 	synced     bool
+	sync.RWMutex
 }
 
 func (r *stateReconciler) Run(_ <-chan struct{}) {
+	r.Lock()
+	defer r.Unlock()
 	r.controller.listAndWatch(r.listFunc, r.watchFunc)
 	r.synced = true
 }
 
 func (r *stateReconciler) HasSynced() bool {
+	r.RLock()
+	defer r.RUnlock()
+
 	return r.synced
 }
 
