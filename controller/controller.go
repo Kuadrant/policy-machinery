@@ -265,7 +265,9 @@ func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 
 func (c *Controller) subscribe() {
 	oldObjs := make(Store)
-	subscription := c.cache.Subscribe(context.TODO())
+	subscription := c.cache.SubscribeSubset(context.TODO(), func(storeId string, _ Store) bool {
+		return storeId == resourceStoreId
+	})
 	go func() {
 		for snapshot := range subscription {
 			c.Lock()
