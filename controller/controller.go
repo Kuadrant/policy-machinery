@@ -296,6 +296,7 @@ func (c *Controller) subscribe(ctx context.Context) {
 			deleteEvents := lo.FilterMap(lo.Keys(oldObjs), func(uid string, _ int) (ResourceEvent, bool) {
 				oldObj := oldObjs[uid]
 				event := ResourceEvent{
+					EventType: DeleteEvent,
 					Kind:      oldObj.GetObjectKind().GroupVersionKind().GroupKind(),
 					OldObject: oldObj,
 				}
