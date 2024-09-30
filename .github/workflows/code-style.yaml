@@ -15,9 +15,8 @@ jobs:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         tool:
-          - goimports
-          - gofmt
-
+        - goimports
+        - gofmt
         include:
         - tool: gofmt
           options: -s
