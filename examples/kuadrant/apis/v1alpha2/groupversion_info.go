@@ -38,7 +38,7 @@ var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1alpha
 var SchemeBuilder = &ctrl.Builder{GroupVersion: GroupVersion}
 
 // AddToScheme adds the types in this group-version to the given scheme.
-var	AddToScheme = SchemeBuilder.AddToScheme
+var AddToScheme = SchemeBuilder.AddToScheme
 
 // Resource takes an unqualified resource and returns a Group qualified GroupResource
 func Resource(resource string) schema.GroupResource {

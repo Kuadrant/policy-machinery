@@ -92,7 +92,7 @@ func TestWorkflow(t *testing.T) {
 			expectedTask1Called:         true,
 			expectedTask2Called:         true,
 			expectedPostconditionCalled: false,
-			possibleErrs:               []error{fmt.Errorf("task1 error")},
+			possibleErrs:                []error{fmt.Errorf("task1 error")},
 		},
 		{
 			name: "task2 with error",
@@ -103,7 +103,7 @@ func TestWorkflow(t *testing.T) {
 			expectedTask1Called:         true,
 			expectedTask2Called:         true,
 			expectedPostconditionCalled: false,
-			possibleErrs:               []error{fmt.Errorf("task2 error")},
+			possibleErrs:                []error{fmt.Errorf("task2 error")},
 		},
 		{
 			name: "task1 and task2 with error",
