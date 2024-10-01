@@ -1,34 +1,32 @@
 # Policy Machinery
 
-Machinery for implementing [Gateway API](https://gateway-api.sigs.k8s.io/reference/policy-attachment/) policies.
+Machinery for implementing [Gateway API](https://gateway-api.sigs.k8s.io/reference/policy-attachment/) policies and policy controllers.
 
 ## Features
-- `Topology` struct for modeling topologies of targetable network resources and corresponding attached policies
-- Examples of policy struct and implemented merge strategies:
-  - JSON Patch strategy
-  - Kuadrant's Defaults & Overrides
-  ([RFC 0009](https://docs.kuadrant.io/0.8.0/architecture/rfcs/0009-defaults-and-overrides/)) – atomic defaults, atomic
-  overrides, merge policy rule defaults, merge policy rule overrides
-- Helper for building Gateway API-specific topologies
-- [Full example](./examples/kuadrant/README.md) of custom controller leveraging a Gateway API topology with 4 kinds of policy
-- Helpers for testing your own topologies of Gateway API resources and policies
+- Types for modeling topologies of targetable network resources and corresponding attached policies
+- Examples of policy types defined with their own custom merge strategies (JSON patch, [Kuadrant Defaults & Overrides](https://docs.kuadrant.io/0.10.0/architecture/rfcs/0009-defaults-and-overrides))
+- Helpers for building and testing Gateway API-specific topologies of network resources and policies
+- Special package for implementing custom controllers of Gateway API resources, policies and related runtime objects
+- 2 patterns for reconciliation: state-of-the-world and incremental events
+- Reconciliation workflows (for handling dependencies and concurrent tasks) and subscriptions
+- [Full example](./examples/kuadrant/README.md) of custom controller leveraging a Gateway API topology with 4 kinds of policies
 
-## Use
+## Usage
 
-① Import the package:
+❶ Import the package:
 
 ```sh
 go get github.com/kuadrant/policy-machinery
 ```
 
-② Implement the `Policy` interface:
+❷ Implement the `Policy` interface:
 
 ```go
 package mypolicy
 
 import (
   "github.com/kuadrant/policy-machinery/machinery"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+  metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
   gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
@@ -77,7 +75,7 @@ func (p *MyPolicy) DeepCopy() *MyPolicy {
 }
 ```
 
-③ Build a topology of targetable network resources:
+❸ Build a topology of targetable network resources:
 
 ```go
 import (
@@ -120,8 +118,10 @@ for _, path := range paths {
 }
 ```
 
-Alternatively, use the `NewGatewayAPITopology` helper function to build a topology of Gateway API resources.
-The links between objects will be inferred automatically according to the specs. I.e.:
+### Topology of Gateway API resources
+
+Alternatively to the generic `machinery.NewTopology(…)`, use `machinery.NewGatewayAPITopology(…)` to build a topology of Gateway API resources.
+The links between network objects (GatewayClasses, Gateways, HTTPRoutes, etc) will be inferred automatically.
 
 ```go
 topology := machinery.NewGatewayAPITopology(
@@ -132,16 +132,17 @@ topology := machinery.NewGatewayAPITopology(
 )
 ```
 
-> **Tip:** You can use the topology option functions `ExpandGatewayListeners()`, `ExpandHTTPRouteRules()`,
-> `ExpandServicePorts()` to automatically expand Gateways, HTTPRoutes and Services so their inner sections
-> (listeners, route rules, service ports) are added as targetables to the topology. The links between objects
-> are then adjusted accordingly.
+You can use the topology options `ExpandGatewayListeners()`, `ExpandHTTPRouteRules()`, and
+`ExpandServicePorts()` to automatically expand Gateways, HTTPRoutes and Services. The inner sections of these resources
+(listeners, route rules, service ports, respectively) will be added as targetables to the topology. The links between objects
+are then automatically adjusted accordingly.
 
-### Custom controller for Gateway API Topologies
+### Custom controllers for topologies of Gateway API resources
 
-The `github.com/kuadrant/policy-machinery/controller` package defines a simplified controller abstraction based on
-the [k8s.io/apimachinery](https://pkg.go.dev/k8s.io/apimachinery)'s informers pattern, that keeps an in-memory
-Gateway API topology up to date from events the client has subscribed to.
+The `controller` package defines a simplified controller abstraction based on the [k8s.io/apimachinery](https://pkg.go.dev/k8s.io/apimachinery)
+and [sigs.k8s.io/controller-runtime](https://pkg.go.dev/sigs.k8s.io/controller-runtime), that builds an in-memory
+representation of your topology of Gateway API, policy and generic linked resources, from events watched from the
+cluster.
 
 Example:
 
@@ -153,6 +154,7 @@ import (
   "k8s.io/apimachinery/pkg/runtime/schema"
   "k8s.io/client-go/dynamic"
   "k8s.io/client-go/tools/clientcmd"
+  ctrlruntime "sigs.k8s.io/controller-runtime"
 
   gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
   "./mypolicy"
@@ -162,6 +164,9 @@ import (
 )
 
 func main() {
+	// create a logger
+	logger := controller.CreateAndSetLogger()
+
 	// load kubeconfig
 	kubeconfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(clientcmd.NewDefaultClientConfigLoadingRules(), &clientcmd.ConfigOverrides{})
 	config, err := kubeconfig.ClientConfig()
@@ -177,6 +182,7 @@ func main() {
 
 	// create a controller with a built-in gateway api topology
 	controller := controller.NewController(
+		controller.WithLogger(logger),
 		controller.WithClient(client),
 		controller.WithRunnable("gateway", controller.Watch(*gwapiv1.Gateway{}, gwapiv1.SchemeGroupVersion.WithResource("gateways"), metav1.NamespaceAll)),
 		controller.WithRunnable("httproute", controller.Watch(*gwapiv1.HTTPRoute{}, gwapiv1.SchemeGroupVersion.WithResource("httproutes"), metav1.NamespaceAll)),
@@ -185,16 +191,27 @@ func main() {
 		controller.WithReconcile(reconcile),
 	)
 
-	controller.Start(context.Background())
+	if err := controller.Start(ctrlruntime.SetupSignalHandler()); err != nil {
+		logger.Error(err, "error starting controller")
+		os.Exit(1)
+	}
 }
 
-func reconcile(ctx context.Context, events []ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) {
-  // TODO
+func reconcile(ctx context.Context, events []ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
+  // TODO: implement your reconciliation business logic here
 }
 ```
 
+[State-of-the-world](https://pkg.go.dev/github.com/kuadrant/policy-machinery/controller#StateReconciler) kind of watchers will coallesce events into a compact single reconciliation call (default). Alternatively, use [incremental informers](https://pkg.go.dev/github.com/kuadrant/policy-machinery/controller#IncrementalInformer) for more granular reconciliation calls at every event.
+
+Check out as well the options for defining watchers with [predicates](https://pkg.go.dev/github.com/kuadrant/policy-machinery/controller#RunnableBuilderOptions) (labels, field selectors, etc).
+
+For more advanced and optimized reconciliation, consider [workflows](https://pkg.go.dev/github.com/kuadrant/policy-machinery/controller#Workflow) (for handling dependencies and concurrent tasks) and [subscriptions](https://pkg.go.dev/github.com/kuadrant/policy-machinery/controller#Subscription) (for macthing on specific event types).
+
+## Example
+
 Check out the full [Kuadrant example](./examples/kuadrant/README.md) of using the
-`github.com/kuadrant/policy-machinery/controller` package to implement a full custom controller that watches for
+`machinery` and `controller` packages to implement a full custom controller that watches for
 Gateway API resources, as well as policy resources of 4 kinds (DNSPolicy, TLSPolicy, AuthPolicy and RateLimitPolicy.)
 
 Each event the controller subscribes to generates a call to a reconcile function that saves a graphical representation
