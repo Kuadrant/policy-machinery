@@ -225,3 +225,25 @@ func TestStartControllerUnmanaged(t *testing.T) {
 	}()
 	time.Sleep(3 * time.Second)
 }
+
+func TestCacheSubscription(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	count := 0
+	c := NewController(WithReconcile(func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map) error {
+		count++
+		return nil
+	}))
+
+	c.subscribe(ctx)
+	time.Sleep(1 * time.Second)
+	if count != 0 {
+		t.Errorf("expected no reconcile call, got %d", count)
+	}
+
+	c.add(&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "test-service", UID: "7ed703a2-635d-4002-a825-5624823760a5"}})
+	time.Sleep(1 * time.Second)
+	if count != 1 {
+		t.Errorf("expected 1 reconcile call, got %d", count)
+	}
+}

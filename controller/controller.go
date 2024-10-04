@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/samber/lo"
+	"github.com/telepresenceio/watchable"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
@@ -264,54 +265,68 @@ func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 }
 
 func (c *Controller) subscribe(ctx context.Context) {
-	oldObjs := make(Store)
+	// init and subscribe resource store
+	c.cache.LoadOrStore(resourceStoreId, Store{})
 	subscription := c.cache.SubscribeSubset(ctx, func(storeId string, _ Store) bool {
 		return storeId == resourceStoreId
 	})
+	// handle cache events
+	objs := make(Store)
 	go func() {
 		for snapshot := range subscription {
-			c.Lock()
-
-			newObjs := snapshot.State[resourceStoreId]
-
-			events := lo.FilterMap(lo.Keys(newObjs), func(uid string, _ int) (ResourceEvent, bool) {
-				newObj := newObjs[uid]
-				event := ResourceEvent{
-					Kind:      newObj.GetObjectKind().GroupVersionKind().GroupKind(),
-					NewObject: newObj,
-				}
-				if oldObj, exists := oldObjs[uid]; !exists {
-					event.EventType = CreateEvent
-					oldObjs[uid] = newObj
-					return event, true
-				} else if !reflect.DeepEqual(oldObj, newObj) {
-					event.EventType = UpdateEvent
-					event.OldObject = oldObj
-					oldObjs[uid] = newObj
-					return event, true
-				}
-				return event, false
-			})
-
-			deleteEvents := lo.FilterMap(lo.Keys(oldObjs), func(uid string, _ int) (ResourceEvent, bool) {
-				oldObj := oldObjs[uid]
-				event := ResourceEvent{
-					EventType: DeleteEvent,
-					Kind:      oldObj.GetObjectKind().GroupVersionKind().GroupKind(),
-					OldObject: oldObj,
-				}
-				_, exists := newObjs[uid]
-				if !exists {
-					delete(oldObjs, uid)
-				}
-				return event, !exists
-			})
-
-			events = append(events, deleteEvents...)
-
-			c.propagate(events)
-
-			c.Unlock()
+			objs = c.handleCacheEvent(snapshot, objs)
 		}
 	}()
+}
+
+func (c *Controller) handleCacheEvent(snapshot watchable.Snapshot[string, Store], objs Store) Store {
+	c.Lock()
+	defer c.Unlock()
+
+	if len(snapshot.Updates) == 0 {
+		return objs
+	}
+
+	newObjs := snapshot.State[resourceStoreId]
+
+	events := lo.FilterMap(lo.Keys(newObjs), func(uid string, _ int) (ResourceEvent, bool) {
+		newObj := newObjs[uid]
+		event := ResourceEvent{
+			Kind:      newObj.GetObjectKind().GroupVersionKind().GroupKind(),
+			NewObject: newObj,
+		}
+		if obj, exists := objs[uid]; !exists {
+			event.EventType = CreateEvent
+			objs[uid] = newObj
+			return event, true
+		} else if !reflect.DeepEqual(obj, newObj) {
+			event.EventType = UpdateEvent
+			event.OldObject = obj
+			objs[uid] = newObj
+			return event, true
+		}
+		return event, false
+	})
+
+	deleteEvents := lo.FilterMap(lo.Keys(objs), func(uid string, _ int) (ResourceEvent, bool) {
+		obj := objs[uid]
+		event := ResourceEvent{
+			EventType: DeleteEvent,
+			Kind:      obj.GetObjectKind().GroupVersionKind().GroupKind(),
+			OldObject: obj,
+		}
+		_, exists := newObjs[uid]
+		if !exists {
+			delete(objs, uid)
+		}
+		return event, !exists
+	})
+
+	events = append(events, deleteEvents...)
+
+	if len(events) > 0 { // this condition is actually redundant; if the snapshot has updates, there must be events
+		c.propagate(events)
+	}
+
+	return objs
 }
