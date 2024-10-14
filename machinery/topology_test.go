@@ -377,21 +377,29 @@ func TestTopologyWithRuntimeObjects(t *testing.T) {
 	}
 
 	expectedLinks := map[string][]string{
-		"apple-1": {"orange-1", "orange-2"},
-		"info-1":  {"apple-1"},
-		"info-2":  {"orange-1"},
+		"apple-1":  {"orange-1", "orange-2"},
+		"orange-1": {},
+		"orange-2": {},
 	}
 
 	links := make(map[string][]string)
 	for _, root := range topology.Targetables().Roots() {
 		linksFromTargetable(topology, root, links)
 	}
-	for from, tos := range links {
-		expectedTos := expectedLinks[from]
+
+	if len(links) != len(expectedLinks) {
+		t.Errorf("expected links length to be %v, got %v", len(expectedLinks), len(links))
+	}
+
+	for expectedFrom, expectedTos := range expectedLinks {
+		tos, ok := links[expectedFrom]
+		if !ok {
+			t.Errorf("expected root for %v, got none", expectedFrom)
+		}
 		slices.Sort(expectedTos)
 		slices.Sort(tos)
 		if !slices.Equal(expectedTos, tos) {
-			t.Errorf("expected links from %s to be %v, got %v", from, expectedTos, tos)
+			t.Errorf("expected links from %s to be %v, got %v", expectedFrom, expectedTos, tos)
 		}
 	}
 
@@ -500,5 +508,178 @@ func TestTopologyHasNoLoops(t *testing.T) {
 	)
 	if err != nil {
 		t.Errorf("Expected no error, got: %s", err.Error())
+	}
+}
+
+func TestTopologyAll(t *testing.T) {
+	objects := []*Info{
+		{Name: "info-1", Ref: "apple.example.test:apple-1"},
+		{Name: "info-2", Ref: "orange.example.test:my-namespace/orange-1"},
+	}
+	apples := []*Apple{{Name: "apple-1"}}
+	oranges := []*Orange{
+		{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1"}},
+		{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-1"}},
+	}
+	policies := []Policy{
+		buildFruitPolicy(func(policy *FruitPolicy) {
+			policy.Name = "policy-1"
+			policy.Spec.TargetRef.Kind = "Apple"
+			policy.Spec.TargetRef.Name = "apple-1"
+		}),
+		buildFruitPolicy(func(policy *FruitPolicy) {
+			policy.Name = "policy-2"
+			policy.Spec.TargetRef.Kind = "Orange"
+			policy.Spec.TargetRef.Name = "orange-1"
+		}),
+	}
+
+	topology, err := NewTopology(
+		WithObjects(objects...),
+		WithTargetables(apples...),
+		WithTargetables(oranges...),
+		WithPolicies(policies...),
+		WithLinks(
+			LinkApplesToOranges(apples),
+			LinkInfoFrom("Apple", lo.Map(apples, AsObject[*Apple])),
+			LinkInfoFrom("Orange", lo.Map(oranges, AsObject[*Orange])),
+		),
+	)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+
+	SaveToOutputDir(t, topology.ToDot(), "../tests/out", ".dot")
+
+	expectedLinks := map[string][]string{
+		"policy-1": {"apple-1"},
+		"policy-2": {"orange-1"},
+		"apple-1":  {"orange-1", "orange-2", "info-1"},
+		"orange-1": {"info-2"},
+		"orange-2": {},
+		"info-1":   {},
+		"info-2":   {},
+	}
+
+	links := make(map[string][]string)
+	for _, root := range topology.All().Roots() {
+		linksFromAll(topology, root, links)
+	}
+
+	if len(links) != len(expectedLinks) {
+		t.Errorf("expected links length to be %v, got %v", len(expectedLinks), len(links))
+	}
+
+	for expectedFrom, expectedTos := range expectedLinks {
+		tos, ok := links[expectedFrom]
+		if !ok {
+			t.Errorf("expected root for %v, got none", expectedFrom)
+		}
+		slices.Sort(expectedTos)
+		slices.Sort(tos)
+		if !slices.Equal(expectedTos, tos) {
+			t.Errorf("expected links from %s to be %v, got %v", expectedFrom, expectedTos, tos)
+		}
+	}
+}
+
+func TestTopologyAllPaths(t *testing.T) {
+	objects := []*Info{
+		{Name: "info-1", Ref: "apple.example.test:apple-1"},
+		{Name: "info-2", Ref: "orange.example.test:my-namespace/orange-1"},
+	}
+	apples := []*Apple{{Name: "apple-1"}}
+	oranges := []*Orange{
+		{Name: "orange-1", Namespace: "my-namespace", AppleParents: []string{"apple-1"}},
+		{Name: "orange-2", Namespace: "my-namespace", AppleParents: []string{"apple-1"}},
+	}
+	policies := []Policy{
+		buildFruitPolicy(func(policy *FruitPolicy) {
+			policy.Name = "policy-1"
+			policy.Spec.TargetRef.Kind = "Apple"
+			policy.Spec.TargetRef.Name = "apple-1"
+		}),
+		buildFruitPolicy(func(policy *FruitPolicy) {
+			policy.Name = "policy-2"
+			policy.Spec.TargetRef.Kind = "Orange"
+			policy.Spec.TargetRef.Name = "orange-1"
+		}),
+	}
+
+	topology, err := NewTopology(
+		WithObjects(objects...),
+		WithTargetables(apples...),
+		WithTargetables(oranges...),
+		WithPolicies(policies...),
+		WithLinks(
+			LinkApplesToOranges(apples),
+			LinkInfoFrom("Apple", lo.Map(apples, AsObject[*Apple])),
+			LinkInfoFrom("Orange", lo.Map(oranges, AsObject[*Orange])),
+		),
+	)
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %s", err)
+	}
+
+	SaveToOutputDir(t, topology.ToDot(), "../tests/out", ".dot")
+
+	testCases := []struct {
+		name          string
+		from          Object
+		to            Object
+		expectedPaths [][]Object
+	}{
+		{
+			name: "policy to targetable",
+			from: policies[0],
+			to:   apples[0],
+			expectedPaths: [][]Object{
+				{policies[0], apples[0]},
+			},
+		},
+		{
+			name: "targetable to targetable",
+			from: apples[0],
+			to:   oranges[0],
+			expectedPaths: [][]Object{
+				{apples[0], oranges[0]},
+			},
+		},
+		{
+			name: "targetable to object",
+			from: oranges[0],
+			to:   objects[1],
+			expectedPaths: [][]Object{
+				{oranges[0], objects[1]},
+			},
+		},
+		{
+			name: "policy to object",
+			from: policies[0],
+			to:   objects[1],
+			expectedPaths: [][]Object{
+				{policies[0], apples[0], oranges[0], objects[1]},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			paths := topology.All().Paths(tc.from, tc.to)
+			if len(paths) != len(tc.expectedPaths) {
+				t.Errorf("expected %d paths, got %d", len(tc.expectedPaths), len(paths))
+			}
+			expectedPaths := lo.Map(tc.expectedPaths, func(expectedPath []Object, _ int) string {
+				return strings.Join(lo.Map(expectedPath, MapObjectToLocatorFunc), "→")
+			})
+			for _, path := range paths {
+				pathString := strings.Join(lo.Map(path, MapObjectToLocatorFunc), "→")
+				if !lo.Contains(expectedPaths, pathString) {
+					t.Errorf("expected path %v not found", pathString)
+				}
+			}
+		})
 	}
 }
