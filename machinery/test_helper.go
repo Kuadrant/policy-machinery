@@ -38,6 +38,17 @@ func linksFromTargetable(topology *Topology, targetable Targetable, edges map[st
 	}
 }
 
+func linksFromAll(topology *Topology, obj Object, edges map[string][]string) {
+	if _, ok := edges[obj.GetName()]; ok {
+		return
+	}
+	children := topology.All().Children(obj)
+	edges[obj.GetName()] = lo.Map(children, func(child Object, _ int) string { return child.GetName() })
+	for _, child := range children {
+		linksFromAll(topology, child, edges)
+	}
+}
+
 const TestGroupName = "example.test"
 
 type Apple struct {

@@ -142,7 +142,6 @@ type Topology struct {
 }
 
 // Targetables returns all targetable nodes in the topology.
-// The list can be filtered by providing one or more filter functions.
 func (t *Topology) Targetables() *collection[Targetable] {
 	return &collection[Targetable]{
 		topology: t,
@@ -151,7 +150,6 @@ func (t *Topology) Targetables() *collection[Targetable] {
 }
 
 // Policies returns all policies in the topology.
-// The list can be filtered by providing one or more filter functions.
 func (t *Topology) Policies() *collection[Policy] {
 	return &collection[Policy]{
 		topology: t,
@@ -160,11 +158,25 @@ func (t *Topology) Policies() *collection[Policy] {
 }
 
 // Objects returns all non-targetable, non-policy object nodes in the topology.
-// The list can be filtered by providing one or more filter functions.
 func (t *Topology) Objects() *collection[Object] {
 	return &collection[Object]{
 		topology: t,
 		items:    t.objects,
+	}
+}
+
+// All returns all object nodes in the topology.
+func (t *Topology) All() *collection[Object] {
+	allObjects := t.objects
+	for k, v := range t.targetables {
+		allObjects[k] = v
+	}
+	for k, v := range t.policies {
+		allObjects[k] = v
+	}
+	return &collection[Object]{
+		topology: t,
+		items:    allObjects,
 	}
 }
 
