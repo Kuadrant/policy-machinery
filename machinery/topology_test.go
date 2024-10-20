@@ -515,6 +515,7 @@ func TestTopologyAll(t *testing.T) {
 	objects := []*Info{
 		{Name: "info-1", Ref: "apple.example.test:apple-1"},
 		{Name: "info-2", Ref: "orange.example.test:my-namespace/orange-1"},
+		{Name: "info-3", Ref: "fruitpolicy.test:my-namespace/policy-1"},
 	}
 	apples := []*Apple{{Name: "apple-1"}}
 	oranges := []*Orange{
@@ -543,6 +544,7 @@ func TestTopologyAll(t *testing.T) {
 			LinkApplesToOranges(apples),
 			LinkInfoFrom("Apple", lo.Map(apples, AsObject[*Apple])),
 			LinkInfoFrom("Orange", lo.Map(oranges, AsObject[*Orange])),
+			LinkInfoFrom("Policy", lo.Map(policies, AsObject[Policy])),
 		),
 	)
 
@@ -553,13 +555,14 @@ func TestTopologyAll(t *testing.T) {
 	SaveToOutputDir(t, topology.ToDot(), "../tests/out", ".dot")
 
 	expectedLinks := map[string][]string{
-		"policy-1": {"apple-1"},
+		"policy-1": {"apple-1", "info-3"},
 		"policy-2": {"orange-1"},
 		"apple-1":  {"orange-1", "orange-2", "info-1"},
 		"orange-1": {"info-2"},
 		"orange-2": {},
 		"info-1":   {},
 		"info-2":   {},
+		"info-3":   {},
 	}
 
 	links := make(map[string][]string)
