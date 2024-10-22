@@ -101,6 +101,7 @@ func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
 
 	addObjectsToGraph(graph, o.Objects)
 	addTargetablesToGraph(graph, targetables)
+	addPoliciesToGraph(graph, policies)
 
 	linkables := append(o.Objects, lo.Map(targetables, AsObject[Targetable])...)
 	linkables = append(linkables, lo.Map(policies, AsObject[Policy])...)
@@ -117,8 +118,6 @@ func NewTopology(options ...TopologyOptionsFunc) (*Topology, error) {
 			}
 		}
 	}
-
-	addPoliciesToGraph(graph, policies)
 
 	var err error
 	if !o.AllowLoops && !isDAG(graph) {
