@@ -166,7 +166,10 @@ func (t *Topology) Objects() *collection[Object] {
 
 // All returns all object nodes in the topology.
 func (t *Topology) All() *collection[Object] {
-	allObjects := t.objects
+	allObjects := map[string]Object{}
+	for k, v := range t.objects {
+		allObjects[k] = v
+	}
 	for k, v := range t.targetables {
 		allObjects[k] = v
 	}
