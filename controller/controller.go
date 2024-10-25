@@ -211,8 +211,8 @@ func (c *Controller) Reconcile(ctx context.Context, _ ctrlruntimereconcile.Reque
 	c.Lock()
 	defer c.Unlock()
 
-	c.logger.Info("reconciling state of the world started")
-	defer c.logger.Info("reconciling state of the world finished")
+	c.logger.V(1).Info("reading state of the world")
+	defer c.logger.V(1).Info("finished reading state of the world")
 
 	store := Store{}
 	for _, f := range c.listFuncs {
@@ -255,6 +255,9 @@ func (c *Controller) delete(obj Object) {
 }
 
 func (c *Controller) propagate(resourceEvents []ResourceEvent) {
+	c.logger.V(1).Info("propagating new state of the world events", "events", len(resourceEvents))
+	defer c.logger.V(1).Info("finished propagating new state of the world events")
+
 	topology, err := c.topology.Build(c.cache.List(resourceStoreId))
 	if err != nil {
 		c.logger.Error(err, "error building topology")
@@ -286,6 +289,9 @@ func (c *Controller) handleCacheEvent(snapshot watchable.Snapshot[string, Store]
 	if len(snapshot.Updates) == 0 {
 		return objs
 	}
+
+	c.logger.V(1).Info("handling new state of the world")
+	defer c.logger.V(1).Info("finished handling new state of the world")
 
 	newObjs := snapshot.State[resourceStoreId]
 
@@ -325,6 +331,7 @@ func (c *Controller) handleCacheEvent(snapshot watchable.Snapshot[string, Store]
 	events = append(events, deleteEvents...)
 
 	if len(events) > 0 { // this condition is actually redundant; if the snapshot has updates, there must be events
+		c.logger.V(1).Info("state of the world has not changed")
 		c.propagate(events)
 	}
 
