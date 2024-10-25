@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -159,7 +160,10 @@ func StateReconciler[T Object](obj T, resource schema.GroupVersionResource, name
 						controller.logger.Error(err, "failed to restructure object", "kind", kind)
 						return nil
 					}
-					runtimeObj, _ := obj.(Object)
+					runtimeObj, ok := obj.(Object)
+					if !ok {
+						controller.logger.Error(fmt.Errorf("unexpected object type: %T", obj), "failed to cast object", "kind", kind)
+					}
 					return runtimeObj
 				})
 			},
@@ -221,16 +225,21 @@ func Restructure[T any](obj any) (any, error) {
 	if !ok {
 		return nil, fmt.Errorf("unexpected object type: %T", obj)
 	}
-	o := *new(T)
-	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredObj.UnstructuredContent(), &o); err != nil {
+	j, err := unstructuredObj.MarshalJSON()
+	if err != nil {
 		return nil, err
 	}
-	return o, nil
+	o := new(T)
+	if err := json.Unmarshal(j, o); err != nil {
+		return nil, err
+	}
+	return *o, nil
 }
 
 func Destruct[T any](obj T) (*unstructured.Unstructured, error) {
-	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&obj)
-	if err != nil {
+	j, _ := json.Marshal(obj)
+	var u map[string]interface{}
+	if err := json.Unmarshal(j, &u); err != nil {
 		return nil, err
 	}
 	return &unstructured.Unstructured{Object: u}, nil
