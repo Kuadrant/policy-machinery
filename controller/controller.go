@@ -217,6 +217,9 @@ func (c *Controller) Reconcile(ctx context.Context, _ ctrlruntimereconcile.Reque
 	store := Store{}
 	for _, f := range c.listFuncs {
 		for _, object := range f() {
+			if object == nil {
+				continue
+			}
 			store[string(object.GetUID())] = object
 		}
 	}
