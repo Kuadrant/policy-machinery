@@ -331,8 +331,9 @@ func (c *Controller) handleCacheEvent(snapshot watchable.Snapshot[string, Store]
 	events = append(events, deleteEvents...)
 
 	if len(events) > 0 { // this condition is actually redundant; if the snapshot has updates, there must be events
-		c.logger.V(1).Info("state of the world has not changed")
 		c.propagate(events)
+	} else {
+		c.logger.V(1).Info("state of the world has not changed")
 	}
 
 	return objs
