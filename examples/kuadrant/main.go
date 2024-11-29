@@ -12,6 +12,7 @@ import (
 	"github.com/samber/lo"
 	istiov1 "istio.io/client-go/pkg/apis/security/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -125,6 +126,10 @@ func main() {
 			&gwapiv1.Gateway{},
 			controller.GatewaysResource,
 			metav1.NamespaceAll,
+			// Example of using custom transformer function
+			controller.WithTransformerFunc[*gwapiv1.Gateway](controller.TransformFunc[*gwapiv1.Gateway](func(unstructuredObj *unstructured.Unstructured) {
+				unstructuredObj.SetManagedFields(nil)
+			})),
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*gwapiv1.Gateway]{})),
 		),
 		controller.WithRunnable("httproute watcher", buildWatcher(
