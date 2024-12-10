@@ -148,10 +148,10 @@ func IncrementalInformer[T Object](_ T, resource schema.GroupVersionResource, na
 			},
 		})
 		if err != nil {
-			fmt.Print(err.Error())
+			fmt.Println(err.Error())
 		}
 		if err := informer.SetTransform(opts.TransformFunc); err != nil {
-			fmt.Print(err.Error())
+			fmt.Println(err.Error())
 		}
 		return informer
 	}
