@@ -3,7 +3,7 @@ module github.com/kuadrant/policy-machinery
 go 1.22.5
 
 require (
-	github.com/emicklei/dot v1.6.2
+	github.com/emicklei/dot v1.8.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
 	github.com/samber/lo v1.39.0

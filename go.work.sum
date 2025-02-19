@@ -473,6 +473,8 @@ github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkp
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/eko/gocache v1.2.0 h1:SCtTs65qMXjhdtu62yHPCQuzdMkQjP+fQmkNrVutkRw=
 github.com/eko/gocache v1.2.0/go.mod h1:6u8/2bnr+nOf87mRXWS710rqNNZUECF4CGsPNnsoJ78=
+github.com/emicklei/dot v1.7.0 h1:qoWBmCkk6eNVy4/oktL63M7/8eEd5859Sasb+zHKoYg=
+github.com/emicklei/dot v1.7.0/go.mod h1:DeV7GvQtIw4h2u73RKBkkFdvVAz0D9fzeJrgPW6gy/s=
 github.com/emicklei/go-restful/v3 v3.11.0/go.mod h1:6n3XBCmQQb25CM2LCACGz8ukIrRry+4bhvbpWn3mrbc=
 github.com/envoyproxy/go-control-plane v0.9.0/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
 github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.mod h1:YTl/9mNaCwkRvm6d1a2C3ymFceY/DCBVvsKhRF0iEA4=
