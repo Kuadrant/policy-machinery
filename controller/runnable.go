@@ -40,6 +40,7 @@ type RunnableBuilderOptions[T Object] struct {
 	FieldSelector string
 	Predicates    []ctrlruntimepredicate.TypedPredicate[T]
 	Builder       func(obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder
+	TransformFunc cache.TransformFunc
 }
 
 type RunnableBuilderOption[T Object] func(*RunnableBuilderOptions[T])
@@ -53,6 +54,12 @@ func FilterResourcesByLabel[T Object](selector string) RunnableBuilderOption[T] 
 func FilterResourcesByField[T Object](selector string) RunnableBuilderOption[T] {
 	return func(o *RunnableBuilderOptions[T]) {
 		o.FieldSelector = selector
+	}
+}
+
+func WithTransformerFunc[T Object](transformer cache.TransformFunc) RunnableBuilderOption[T] {
+	return func(o *RunnableBuilderOptions[T]) {
+		o.TransformFunc = transformer
 	}
 }
 
@@ -79,7 +86,9 @@ func Watch[T Object](obj T, resource schema.GroupVersionResource, namespace stri
 }
 
 func IncrementalInformer[T Object](_ T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
-	opts := &RunnableBuilderOptions[T]{}
+	opts := &RunnableBuilderOptions[T]{
+		TransformFunc: Restructure[T],
+	}
 	for _, f := range options {
 		f(opts)
 	}
@@ -108,7 +117,7 @@ func IncrementalInformer[T Object](_ T, resource schema.GroupVersionResource, na
 			&unstructured.Unstructured{},
 			time.Minute*10,
 		)
-		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(o any) {
 				obj := o.(T)
 				for _, p := range opts.Predicates {
@@ -138,13 +147,20 @@ func IncrementalInformer[T Object](_ T, resource schema.GroupVersionResource, na
 				controller.delete(obj)
 			},
 		})
-		informer.SetTransform(Restructure[T])
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		if err := informer.SetTransform(opts.TransformFunc); err != nil {
+			fmt.Println(err.Error())
+		}
 		return informer
 	}
 }
 
 func StateReconciler[T Object](obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
-	o := &RunnableBuilderOptions[T]{}
+	o := &RunnableBuilderOptions[T]{
+		TransformFunc: Restructure[T],
+	}
 	for _, f := range options {
 		f(o)
 	}
@@ -170,8 +186,8 @@ func StateReconciler[T Object](obj T, resource schema.GroupVersionResource, name
 					controller.logger.Error(err, "failed to list resources", "kind", kind)
 					return nil
 				}
-				return lo.Map(objs.Items, func(o unstructured.Unstructured, _ int) Object {
-					obj, err := Restructure[T](&o)
+				return lo.Map(objs.Items, func(u unstructured.Unstructured, _ int) Object {
+					obj, err := o.TransformFunc(&u)
 					if err != nil {
 						controller.logger.Error(err, "failed to restructure object", "kind", kind)
 						return nil
@@ -236,20 +252,35 @@ func (r *stateReconciler) HasSynced() bool {
 	return r.synced
 }
 
+// TransformFunc returns a cache.TransformFunc that converts unstructured data into a typed object.
+// It accepts a variable number of mutate functions that are applied to the unstructured
+// object before it is converted to the target type. This allows for pre-processing or modification
+// of the unstructured data before it is transformed.
+func TransformFunc[T any](mutateFns ...func(unstructuredObj *unstructured.Unstructured)) cache.TransformFunc {
+	return func(obj any) (any, error) {
+		unstructuredObj, ok := obj.(*unstructured.Unstructured)
+		if !ok {
+			return nil, fmt.Errorf("unexpected object type: %T", obj)
+		}
+
+		for _, fn := range mutateFns {
+			fn(unstructuredObj)
+		}
+
+		j, err := unstructuredObj.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+		o := new(T)
+		if err := json.Unmarshal(j, o); err != nil {
+			return nil, err
+		}
+		return *o, nil
+	}
+}
+
 func Restructure[T any](obj any) (any, error) {
-	unstructuredObj, ok := obj.(*unstructured.Unstructured)
-	if !ok {
-		return nil, fmt.Errorf("unexpected object type: %T", obj)
-	}
-	j, err := unstructuredObj.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-	o := new(T)
-	if err := json.Unmarshal(j, o); err != nil {
-		return nil, err
-	}
-	return *o, nil
+	return TransformFunc[T]()(obj)
 }
 
 func Destruct[T any](obj T) (*unstructured.Unstructured, error) {
