@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/cache"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	ctrlruntime "sigs.k8s.io/controller-runtime"
 	ctrlruntimehandler "sigs.k8s.io/controller-runtime/pkg/handler"
@@ -77,29 +78,29 @@ func Watch[T Object](obj T, resource schema.GroupVersionResource, namespace stri
 	return o.Builder(obj, resource, namespace, options...)
 }
 
-func IncrementalInformer[T Object](obj T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
-	o := &RunnableBuilderOptions[T]{}
+func IncrementalInformer[T Object](_ T, resource schema.GroupVersionResource, namespace string, options ...RunnableBuilderOption[T]) RunnableBuilder {
+	opts := &RunnableBuilderOptions[T]{}
 	for _, f := range options {
-		f(o)
+		f(opts)
 	}
 	return func(controller *Controller) Runnable {
 		informer := cache.NewSharedInformer(
 			&cache.ListWatch{
 				ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-					if o.LabelSelector != "" {
-						options.LabelSelector = o.LabelSelector
+					if opts.LabelSelector != "" {
+						options.LabelSelector = opts.LabelSelector
 					}
-					if o.FieldSelector != "" {
-						options.FieldSelector = o.FieldSelector
+					if opts.FieldSelector != "" {
+						options.FieldSelector = opts.FieldSelector
 					}
 					return controller.client.Resource(resource).Namespace(namespace).List(context.Background(), options)
 				},
 				WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-					if o.LabelSelector != "" {
-						options.LabelSelector = o.LabelSelector
+					if opts.LabelSelector != "" {
+						options.LabelSelector = opts.LabelSelector
 					}
-					if o.FieldSelector != "" {
-						options.FieldSelector = o.FieldSelector
+					if opts.FieldSelector != "" {
+						options.FieldSelector = opts.FieldSelector
 					}
 					return controller.client.Resource(resource).Namespace(namespace).Watch(context.Background(), options)
 				},
@@ -110,15 +111,30 @@ func IncrementalInformer[T Object](obj T, resource schema.GroupVersionResource, 
 		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(o any) {
 				obj := o.(T)
+				for _, p := range opts.Predicates {
+					if !p.Create(event.TypedCreateEvent[T]{Object: obj}) {
+						return
+					}
+				}
 				controller.add(obj)
 			},
 			UpdateFunc: func(o, newO any) {
 				oldObj := o.(T)
 				newObj := newO.(T)
+				for _, p := range opts.Predicates {
+					if !p.Update(event.TypedUpdateEvent[T]{ObjectOld: oldObj, ObjectNew: newObj}) {
+						return
+					}
+				}
 				controller.update(oldObj, newObj)
 			},
 			DeleteFunc: func(o any) {
 				obj := o.(T)
+				for _, p := range opts.Predicates {
+					if !p.Delete(event.TypedDeleteEvent[T]{Object: obj}) {
+						return
+					}
+				}
 				controller.delete(obj)
 			},
 		})
