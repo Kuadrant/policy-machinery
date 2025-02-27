@@ -10,6 +10,7 @@ import (
 )
 
 const topologyFile = "topology.dot"
+const topologyFileJSON = "topology.json"
 
 type TopologyFileReconciler struct{}
 
@@ -26,6 +27,25 @@ func (r *TopologyFileReconciler) Reconcile(ctx context.Context, _ []controller.R
 	_, err = file.WriteString(topology.ToDot())
 	if err != nil {
 		logger.Error(err, "failed to write to topology file")
+		return err
+	}
+
+	jsonFile, err := os.Create(topologyFileJSON)
+	if err != nil {
+		logger.Error(err, "failed to create topology json file")
+		return err
+	}
+	defer jsonFile.Close()
+
+	tJson, err := topology.ToJSON()
+	if err != nil {
+		logger.Error(err, "failed to create topology json file")
+		return err
+	}
+
+	_, err = jsonFile.WriteString(tJson)
+	if err != nil {
+		logger.Error(err, "failed to write to topology json file")
 		return err
 	}
 

@@ -1,10 +1,12 @@
 package machinery
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/awalterschulze/gographviz"
 	"github.com/emicklei/dot"
 	"github.com/samber/lo"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -184,6 +186,26 @@ func (t *Topology) All() *collection[Object] {
 
 func (t *Topology) ToDot() string {
 	return t.graph.String()
+}
+
+func (t *Topology) ToJSON() (string, error) {
+	graphAst, err := gographviz.ParseString(t.ToDot())
+	if err != nil {
+		return "", err
+	}
+
+	graph := gographviz.NewGraph()
+	if err := gographviz.Analyse(graphAst, graph); err != nil {
+		return "", err
+	}
+
+	// TODO: No need to marshal indent - just marshal
+	jsonData, err := json.MarshalIndent(graph, "", "  ")
+	if err != nil {
+		return "", err
+	}
+
+	return string(jsonData), nil
 }
 
 func addObjectsToGraph[T Object](graph *dot.Graph, objects []T) []dot.Node {
