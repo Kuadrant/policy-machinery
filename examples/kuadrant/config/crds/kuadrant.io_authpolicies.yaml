@@ -45,7 +45,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1beta3
+    name: v1
     schema:
       openAPIV3Schema:
         description: AuthPolicy enables authentication and authorization for service
@@ -77,32 +77,37 @@ spec:
                 properties:
                   patterns:
                     additionalProperties:
-                      items:
-                        properties:
-                          operator:
-                            description: |-
-                              The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
-                              Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
-                            enum:
-                            - eq
-                            - neq
-                            - incl
-                            - excl
-                            - matches
-                            type: string
-                          selector:
-                            description: |-
-                              Path selector to fetch content from the authorization JSON (e.g. 'request.method').
-                              Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
-                              Authorino custom JSON path modifiers are also supported.
-                            type: string
-                          value:
-                            description: |-
-                              The value of reference for the comparison with the content fetched from the authorization JSON.
-                              If used with the "matches" operator, the value must compile to a valid Golang regex.
-                            type: string
-                        type: object
-                      type: array
+                      properties:
+                        allOf:
+                          items:
+                            properties:
+                              operator:
+                                description: |-
+                                  The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
+                                  Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
+                                enum:
+                                - eq
+                                - neq
+                                - incl
+                                - excl
+                                - matches
+                                type: string
+                              selector:
+                                description: |-
+                                  Path selector to fetch content from the authorization JSON (e.g. 'request.method').
+                                  Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
+                                  Authorino custom JSON path modifiers are also supported.
+                                type: string
+                              value:
+                                description: |-
+                                  The value of reference for the comparison with the content fetched from the authorization JSON.
+                                  If used with the "matches" operator, the value must compile to a valid Golang regex.
+                                type: string
+                            type: object
+                          type: array
+                      required:
+                      - allOf
+                      type: object
                     description: Named sets of patterns that can be referred in `when`
                       conditions and in pattern-matching authorization policy rules.
                     type: object
@@ -189,6 +194,8 @@ spec:
                                     Key used to store the entry in the cache.
                                     The resolved key must be unique within the scope of this particular config.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -243,6 +250,8 @@ spec:
                             defaults:
                               additionalProperties:
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -327,6 +336,8 @@ spec:
                             overrides:
                               additionalProperties:
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -348,14 +359,14 @@ spec:
                                 Identity object extracted from the context.
                                 Use this method when authentication is performed beforehand by a proxy and the resulting object passed to Authorino as JSON in the auth request.
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
                                     Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
                                     The following Authorino custom modifiers are supported: @extract:{sep:" ",pos:0}, @replace{old:"",new:""}, @case:upper|lower, @base64:encode|decode and @strip.
                                   type: string
-                              required:
-                              - selector
                               type: object
                             priority:
                               default: 0
@@ -398,6 +409,8 @@ spec:
                                   patternRef:
                                     description: Reference to a named set of pattern
                                       expressions
+                                    type: string
+                                  predicate:
                                     type: string
                                   selector:
                                     description: |-
@@ -479,7 +492,6 @@ spec:
                         description: |-
                           Authentication configs.
                           At least one config MUST evaluate to a valid identity object for the auth request to be successful.
-                        maxProperties: 10
                         type: object
                       authorization:
                         additionalProperties:
@@ -494,6 +506,8 @@ spec:
                                     Key used to store the entry in the cache.
                                     The resolved key must be unique within the scope of this particular config.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -533,6 +547,8 @@ spec:
                                         API group of the resource.
                                         Use '*' for all API groups.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -548,6 +564,8 @@ spec:
                                         Resource name
                                         Omit it to check for authorization on all resources of the specified kind.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -562,6 +580,8 @@ spec:
                                       description: Namespace where the user must have
                                         permissions on the resource.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -577,6 +597,8 @@ spec:
                                         Resource kind
                                         Use '*' for all resource kinds.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -590,6 +612,8 @@ spec:
                                     subresource:
                                       description: Subresource kind
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -605,6 +629,8 @@ spec:
                                         Verb to check for authorization on the resource.
                                         Use '*' for all verbs.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -621,6 +647,8 @@ spec:
                                     User to check for authorization in the Kubernetes RBAC.
                                     Omit it to check for group authorization only.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -660,6 +688,8 @@ spec:
                                         Supersedes 'bodyParameters'; use either one or the other.
                                         Use it with method=POST; for GET requests, set parameters as query string in the 'endpoint' (placeholders can be used).
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -673,6 +703,8 @@ spec:
                                     bodyParameters:
                                       additionalProperties:
                                         properties:
+                                          expression:
+                                            type: string
                                           selector:
                                             description: |-
                                               Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -732,6 +764,8 @@ spec:
                                     headers:
                                       additionalProperties:
                                         properties:
+                                          expression:
+                                            type: string
                                           selector:
                                             description: |-
                                               Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -843,8 +877,8 @@ spec:
                                         by https://pkg.go.dev/github.com/tidwall/gjson and selects value from the authorization JSON.
                                         E.g. https://ext-auth-server.io/metadata?p={request.path}
                                       type: string
-                                  required:
-                                  - url
+                                    urlExpression:
+                                      type: string
                                   type: object
                                 rego:
                                   description: |-
@@ -888,6 +922,8 @@ spec:
                                         description: Reference to a named set of pattern
                                           expressions
                                         type: string
+                                      predicate:
+                                        type: string
                                       selector:
                                         description: |-
                                           Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -926,6 +962,8 @@ spec:
                                   description: The name of the permission (or relation)
                                     on which to execute the check.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -942,6 +980,8 @@ spec:
                                   properties:
                                     kind:
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -954,6 +994,8 @@ spec:
                                       type: object
                                     name:
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -988,6 +1030,8 @@ spec:
                                   properties:
                                     kind:
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1000,6 +1044,8 @@ spec:
                                       type: object
                                     name:
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1050,6 +1096,8 @@ spec:
                                     description: Reference to a named set of pattern
                                       expressions
                                     type: string
+                                  predicate:
+                                    type: string
                                   selector:
                                     description: |-
                                       Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -1067,7 +1115,6 @@ spec:
                         description: |-
                           Authorization policies.
                           All policies MUST evaluate to "allowed = true" for the auth request be successful.
-                        maxProperties: 10
                         type: object
                       callbacks:
                         additionalProperties:
@@ -1082,6 +1129,8 @@ spec:
                                     Key used to store the entry in the cache.
                                     The resolved key must be unique within the scope of this particular config.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1110,6 +1159,8 @@ spec:
                                     Supersedes 'bodyParameters'; use either one or the other.
                                     Use it with method=POST; for GET requests, set parameters as query string in the 'endpoint' (placeholders can be used).
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1123,6 +1174,8 @@ spec:
                                 bodyParameters:
                                   additionalProperties:
                                     properties:
+                                      expression:
+                                        type: string
                                       selector:
                                         description: |-
                                           Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1182,6 +1235,8 @@ spec:
                                 headers:
                                   additionalProperties:
                                     properties:
+                                      expression:
+                                        type: string
                                       selector:
                                         description: |-
                                           Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1286,8 +1341,8 @@ spec:
                                     by https://pkg.go.dev/github.com/tidwall/gjson and selects value from the authorization JSON.
                                     E.g. https://ext-auth-server.io/metadata?p={request.path}
                                   type: string
-                              required:
-                              - url
+                                urlExpression:
+                                  type: string
                               type: object
                             metrics:
                               default: false
@@ -1336,6 +1391,8 @@ spec:
                                     description: Reference to a named set of pattern
                                       expressions
                                     type: string
+                                  predicate:
+                                    type: string
                                   selector:
                                     description: |-
                                       Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -1355,7 +1412,6 @@ spec:
                         description: |-
                           Callback functions.
                           Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
-                        maxProperties: 10
                         type: object
                       metadata:
                         additionalProperties:
@@ -1370,6 +1426,8 @@ spec:
                                     Key used to store the entry in the cache.
                                     The resolved key must be unique within the scope of this particular config.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1399,6 +1457,8 @@ spec:
                                     Supersedes 'bodyParameters'; use either one or the other.
                                     Use it with method=POST; for GET requests, set parameters as query string in the 'endpoint' (placeholders can be used).
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1412,6 +1472,8 @@ spec:
                                 bodyParameters:
                                   additionalProperties:
                                     properties:
+                                      expression:
+                                        type: string
                                       selector:
                                         description: |-
                                           Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1471,6 +1533,8 @@ spec:
                                 headers:
                                   additionalProperties:
                                     properties:
+                                      expression:
+                                        type: string
                                       selector:
                                         description: |-
                                           Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1575,8 +1639,8 @@ spec:
                                     by https://pkg.go.dev/github.com/tidwall/gjson and selects value from the authorization JSON.
                                     E.g. https://ext-auth-server.io/metadata?p={request.path}
                                   type: string
-                              required:
-                              - url
+                                urlExpression:
+                                  type: string
                               type: object
                             metrics:
                               default: false
@@ -1666,6 +1730,8 @@ spec:
                                     description: Reference to a named set of pattern
                                       expressions
                                     type: string
+                                  predicate:
+                                    type: string
                                   selector:
                                     description: |-
                                       Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -1683,7 +1749,6 @@ spec:
                         description: |-
                           Metadata sources.
                           Authorino fetches auth metadata as JSON from sources specified in this config.
-                        maxProperties: 10
                         type: object
                       response:
                         description: |-
@@ -1695,10 +1760,8 @@ spec:
                               Response items to be included in the auth response when the request is authenticated and authorized.
                               For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata and/or inject data in the request.
                             properties:
-                              dynamicMetadata:
+                              filters:
                                 additionalProperties:
-                                  description: Settings of the success custom response
-                                    item.
                                   properties:
                                     cache:
                                       description: |-
@@ -1710,6 +1773,8 @@ spec:
                                             Key used to store the entry in the cache.
                                             The resolved key must be unique within the scope of this particular config.
                                           properties:
+                                            expression:
+                                              type: string
                                             selector:
                                               description: |-
                                                 Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1737,6 +1802,8 @@ spec:
                                         properties:
                                           additionalProperties:
                                             properties:
+                                              expression:
+                                                type: string
                                               selector:
                                                 description: |-
                                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1764,6 +1831,8 @@ spec:
                                     plain:
                                       description: Plain text content
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1816,6 +1885,8 @@ spec:
                                             description: Reference to a named set
                                               of pattern expressions
                                             type: string
+                                          predicate:
+                                            type: string
                                           selector:
                                             description: |-
                                               Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -1835,6 +1906,8 @@ spec:
                                         customClaims:
                                           additionalProperties:
                                             properties:
+                                              expression:
+                                                type: string
                                               selector:
                                                 description: |-
                                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1893,10 +1966,8 @@ spec:
                                       - signingKeyRefs
                                       type: object
                                   type: object
-                                description: |-
-                                  Custom success response items wrapped as HTTP headers.
-                                  For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
-                                  See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
+                                description: Custom data made available to other filters
+                                  managed by Kuadrant (i.e. Rate Limit)
                                 type: object
                               headers:
                                 additionalProperties:
@@ -1911,6 +1982,8 @@ spec:
                                             Key used to store the entry in the cache.
                                             The resolved key must be unique within the scope of this particular config.
                                           properties:
+                                            expression:
+                                              type: string
                                             selector:
                                               description: |-
                                                 Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1938,6 +2011,8 @@ spec:
                                         properties:
                                           additionalProperties:
                                             properties:
+                                              expression:
+                                                type: string
                                               selector:
                                                 description: |-
                                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -1965,6 +2040,8 @@ spec:
                                     plain:
                                       description: Plain text content
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2017,6 +2094,8 @@ spec:
                                             description: Reference to a named set
                                               of pattern expressions
                                             type: string
+                                          predicate:
+                                            type: string
                                           selector:
                                             description: |-
                                               Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -2036,6 +2115,8 @@ spec:
                                         customClaims:
                                           additionalProperties:
                                             properties:
+                                              expression:
+                                                type: string
                                               selector:
                                                 description: |-
                                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2094,9 +2175,7 @@ spec:
                                       - signingKeyRefs
                                       type: object
                                   type: object
-                                description: |-
-                                  Custom success response items wrapped as HTTP headers.
-                                  For integration of Authorino via proxy, the proxy must use these settings to inject data in the request.
+                                description: Custom headers to inject in the request.
                                 type: object
                             type: object
                           unauthenticated:
@@ -2109,6 +2188,8 @@ spec:
                                 description: HTTP response body to override the default
                                   denial body.
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2129,6 +2210,8 @@ spec:
                               headers:
                                 additionalProperties:
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2146,6 +2229,8 @@ spec:
                                 description: HTTP message to override the default
                                   denial message.
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2167,6 +2252,8 @@ spec:
                                 description: HTTP response body to override the default
                                   denial body.
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2187,6 +2274,8 @@ spec:
                               headers:
                                 additionalProperties:
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2204,6 +2293,8 @@ spec:
                                 description: HTTP message to override the default
                                   denial message.
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2227,86 +2318,59 @@ spec:
                     type: string
                   when:
                     description: |-
-                      Overall conditions for the AuthPolicy to be enforced.
-                      If omitted, the AuthPolicy will be enforced at all requests to the protected routes.
-                      If present, all conditions must match for the AuthPolicy to be enforced; otherwise, the authorization service skips the AuthPolicy and returns to the auth request with status OK.
+                      Overall conditions for the policy to be enforced.
+                      If omitted, the policy will be enforced at all requests to the protected routes.
+                      If present, all conditions must match for the policy to be enforced.
                     items:
+                      description: Predicate defines one CEL expression that must
+                        be evaluated to bool
                       properties:
-                        all:
-                          description: A list of pattern expressions to be evaluated
-                            as a logical AND.
-                          items:
-                            type: object
-                            x-kubernetes-preserve-unknown-fields: true
-                          type: array
-                        any:
-                          description: A list of pattern expressions to be evaluated
-                            as a logical OR.
-                          items:
-                            type: object
-                            x-kubernetes-preserve-unknown-fields: true
-                          type: array
-                        operator:
-                          description: |-
-                            The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
-                            Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
-                          enum:
-                          - eq
-                          - neq
-                          - incl
-                          - excl
-                          - matches
+                        predicate:
+                          minLength: 1
                           type: string
-                        patternRef:
-                          description: Reference to a named set of pattern expressions
-                          type: string
-                        selector:
-                          description: |-
-                            Path selector to fetch content from the authorization JSON (e.g. 'request.method').
-                            Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
-                            Authorino custom JSON path modifiers are also supported.
-                          type: string
-                        value:
-                          description: |-
-                            The value of reference for the comparison with the content fetched from the authorization JSON.
-                            If used with the "matches" operator, the value must compile to a valid Golang regex.
-                          type: string
+                      required:
+                      - predicate
                       type: object
                     type: array
                 type: object
               overrides:
                 description: |-
-                  Rules to apply as overrides. Override all policy rules lower in the hierarchy. Can be overriden by less specific policy overrides.
+                  Rules to apply as overrides. Override all policy rules lower in the hierarchy. Can be overridden by less specific policy overrides.
                   Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
                 properties:
                   patterns:
                     additionalProperties:
-                      items:
-                        properties:
-                          operator:
-                            description: |-
-                              The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
-                              Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
-                            enum:
-                            - eq
-                            - neq
-                            - incl
-                            - excl
-                            - matches
-                            type: string
-                          selector:
-                            description: |-
-                              Path selector to fetch content from the authorization JSON (e.g. 'request.method').
-                              Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
-                              Authorino custom JSON path modifiers are also supported.
-                            type: string
-                          value:
-                            description: |-
-                              The value of reference for the comparison with the content fetched from the authorization JSON.
-                              If used with the "matches" operator, the value must compile to a valid Golang regex.
-                            type: string
-                        type: object
-                      type: array
+                      properties:
+                        allOf:
+                          items:
+                            properties:
+                              operator:
+                                description: |-
+                                  The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
+                                  Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
+                                enum:
+                                - eq
+                                - neq
+                                - incl
+                                - excl
+                                - matches
+                                type: string
+                              selector:
+                                description: |-
+                                  Path selector to fetch content from the authorization JSON (e.g. 'request.method').
+                                  Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
+                                  Authorino custom JSON path modifiers are also supported.
+                                type: string
+                              value:
+                                description: |-
+                                  The value of reference for the comparison with the content fetched from the authorization JSON.
+                                  If used with the "matches" operator, the value must compile to a valid Golang regex.
+                                type: string
+                            type: object
+                          type: array
+                      required:
+                      - allOf
+                      type: object
                     description: Named sets of patterns that can be referred in `when`
                       conditions and in pattern-matching authorization policy rules.
                     type: object
@@ -2393,6 +2457,8 @@ spec:
                                     Key used to store the entry in the cache.
                                     The resolved key must be unique within the scope of this particular config.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2447,6 +2513,8 @@ spec:
                             defaults:
                               additionalProperties:
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2531,6 +2599,8 @@ spec:
                             overrides:
                               additionalProperties:
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2552,14 +2622,14 @@ spec:
                                 Identity object extracted from the context.
                                 Use this method when authentication is performed beforehand by a proxy and the resulting object passed to Authorino as JSON in the auth request.
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
                                     Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
                                     The following Authorino custom modifiers are supported: @extract:{sep:" ",pos:0}, @replace{old:"",new:""}, @case:upper|lower, @base64:encode|decode and @strip.
                                   type: string
-                              required:
-                              - selector
                               type: object
                             priority:
                               default: 0
@@ -2602,6 +2672,8 @@ spec:
                                   patternRef:
                                     description: Reference to a named set of pattern
                                       expressions
+                                    type: string
+                                  predicate:
                                     type: string
                                   selector:
                                     description: |-
@@ -2683,7 +2755,6 @@ spec:
                         description: |-
                           Authentication configs.
                           At least one config MUST evaluate to a valid identity object for the auth request to be successful.
-                        maxProperties: 10
                         type: object
                       authorization:
                         additionalProperties:
@@ -2698,6 +2769,8 @@ spec:
                                     Key used to store the entry in the cache.
                                     The resolved key must be unique within the scope of this particular config.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2737,6 +2810,8 @@ spec:
                                         API group of the resource.
                                         Use '*' for all API groups.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2752,6 +2827,8 @@ spec:
                                         Resource name
                                         Omit it to check for authorization on all resources of the specified kind.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2766,6 +2843,8 @@ spec:
                                       description: Namespace where the user must have
                                         permissions on the resource.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2781,6 +2860,8 @@ spec:
                                         Resource kind
                                         Use '*' for all resource kinds.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2794,6 +2875,8 @@ spec:
                                     subresource:
                                       description: Subresource kind
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2809,6 +2892,8 @@ spec:
                                         Verb to check for authorization on the resource.
                                         Use '*' for all verbs.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2825,6 +2910,8 @@ spec:
                                     User to check for authorization in the Kubernetes RBAC.
                                     Omit it to check for group authorization only.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2864,6 +2951,8 @@ spec:
                                         Supersedes 'bodyParameters'; use either one or the other.
                                         Use it with method=POST; for GET requests, set parameters as query string in the 'endpoint' (placeholders can be used).
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2877,6 +2966,8 @@ spec:
                                     bodyParameters:
                                       additionalProperties:
                                         properties:
+                                          expression:
+                                            type: string
                                           selector:
                                             description: |-
                                               Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -2936,6 +3027,8 @@ spec:
                                     headers:
                                       additionalProperties:
                                         properties:
+                                          expression:
+                                            type: string
                                           selector:
                                             description: |-
                                               Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3047,8 +3140,8 @@ spec:
                                         by https://pkg.go.dev/github.com/tidwall/gjson and selects value from the authorization JSON.
                                         E.g. https://ext-auth-server.io/metadata?p={request.path}
                                       type: string
-                                  required:
-                                  - url
+                                    urlExpression:
+                                      type: string
                                   type: object
                                 rego:
                                   description: |-
@@ -3092,6 +3185,8 @@ spec:
                                         description: Reference to a named set of pattern
                                           expressions
                                         type: string
+                                      predicate:
+                                        type: string
                                       selector:
                                         description: |-
                                           Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -3130,6 +3225,8 @@ spec:
                                   description: The name of the permission (or relation)
                                     on which to execute the check.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3146,6 +3243,8 @@ spec:
                                   properties:
                                     kind:
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3158,6 +3257,8 @@ spec:
                                       type: object
                                     name:
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3192,6 +3293,8 @@ spec:
                                   properties:
                                     kind:
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3204,6 +3307,8 @@ spec:
                                       type: object
                                     name:
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3254,6 +3359,8 @@ spec:
                                     description: Reference to a named set of pattern
                                       expressions
                                     type: string
+                                  predicate:
+                                    type: string
                                   selector:
                                     description: |-
                                       Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -3271,7 +3378,6 @@ spec:
                         description: |-
                           Authorization policies.
                           All policies MUST evaluate to "allowed = true" for the auth request be successful.
-                        maxProperties: 10
                         type: object
                       callbacks:
                         additionalProperties:
@@ -3286,6 +3392,8 @@ spec:
                                     Key used to store the entry in the cache.
                                     The resolved key must be unique within the scope of this particular config.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3314,6 +3422,8 @@ spec:
                                     Supersedes 'bodyParameters'; use either one or the other.
                                     Use it with method=POST; for GET requests, set parameters as query string in the 'endpoint' (placeholders can be used).
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3327,6 +3437,8 @@ spec:
                                 bodyParameters:
                                   additionalProperties:
                                     properties:
+                                      expression:
+                                        type: string
                                       selector:
                                         description: |-
                                           Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3386,6 +3498,8 @@ spec:
                                 headers:
                                   additionalProperties:
                                     properties:
+                                      expression:
+                                        type: string
                                       selector:
                                         description: |-
                                           Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3490,8 +3604,8 @@ spec:
                                     by https://pkg.go.dev/github.com/tidwall/gjson and selects value from the authorization JSON.
                                     E.g. https://ext-auth-server.io/metadata?p={request.path}
                                   type: string
-                              required:
-                              - url
+                                urlExpression:
+                                  type: string
                               type: object
                             metrics:
                               default: false
@@ -3540,6 +3654,8 @@ spec:
                                     description: Reference to a named set of pattern
                                       expressions
                                     type: string
+                                  predicate:
+                                    type: string
                                   selector:
                                     description: |-
                                       Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -3559,7 +3675,6 @@ spec:
                         description: |-
                           Callback functions.
                           Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
-                        maxProperties: 10
                         type: object
                       metadata:
                         additionalProperties:
@@ -3574,6 +3689,8 @@ spec:
                                     Key used to store the entry in the cache.
                                     The resolved key must be unique within the scope of this particular config.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3603,6 +3720,8 @@ spec:
                                     Supersedes 'bodyParameters'; use either one or the other.
                                     Use it with method=POST; for GET requests, set parameters as query string in the 'endpoint' (placeholders can be used).
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3616,6 +3735,8 @@ spec:
                                 bodyParameters:
                                   additionalProperties:
                                     properties:
+                                      expression:
+                                        type: string
                                       selector:
                                         description: |-
                                           Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3675,6 +3796,8 @@ spec:
                                 headers:
                                   additionalProperties:
                                     properties:
+                                      expression:
+                                        type: string
                                       selector:
                                         description: |-
                                           Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3779,8 +3902,8 @@ spec:
                                     by https://pkg.go.dev/github.com/tidwall/gjson and selects value from the authorization JSON.
                                     E.g. https://ext-auth-server.io/metadata?p={request.path}
                                   type: string
-                              required:
-                              - url
+                                urlExpression:
+                                  type: string
                               type: object
                             metrics:
                               default: false
@@ -3870,6 +3993,8 @@ spec:
                                     description: Reference to a named set of pattern
                                       expressions
                                     type: string
+                                  predicate:
+                                    type: string
                                   selector:
                                     description: |-
                                       Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -3887,7 +4012,6 @@ spec:
                         description: |-
                           Metadata sources.
                           Authorino fetches auth metadata as JSON from sources specified in this config.
-                        maxProperties: 10
                         type: object
                       response:
                         description: |-
@@ -3899,10 +4023,8 @@ spec:
                               Response items to be included in the auth response when the request is authenticated and authorized.
                               For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata and/or inject data in the request.
                             properties:
-                              dynamicMetadata:
+                              filters:
                                 additionalProperties:
-                                  description: Settings of the success custom response
-                                    item.
                                   properties:
                                     cache:
                                       description: |-
@@ -3914,6 +4036,8 @@ spec:
                                             Key used to store the entry in the cache.
                                             The resolved key must be unique within the scope of this particular config.
                                           properties:
+                                            expression:
+                                              type: string
                                             selector:
                                               description: |-
                                                 Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3941,6 +4065,8 @@ spec:
                                         properties:
                                           additionalProperties:
                                             properties:
+                                              expression:
+                                                type: string
                                               selector:
                                                 description: |-
                                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -3968,6 +4094,8 @@ spec:
                                     plain:
                                       description: Plain text content
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4020,6 +4148,8 @@ spec:
                                             description: Reference to a named set
                                               of pattern expressions
                                             type: string
+                                          predicate:
+                                            type: string
                                           selector:
                                             description: |-
                                               Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -4039,6 +4169,8 @@ spec:
                                         customClaims:
                                           additionalProperties:
                                             properties:
+                                              expression:
+                                                type: string
                                               selector:
                                                 description: |-
                                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4097,10 +4229,8 @@ spec:
                                       - signingKeyRefs
                                       type: object
                                   type: object
-                                description: |-
-                                  Custom success response items wrapped as HTTP headers.
-                                  For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
-                                  See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
+                                description: Custom data made available to other filters
+                                  managed by Kuadrant (i.e. Rate Limit)
                                 type: object
                               headers:
                                 additionalProperties:
@@ -4115,6 +4245,8 @@ spec:
                                             Key used to store the entry in the cache.
                                             The resolved key must be unique within the scope of this particular config.
                                           properties:
+                                            expression:
+                                              type: string
                                             selector:
                                               description: |-
                                                 Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4142,6 +4274,8 @@ spec:
                                         properties:
                                           additionalProperties:
                                             properties:
+                                              expression:
+                                                type: string
                                               selector:
                                                 description: |-
                                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4169,6 +4303,8 @@ spec:
                                     plain:
                                       description: Plain text content
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4221,6 +4357,8 @@ spec:
                                             description: Reference to a named set
                                               of pattern expressions
                                             type: string
+                                          predicate:
+                                            type: string
                                           selector:
                                             description: |-
                                               Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -4240,6 +4378,8 @@ spec:
                                         customClaims:
                                           additionalProperties:
                                             properties:
+                                              expression:
+                                                type: string
                                               selector:
                                                 description: |-
                                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4298,9 +4438,7 @@ spec:
                                       - signingKeyRefs
                                       type: object
                                   type: object
-                                description: |-
-                                  Custom success response items wrapped as HTTP headers.
-                                  For integration of Authorino via proxy, the proxy must use these settings to inject data in the request.
+                                description: Custom headers to inject in the request.
                                 type: object
                             type: object
                           unauthenticated:
@@ -4313,6 +4451,8 @@ spec:
                                 description: HTTP response body to override the default
                                   denial body.
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4333,6 +4473,8 @@ spec:
                               headers:
                                 additionalProperties:
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4350,6 +4492,8 @@ spec:
                                 description: HTTP message to override the default
                                   denial message.
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4371,6 +4515,8 @@ spec:
                                 description: HTTP response body to override the default
                                   denial body.
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4391,6 +4537,8 @@ spec:
                               headers:
                                 additionalProperties:
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4408,6 +4556,8 @@ spec:
                                 description: HTTP message to override the default
                                   denial message.
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4431,81 +4581,54 @@ spec:
                     type: string
                   when:
                     description: |-
-                      Overall conditions for the AuthPolicy to be enforced.
-                      If omitted, the AuthPolicy will be enforced at all requests to the protected routes.
-                      If present, all conditions must match for the AuthPolicy to be enforced; otherwise, the authorization service skips the AuthPolicy and returns to the auth request with status OK.
+                      Overall conditions for the policy to be enforced.
+                      If omitted, the policy will be enforced at all requests to the protected routes.
+                      If present, all conditions must match for the policy to be enforced.
                     items:
+                      description: Predicate defines one CEL expression that must
+                        be evaluated to bool
                       properties:
-                        all:
-                          description: A list of pattern expressions to be evaluated
-                            as a logical AND.
-                          items:
-                            type: object
-                            x-kubernetes-preserve-unknown-fields: true
-                          type: array
-                        any:
-                          description: A list of pattern expressions to be evaluated
-                            as a logical OR.
-                          items:
-                            type: object
-                            x-kubernetes-preserve-unknown-fields: true
-                          type: array
-                        operator:
-                          description: |-
-                            The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
-                            Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
-                          enum:
-                          - eq
-                          - neq
-                          - incl
-                          - excl
-                          - matches
+                        predicate:
+                          minLength: 1
                           type: string
-                        patternRef:
-                          description: Reference to a named set of pattern expressions
-                          type: string
-                        selector:
-                          description: |-
-                            Path selector to fetch content from the authorization JSON (e.g. 'request.method').
-                            Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
-                            Authorino custom JSON path modifiers are also supported.
-                          type: string
-                        value:
-                          description: |-
-                            The value of reference for the comparison with the content fetched from the authorization JSON.
-                            If used with the "matches" operator, the value must compile to a valid Golang regex.
-                          type: string
+                      required:
+                      - predicate
                       type: object
                     type: array
                 type: object
               patterns:
                 additionalProperties:
-                  items:
-                    properties:
-                      operator:
-                        description: |-
-                          The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
-                          Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
-                        enum:
-                        - eq
-                        - neq
-                        - incl
-                        - excl
-                        - matches
-                        type: string
-                      selector:
-                        description: |-
-                          Path selector to fetch content from the authorization JSON (e.g. 'request.method').
-                          Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
-                          Authorino custom JSON path modifiers are also supported.
-                        type: string
-                      value:
-                        description: |-
-                          The value of reference for the comparison with the content fetched from the authorization JSON.
-                          If used with the "matches" operator, the value must compile to a valid Golang regex.
-                        type: string
-                    type: object
-                  type: array
+                  properties:
+                    allOf:
+                      items:
+                        properties:
+                          operator:
+                            description: |-
+                              The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
+                              Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
+                            enum:
+                            - eq
+                            - neq
+                            - incl
+                            - excl
+                            - matches
+                            type: string
+                          selector:
+                            description: |-
+                              Path selector to fetch content from the authorization JSON (e.g. 'request.method').
+                              Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
+                              Authorino custom JSON path modifiers are also supported.
+                            type: string
+                          value:
+                            description: |-
+                              The value of reference for the comparison with the content fetched from the authorization JSON.
+                              If used with the "matches" operator, the value must compile to a valid Golang regex.
+                            type: string
+                        type: object
+                      type: array
+                  required:
+                  - allOf
+                  type: object
                 description: Named sets of patterns that can be referred in `when`
                   conditions and in pattern-matching authorization policy rules.
                 type: object
@@ -4591,6 +4714,8 @@ spec:
                                 Key used to store the entry in the cache.
                                 The resolved key must be unique within the scope of this particular config.
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4644,6 +4769,8 @@ spec:
                         defaults:
                           additionalProperties:
                             properties:
+                              expression:
+                                type: string
                               selector:
                                 description: |-
                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4728,6 +4855,8 @@ spec:
                         overrides:
                           additionalProperties:
                             properties:
+                              expression:
+                                type: string
                               selector:
                                 description: |-
                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4749,14 +4878,14 @@ spec:
                             Identity object extracted from the context.
                             Use this method when authentication is performed beforehand by a proxy and the resulting object passed to Authorino as JSON in the auth request.
                           properties:
+                            expression:
+                              type: string
                             selector:
                               description: |-
                                 Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
                                 Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
                                 The following Authorino custom modifiers are supported: @extract:{sep:" ",pos:0}, @replace{old:"",new:""}, @case:upper|lower, @base64:encode|decode and @strip.
                               type: string
-                          required:
-                          - selector
                           type: object
                         priority:
                           default: 0
@@ -4798,6 +4927,8 @@ spec:
                                 type: string
                               patternRef:
                                 description: Reference to a named set of pattern expressions
+                                type: string
+                              predicate:
                                 type: string
                               selector:
                                 description: |-
@@ -4878,7 +5009,6 @@ spec:
                     description: |-
                       Authentication configs.
                       At least one config MUST evaluate to a valid identity object for the auth request to be successful.
-                    maxProperties: 10
                     type: object
                   authorization:
                     additionalProperties:
@@ -4893,6 +5023,8 @@ spec:
                                 Key used to store the entry in the cache.
                                 The resolved key must be unique within the scope of this particular config.
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4931,6 +5063,8 @@ spec:
                                     API group of the resource.
                                     Use '*' for all API groups.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4946,6 +5080,8 @@ spec:
                                     Resource name
                                     Omit it to check for authorization on all resources of the specified kind.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4960,6 +5096,8 @@ spec:
                                   description: Namespace where the user must have
                                     permissions on the resource.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4975,6 +5113,8 @@ spec:
                                     Resource kind
                                     Use '*' for all resource kinds.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -4988,6 +5128,8 @@ spec:
                                 subresource:
                                   description: Subresource kind
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5003,6 +5145,8 @@ spec:
                                     Verb to check for authorization on the resource.
                                     Use '*' for all verbs.
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5019,6 +5163,8 @@ spec:
                                 User to check for authorization in the Kubernetes RBAC.
                                 Omit it to check for group authorization only.
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5058,6 +5204,8 @@ spec:
                                     Supersedes 'bodyParameters'; use either one or the other.
                                     Use it with method=POST; for GET requests, set parameters as query string in the 'endpoint' (placeholders can be used).
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5071,6 +5219,8 @@ spec:
                                 bodyParameters:
                                   additionalProperties:
                                     properties:
+                                      expression:
+                                        type: string
                                       selector:
                                         description: |-
                                           Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5130,6 +5280,8 @@ spec:
                                 headers:
                                   additionalProperties:
                                     properties:
+                                      expression:
+                                        type: string
                                       selector:
                                         description: |-
                                           Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5239,8 +5391,8 @@ spec:
                                     by https://pkg.go.dev/github.com/tidwall/gjson and selects value from the authorization JSON.
                                     E.g. https://ext-auth-server.io/metadata?p={request.path}
                                   type: string
-                              required:
-                              - url
+                                urlExpression:
+                                  type: string
                               type: object
                             rego:
                               description: |-
@@ -5284,6 +5436,8 @@ spec:
                                     description: Reference to a named set of pattern
                                       expressions
                                     type: string
+                                  predicate:
+                                    type: string
                                   selector:
                                     description: |-
                                       Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -5322,6 +5476,8 @@ spec:
                               description: The name of the permission (or relation)
                                 on which to execute the check.
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5338,6 +5494,8 @@ spec:
                               properties:
                                 kind:
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5350,6 +5508,8 @@ spec:
                                   type: object
                                 name:
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5384,6 +5544,8 @@ spec:
                               properties:
                                 kind:
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5396,6 +5558,8 @@ spec:
                                   type: object
                                 name:
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5445,6 +5609,8 @@ spec:
                               patternRef:
                                 description: Reference to a named set of pattern expressions
                                 type: string
+                              predicate:
+                                type: string
                               selector:
                                 description: |-
                                   Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -5462,7 +5628,6 @@ spec:
                     description: |-
                       Authorization policies.
                       All policies MUST evaluate to "allowed = true" for the auth request be successful.
-                    maxProperties: 10
                     type: object
                   callbacks:
                     additionalProperties:
@@ -5477,6 +5642,8 @@ spec:
                                 Key used to store the entry in the cache.
                                 The resolved key must be unique within the scope of this particular config.
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5504,6 +5671,8 @@ spec:
                                 Supersedes 'bodyParameters'; use either one or the other.
                                 Use it with method=POST; for GET requests, set parameters as query string in the 'endpoint' (placeholders can be used).
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5517,6 +5686,8 @@ spec:
                             bodyParameters:
                               additionalProperties:
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5576,6 +5747,8 @@ spec:
                             headers:
                               additionalProperties:
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5679,8 +5852,8 @@ spec:
                                 by https://pkg.go.dev/github.com/tidwall/gjson and selects value from the authorization JSON.
                                 E.g. https://ext-auth-server.io/metadata?p={request.path}
                               type: string
-                          required:
-                          - url
+                            urlExpression:
+                              type: string
                           type: object
                         metrics:
                           default: false
@@ -5728,6 +5901,8 @@ spec:
                               patternRef:
                                 description: Reference to a named set of pattern expressions
                                 type: string
+                              predicate:
+                                type: string
                               selector:
                                 description: |-
                                   Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -5747,7 +5922,6 @@ spec:
                     description: |-
                       Callback functions.
                       Authorino sends callbacks at the end of the auth pipeline to the endpoints specified in this config.
-                    maxProperties: 10
                     type: object
                   metadata:
                     additionalProperties:
@@ -5762,6 +5936,8 @@ spec:
                                 Key used to store the entry in the cache.
                                 The resolved key must be unique within the scope of this particular config.
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5789,6 +5965,8 @@ spec:
                                 Supersedes 'bodyParameters'; use either one or the other.
                                 Use it with method=POST; for GET requests, set parameters as query string in the 'endpoint' (placeholders can be used).
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5802,6 +5980,8 @@ spec:
                             bodyParameters:
                               additionalProperties:
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5861,6 +6041,8 @@ spec:
                             headers:
                               additionalProperties:
                                 properties:
+                                  expression:
+                                    type: string
                                   selector:
                                     description: |-
                                       Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -5964,8 +6146,8 @@ spec:
                                 by https://pkg.go.dev/github.com/tidwall/gjson and selects value from the authorization JSON.
                                 E.g. https://ext-auth-server.io/metadata?p={request.path}
                               type: string
-                          required:
-                          - url
+                            urlExpression:
+                              type: string
                           type: object
                         metrics:
                           default: false
@@ -6054,6 +6236,8 @@ spec:
                               patternRef:
                                 description: Reference to a named set of pattern expressions
                                 type: string
+                              predicate:
+                                type: string
                               selector:
                                 description: |-
                                   Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -6071,7 +6255,6 @@ spec:
                     description: |-
                       Metadata sources.
                       Authorino fetches auth metadata as JSON from sources specified in this config.
-                    maxProperties: 10
                     type: object
                   response:
                     description: |-
@@ -6083,10 +6266,8 @@ spec:
                           Response items to be included in the auth response when the request is authenticated and authorized.
                           For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata and/or inject data in the request.
                         properties:
-                          dynamicMetadata:
+                          filters:
                             additionalProperties:
-                              description: Settings of the success custom response
-                                item.
                               properties:
                                 cache:
                                   description: |-
@@ -6098,6 +6279,8 @@ spec:
                                         Key used to store the entry in the cache.
                                         The resolved key must be unique within the scope of this particular config.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6125,6 +6308,8 @@ spec:
                                     properties:
                                       additionalProperties:
                                         properties:
+                                          expression:
+                                            type: string
                                           selector:
                                             description: |-
                                               Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6152,6 +6337,8 @@ spec:
                                 plain:
                                   description: Plain text content
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6204,6 +6391,8 @@ spec:
                                         description: Reference to a named set of pattern
                                           expressions
                                         type: string
+                                      predicate:
+                                        type: string
                                       selector:
                                         description: |-
                                           Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -6223,6 +6412,8 @@ spec:
                                     customClaims:
                                       additionalProperties:
                                         properties:
+                                          expression:
+                                            type: string
                                           selector:
                                             description: |-
                                               Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6280,10 +6471,8 @@ spec:
                                   - signingKeyRefs
                                   type: object
                               type: object
-                            description: |-
-                              Custom success response items wrapped as HTTP headers.
-                              For integration of Authorino via proxy, the proxy must use these settings to propagate dynamic metadata.
-                              See https://www.envoyproxy.io/docs/envoy/latest/configuration/advanced/well_known_dynamic_metadata
+                            description: Custom data made available to other filters
+                              managed by Kuadrant (i.e. Rate Limit)
                             type: object
                           headers:
                             additionalProperties:
@@ -6298,6 +6487,8 @@ spec:
                                         Key used to store the entry in the cache.
                                         The resolved key must be unique within the scope of this particular config.
                                       properties:
+                                        expression:
+                                          type: string
                                         selector:
                                           description: |-
                                             Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6325,6 +6516,8 @@ spec:
                                     properties:
                                       additionalProperties:
                                         properties:
+                                          expression:
+                                            type: string
                                           selector:
                                             description: |-
                                               Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6352,6 +6545,8 @@ spec:
                                 plain:
                                   description: Plain text content
                                   properties:
+                                    expression:
+                                      type: string
                                     selector:
                                       description: |-
                                         Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6404,6 +6599,8 @@ spec:
                                         description: Reference to a named set of pattern
                                           expressions
                                         type: string
+                                      predicate:
+                                        type: string
                                       selector:
                                         description: |-
                                           Path selector to fetch content from the authorization JSON (e.g. 'request.method').
@@ -6423,6 +6620,8 @@ spec:
                                     customClaims:
                                       additionalProperties:
                                         properties:
+                                          expression:
+                                            type: string
                                           selector:
                                             description: |-
                                               Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6480,9 +6679,7 @@ spec:
                                   - signingKeyRefs
                                   type: object
                               type: object
-                            description: |-
-                              Custom success response items wrapped as HTTP headers.
-                              For integration of Authorino via proxy, the proxy must use these settings to inject data in the request.
+                            description: Custom headers to inject in the request.
                             type: object
                         type: object
                       unauthenticated:
@@ -6495,6 +6692,8 @@ spec:
                             description: HTTP response body to override the default
                               denial body.
                             properties:
+                              expression:
+                                type: string
                               selector:
                                 description: |-
                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6515,6 +6714,8 @@ spec:
                           headers:
                             additionalProperties:
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6532,6 +6733,8 @@ spec:
                             description: HTTP message to override the default denial
                               message.
                             properties:
+                              expression:
+                                type: string
                               selector:
                                 description: |-
                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6553,6 +6756,8 @@ spec:
                             description: HTTP response body to override the default
                               denial body.
                             properties:
+                              expression:
+                                type: string
                               selector:
                                 description: |-
                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6573,6 +6778,8 @@ spec:
                           headers:
                             additionalProperties:
                               properties:
+                                expression:
+                                  type: string
                                 selector:
                                   description: |-
                                     Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6590,6 +6797,8 @@ spec:
                             description: HTTP message to override the default denial
                               message.
                             properties:
+                              expression:
+                                type: string
                               selector:
                                 description: |-
                                   Simple path selector to fetch content from the authorization JSON (e.g. 'request.method') or a string template with variables that resolve to patterns (e.g. "Hello, {auth.identity.name}!").
@@ -6652,50 +6861,18 @@ spec:
                   rule: self.kind == 'HTTPRoute' || self.kind == 'Gateway'
               when:
                 description: |-
-                  Overall conditions for the AuthPolicy to be enforced.
-                  If omitted, the AuthPolicy will be enforced at all requests to the protected routes.
-                  If present, all conditions must match for the AuthPolicy to be enforced; otherwise, the authorization service skips the AuthPolicy and returns to the auth request with status OK.
+                  Overall conditions for the policy to be enforced.
+                  If omitted, the policy will be enforced at all requests to the protected routes.
+                  If present, all conditions must match for the policy to be enforced.
                 items:
+                  description: Predicate defines one CEL expression that must be evaluated
+                    to bool
                   properties:
-                    all:
-                      description: A list of pattern expressions to be evaluated as
-                        a logical AND.
-                      items:
-                        type: object
-                        x-kubernetes-preserve-unknown-fields: true
-                      type: array
-                    any:
-                      description: A list of pattern expressions to be evaluated as
-                        a logical OR.
-                      items:
-                        type: object
-                        x-kubernetes-preserve-unknown-fields: true
-                      type: array
-                    operator:
-                      description: |-
-                        The binary operator to be applied to the content fetched from the authorization JSON, for comparison with "value".
-                        Possible values are: "eq" (equal to), "neq" (not equal to), "incl" (includes; for arrays), "excl" (excludes; for arrays), "matches" (regex)
-                      enum:
-                      - eq
-                      - neq
-                      - incl
-                      - excl
-                      - matches
+                    predicate:
+                      minLength: 1
                       type: string
-                    patternRef:
-                      description: Reference to a named set of pattern expressions
-                      type: string
-                    selector:
-                      description: |-
-                        Path selector to fetch content from the authorization JSON (e.g. 'request.method').
-                        Any pattern supported by https://pkg.go.dev/github.com/tidwall/gjson can be used.
-                        Authorino custom JSON path modifiers are also supported.
-                      type: string
-                    value:
-                      description: |-
-                        The value of reference for the comparison with the content fetched from the authorization JSON.
-                        If used with the "matches" operator, the value must compile to a valid Golang regex.
-                      type: string
+                  required:
+                  - predicate
                   type: object
                 type: array
             required:
@@ -6703,11 +6880,43 @@ spec:
             type: object
             x-kubernetes-validations:
             - message: Implicit and explicit defaults are mutually exclusive
-              rule: '!(has(self.defaults) && has(self.rules))'
-            - message: Overrides and explicit defaults are mutually exclusive
-              rule: '!(has(self.defaults) && has(self.overrides))'
-            - message: Overrides and implicit defaults are mutually exclusive
-              rule: '!(has(self.overrides) && has(self.rules))'
+              rule: '!(has(self.defaults) && (has(self.patterns) || has(self.when)
+                || has(self.rules)))'
+            - message: Implicit defaults and explicit overrides are mutually exclusive
+              rule: '!(has(self.overrides) && (has(self.patterns) || has(self.when)
+                || has(self.rules)))'
+            - message: Explicit overrides and explicit defaults are mutually exclusive
+              rule: '!(has(self.overrides) && has(self.defaults))'
+            - message: At least one spec.rules must be defined
+              rule: '!(has(self.overrides) || has(self.defaults)) ? has(self.rules)
+                && ((has(self.rules.authentication) && size(self.rules.authentication)
+                > 0) || (has(self.rules.metadata) && size(self.rules.metadata) > 0)
+                || (has(self.rules.authorization) && size(self.rules.authorization)
+                > 0) || (has(self.rules.response) && (has(self.rules.response.unauthenticated)
+                || has(self.rules.response.unauthorized) || (has(self.rules.response.success)
+                && (size(self.rules.response.success.headers) > 0 ||  size(self.rules.response.success.filters)
+                > 0)))) || (has(self.rules.callbacks) && size(self.rules.callbacks)
+                > 0)) : true'
+            - message: At least one spec.defaults.rules must be defined
+              rule: 'has(self.defaults) ? has(self.defaults.rules) && ((has(self.defaults.rules.authentication)
+                && size(self.defaults.rules.authentication) > 0) || (has(self.defaults.rules.metadata)
+                && size(self.defaults.rules.metadata) > 0) || (has(self.defaults.rules.authorization)
+                && size(self.defaults.rules.authorization) > 0) || (has(self.defaults.rules.response)
+                && (has(self.defaults.rules.response.unauthenticated) || has(self.defaults.rules.response.unauthorized)
+                || (has(self.defaults.rules.response.success) && (size(self.defaults.rules.response.success.headers)
+                > 0 ||  size(self.defaults.rules.response.success.filters) > 0))))
+                || (has(self.defaults.rules.callbacks) && size(self.defaults.rules.callbacks)
+                > 0)) : true'
+            - message: At least one spec.overrides.rules must be defined
+              rule: 'has(self.overrides) ? has(self.overrides.rules) && ((has(self.overrides.rules.authentication)
+                && size(self.overrides.rules.authentication) > 0) || (has(self.overrides.rules.metadata)
+                && size(self.overrides.rules.metadata) > 0) || (has(self.overrides.rules.authorization)
+                && size(self.overrides.rules.authorization) > 0) || (has(self.overrides.rules.response)
+                && (has(self.overrides.rules.response.unauthenticated) || has(self.overrides.rules.response.unauthorized)
+                || (has(self.overrides.rules.response.success) && (size(self.overrides.rules.response.success.headers)
+                > 0 ||  size(self.overrides.rules.response.success.filters) > 0))))
+                || (has(self.overrides.rules.callbacks) && size(self.overrides.rules.callbacks)
+                > 0)) : true'
           status:
             properties:
               conditions:

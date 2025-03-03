@@ -74,7 +74,7 @@ generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and
 
 .PHONY: manifests
 manifests: controller-gen ## Generate CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) crd paths="./apis/v1alpha2;./apis/v1beta3" output:crd:artifacts:config=config/crds
+	$(CONTROLLER_GEN) crd paths="./apis/v1;" output:crd:artifacts:config=config/crds
 
 .PHONY: install
 install: manifests ## Install CRDs into a cluster.
