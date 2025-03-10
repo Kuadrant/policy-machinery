@@ -186,6 +186,11 @@ func (t *Topology) ToDot() string {
 	return t.graph.String()
 }
 
+// Returns a deep copy of the Graph
+func (t *Topology) Graph() *dot.Graph {
+	return t.graph.DeepCopy()
+}
+
 func addObjectsToGraph[T Object](graph *dot.Graph, objects []T) []dot.Node {
 	return lo.Map(objects, func(object T, _ int) dot.Node {
 		name := strings.TrimPrefix(namespacedName(object.GetNamespace(), object.GetName()), string(k8stypes.Separator))
