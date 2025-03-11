@@ -104,11 +104,18 @@ spec:
 EOF
 ```
 
-3. Create a DNSPolicy attached to the Gateway:
+3. Create an AWS Credentials Secret and a DNSPolicy for the Gateway:
+
+```sh
+kubectl create secret generic aws-credentials \
+  --type=kuadrant.io/aws \
+  --from-literal=AWS_ACCESS_KEY_ID='AN_AWS_ACCESS_KEY_ID' \
+  --from-literal=AWS_SECRET_ACCESS_KEY='AN AN_AWS_SECRET_ACCESS_KEY'
+```
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1alpha2
+apiVersion: kuadrant.io/v1
 kind: DNSPolicy
 metadata:
   name: geo
@@ -118,11 +125,11 @@ spec:
     kind: Gateway
     name: prod-web
   loadBalancing:
-    weighted:
-      defaultWeight: 100
-    geo:
-      defaultGeo: US
-  routingStrategy: loadbalanced
+    defaultGeo: true
+    geo: GEO-NA
+    weight: 120
+  providerRefs:
+    - name: aws-credentials
 EOF
 ```
 
@@ -130,7 +137,7 @@ EOF
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: business-hours
@@ -160,7 +167,7 @@ kubectl delete securitypolicy/prod-web
 
 ```sh
 kubectl apply -f - <<EOF
-apiVersion: kuadrant.io/v1beta3
+apiVersion: kuadrant.io/v1
 kind: AuthPolicy
 metadata:
   name: api-key-admins
@@ -261,6 +268,7 @@ Delete the resources:
 kubectl get gateways,httproutes,dnspolicies,authpolicies,securitypolicies -o name | while read -r line; do kubectl delete "$line"; done
 kubectl delete gatewayclass/eg
 kubectl delete gatewayclass/istio
+kubectl delete secret aws-credentials
 ```
 
 Delete the cluster:

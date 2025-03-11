@@ -5,7 +5,7 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.0
   labels:
-    gateway.networking.k8s.io/policy: inherited
+    gateway.networking.k8s.io/policy: direct
   name: tlspolicies.kuadrant.io
 spec:
   group: kuadrant.io
@@ -27,17 +27,18 @@ spec:
       name: Enforced
       priority: 2
       type: string
-    - description: Kind of the object to which the policy aaplies
+    - description: Type of the referenced Gateway API resource
       jsonPath: .spec.targetRef.kind
-      name: TargetKind
+      name: TargetRefKind
       priority: 2
       type: string
-    - description: Name of the object to which the policy applies
+    - description: Name of the referenced Gateway API resource
       jsonPath: .spec.targetRef.name
-      name: TargetName
+      name: TargetRefName
       priority: 2
       type: string
-    - description: 'Name of the section within the object to which the policy applies '
+    - description: 'Name of the Listener section within the Gateway to which the policy
+        applies '
       jsonPath: .spec.targetRef.sectionName
       name: TargetSection
       priority: 2
@@ -45,11 +46,10 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha2
+    name: v1
     schema:
       openAPIV3Schema:
-        description: TLSPolicy enables automatic TLS configuration for Gateway API
-          objects.
+        description: TLSPolicy is the Schema for the tlspolicies API
         properties:
           apiVersion:
             description: |-
@@ -145,7 +145,7 @@ spec:
                       re-issuance is being processed.
 
                       If set to `Never`, a private key will only be generated if one does not
-                      already exist in the target `spec.secretName`. If one does exists but it
+                      already exist in the target `spec.secretName`. If one does exist but it
                       does not have the correct algorithm or size, a warning will be raised
                       to await user intervention.
                       If set to `Always`, a private key matching the specified requirements
@@ -187,7 +187,7 @@ spec:
                 format: int32
                 type: integer
               targetRef:
-                description: Reference to the object to which this policy applies.
+                description: TargetRef identifies an API object to apply policy to.
                 properties:
                   group:
                     description: Group is the group of the target resource.
@@ -298,11 +298,14 @@ spec:
             - targetRef
             type: object
           status:
+            description: TLSPolicyStatus defines the observed state of TLSPolicy
             properties:
               conditions:
                 description: |-
-                  Represents the observations of a foo's current state.
-                  Known .status.conditions.type are: "Available"
+                  conditions are any conditions associated with the policy
+
+                  If configuring the policy fails, the "Failed" condition will be set with a
+                  reason and message describing the cause of the failure.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -358,12 +361,12 @@ spec:
                   - type
                   type: object
                 type: array
-                x-kubernetes-list-map-keys:
-                - type
-                x-kubernetes-list-type: map
               observedGeneration:
-                description: ObservedGeneration reflects the generation of the most
-                  recently observed spec.
+                description: |-
+                  observedGeneration is the most recently observed generation of the
+                  TLSPolicy.  When the TLSPolicy is updated, the controller updates the
+                  corresponding configuration. If an update fails, that failure is
+                  recorded in the status condition
                 format: int64
                 type: integer
             type: object
