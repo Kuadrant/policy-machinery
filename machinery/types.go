@@ -18,11 +18,17 @@ type Object interface {
 	GetLocator() string
 }
 
+type LocatableObject interface {
+	GroupVersionKind() schema.GroupVersionKind
+	GetNamespace() string
+	GetName() string
+}
+
 func MapObjectToLocatorFunc(t Object, _ int) string {
 	return t.GetLocator()
 }
 
-func LocatorFromObject(obj Object) string {
+func LocatorFromObject(obj LocatableObject) string {
 	name := strings.TrimPrefix(namespacedName(obj.GetNamespace(), obj.GetName()), string(k8stypes.Separator))
 	return fmt.Sprintf("%s%s%s", strings.ToLower(obj.GroupVersionKind().GroupKind().String()), string(kindNameLocatorSeparator), name)
 }
