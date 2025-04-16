@@ -1,6 +1,6 @@
 module github.com/kuadrant/policy-machinery/examples
 
-go 1.22.5
+go 1.23.6
 
 require (
 	github.com/cert-manager/cert-manager v1.15.1
