@@ -30,8 +30,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantv1alpha2 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1alpha2"
-	kuadrantv1beta3 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1beta3"
+	kuadrantv1 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1"
 	"github.com/kuadrant/policy-machinery/examples/kuadrant/reconcilers"
 )
 
@@ -54,8 +53,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(kuadrantv1alpha2.AddToScheme(scheme))
-	utilruntime.Must(kuadrantv1beta3.AddToScheme(scheme))
+	utilruntime.Must(kuadrantv1.AddToScheme(scheme))
 	utilruntime.Must(gwapiv1.AddToScheme(scheme))
 	utilruntime.Must(egv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(istiov1.AddToScheme(scheme))
@@ -139,33 +137,33 @@ func main() {
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*gwapiv1.HTTPRoute]{})),
 		),
 		controller.WithRunnable("dnspolicy watcher", buildWatcher(
-			&kuadrantv1alpha2.DNSPolicy{},
-			kuadrantv1alpha2.DNSPoliciesResource,
+			&kuadrantv1.DNSPolicy{},
+			kuadrantv1.DNSPoliciesResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha2.DNSPolicy]{})),
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.DNSPolicy]{})),
 		),
 		controller.WithRunnable("tlspolicy watcher", buildWatcher(
-			&kuadrantv1alpha2.TLSPolicy{},
-			kuadrantv1alpha2.TLSPoliciesResource,
+			&kuadrantv1.TLSPolicy{},
+			kuadrantv1.TLSPoliciesResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1alpha2.TLSPolicy]{})),
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.TLSPolicy]{})),
 		),
 		controller.WithRunnable("authpolicy watcher", buildWatcher(
-			&kuadrantv1beta3.AuthPolicy{},
-			kuadrantv1beta3.AuthPoliciesResource,
+			&kuadrantv1.AuthPolicy{},
+			kuadrantv1.AuthPoliciesResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta3.AuthPolicy]{})),
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.AuthPolicy]{})),
 		),
 		controller.WithRunnable("ratelimitpolicy watcher", buildWatcher(
-			&kuadrantv1beta3.RateLimitPolicy{},
-			kuadrantv1beta3.RateLimitPoliciesResource,
+			&kuadrantv1.RateLimitPolicy{},
+			kuadrantv1.RateLimitPoliciesResource,
 			metav1.NamespaceAll,
-			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1beta3.RateLimitPolicy]{}))),
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*kuadrantv1.RateLimitPolicy]{}))),
 		controller.WithPolicyKinds(
-			kuadrantv1alpha2.DNSPolicyKind,
-			kuadrantv1alpha2.TLSPolicyKind,
-			kuadrantv1beta3.AuthPolicyKind,
-			kuadrantv1beta3.RateLimitPolicyKind,
+			kuadrantv1.DNSPolicyGroupKind,
+			kuadrantv1.TLSPolicyGroupKind,
+			kuadrantv1.AuthPolicyGroupKind,
+			kuadrantv1.RateLimitPolicyGroupKind,
 		),
 		controller.WithReconcile(buildReconciler(gatewayProviders, client)),
 	}
@@ -256,7 +254,7 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 		{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.CreateEvent)},
 		{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.UpdateEvent)},
 		{Kind: ptr.To(machinery.HTTPRouteGroupKind)},
-		{Kind: ptr.To(kuadrantv1beta3.AuthPolicyKind)},
+		{Kind: ptr.To(kuadrantv1.AuthPolicyGroupKind)},
 	}
 
 	for _, gatewayProvider := range gatewayProviders {

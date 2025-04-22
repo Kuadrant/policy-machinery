@@ -1,30 +1,39 @@
-package v1beta3
+/*
+Copyright 2024.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1
 
 import (
-	"encoding/json"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	"time"
 
 	"github.com/kuadrant/policy-machinery/machinery"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
-	kuadrantapis "github.com/kuadrant/policy-machinery/examples/kuadrant/apis"
+	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
+	"github.com/kuadrant/kuadrant-operator/pkg/utils"
 )
 
 var (
-	RateLimitPolicyKind       = schema.GroupKind{Group: SchemeGroupVersion.Group, Kind: "RateLimitPolicy"}
-	RateLimitPoliciesResource = SchemeGroupVersion.WithResource("ratelimitpolicies")
-)
-
-const (
-	EqualOperator      WhenConditionOperator = "eq"
-	NotEqualOperator   WhenConditionOperator = "neq"
-	StartsWithOperator WhenConditionOperator = "startswith"
-	EndsWithOperator   WhenConditionOperator = "endswith"
-	IncludeOperator    WhenConditionOperator = "incl"
-	ExcludeOperator    WhenConditionOperator = "excl"
-	MatchesOperator    WhenConditionOperator = "matches"
+	RateLimitPolicyGroupKind  = schema.GroupKind{Group: GroupVersion.Group, Kind: "RateLimitPolicy"}
+	RateLimitPoliciesResource = GroupVersion.WithResource("ratelimitpolicies")
+	// Top level predicate rules key starting with # to prevent conflict with limit names
+	// TODO(eastizle): this coupling between limit names and rule IDs is a bad smell. Merging implementation should be enhanced.
+	RulesKeyTopLevelPredicates = "###_TOP_LEVEL_PREDICATES_###"
 )
 
 // +kubebuilder:object:root=true
@@ -60,6 +69,11 @@ func (p *RateLimitPolicy) GetLocator() string {
 	return machinery.LocatorFromObject(p)
 }
 
+// Deprecated: Use GetTargetRefs instead
+func (p *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
+	return p.Spec.TargetRef.LocalPolicyTargetReference
+}
+
 func (p *RateLimitPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 	return []machinery.PolicyTargetReference{
 		machinery.LocalPolicyTargetReferenceWithSectionName{
@@ -71,12 +85,12 @@ func (p *RateLimitPolicy) GetTargetRefs() []machinery.PolicyTargetReference {
 
 func (p *RateLimitPolicy) GetMergeStrategy() machinery.MergeStrategy {
 	if spec := p.Spec.Defaults; spec != nil {
-		return kuadrantapis.DefaultsMergeStrategy(spec.Strategy)
+		return DefaultsMergeStrategy(spec.Strategy)
 	}
 	if spec := p.Spec.Overrides; spec != nil {
-		return kuadrantapis.OverridesMergeStrategy(spec.Strategy)
+		return OverridesMergeStrategy(spec.Strategy)
 	}
-	return kuadrantapis.AtomicDefaultsMergeStrategy
+	return AtomicDefaultsMergeStrategy
 }
 
 func (p *RateLimitPolicy) Merge(other machinery.Policy) machinery.Policy {
@@ -87,48 +101,73 @@ func (p *RateLimitPolicy) Merge(other machinery.Policy) machinery.Policy {
 	return source.GetMergeStrategy()(source, p)
 }
 
-var _ kuadrantapis.MergeablePolicy = &RateLimitPolicy{}
+var _ MergeablePolicy = &RateLimitPolicy{}
 
 func (p *RateLimitPolicy) Empty() bool {
 	return len(p.Spec.Proper().Limits) == 0
 }
 
-func (p *RateLimitPolicy) Rules() map[string]any {
-	rules := make(map[string]any)
+func (p *RateLimitPolicy) Rules() map[string]MergeableRule {
+	rules := make(map[string]MergeableRule)
+	policyLocator := p.GetLocator()
+	spec := p.Spec.Proper()
 
-	for ruleId := range p.Spec.Proper().Limits {
-		rules[ruleId] = p.Spec.Proper().Limits[ruleId]
+	if whenPredicates := spec.MergeableWhenPredicates; len(whenPredicates.Predicates) > 0 {
+		rules[RulesKeyTopLevelPredicates] = NewMergeableRule(&whenPredicates, policyLocator)
+	}
+
+	for ruleID := range spec.Limits {
+		limit := spec.Limits[ruleID]
+		rules[ruleID] = NewMergeableRule(&limit, policyLocator)
 	}
 
 	return rules
 }
 
-func (p *RateLimitPolicy) SetRules(rules map[string]any) {
-	if len(rules) > 0 && p.Spec.Proper().Limits == nil {
+func (p *RateLimitPolicy) SetRules(rules map[string]MergeableRule) {
+	// clear all rules of the policy before setting new ones
+	p.Spec.Proper().Limits = nil
+	p.Spec.Proper().Predicates = nil
+
+	if len(rules) > 0 {
 		p.Spec.Proper().Limits = make(map[string]Limit)
 	}
 
-	for ruleId := range rules {
-		rule := rules[ruleId]
-		p.Spec.Proper().Limits[ruleId] = rule.(Limit)
+	for ruleID := range rules {
+		if ruleID == RulesKeyTopLevelPredicates {
+			p.Spec.Proper().MergeableWhenPredicates = *rules[ruleID].(*MergeableWhenPredicates)
+		} else {
+			p.Spec.Proper().Limits[ruleID] = *rules[ruleID].(*Limit)
+		}
 	}
+}
+
+func (p *RateLimitPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
+	return &p.Status
+}
+
+func (p *RateLimitPolicy) Kind() string {
+	return RateLimitPolicyGroupKind.Kind
 }
 
 // +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.limits))",message="Implicit and explicit defaults are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="!(has(self.defaults) && has(self.overrides))",message="Overrides and explicit defaults are mutually exclusive"
 // +kubebuilder:validation:XValidation:rule="!(has(self.overrides) && has(self.limits))",message="Overrides and implicit defaults are mutually exclusive"
+// +kubebuilder:validation:XValidation:rule="!(has(self.overrides) || has(self.defaults)) ? has(self.limits) && size(self.limits) > 0 : true",message="At least one spec.limits must be defined"
+// +kubebuilder:validation:XValidation:rule="has(self.overrides) ? has(self.overrides.limits) && size(self.overrides.limits) > 0 : true",message="At least one spec.overrides.limits must be defined"
+// +kubebuilder:validation:XValidation:rule="has(self.defaults) ? has(self.defaults.limits) && size(self.defaults.limits) > 0 : true",message="At least one spec.defaults.limits must be defined"
 type RateLimitPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
-	TargetRef gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
+	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// Rules to apply as defaults. Can be overridden by more specific policiy rules lower in the hierarchy and by less specific policy overrides.
 	// Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
 	// +optional
 	Defaults *MergeableRateLimitPolicySpec `json:"defaults,omitempty"`
 
-	// Rules to apply as overrides. Override all policy rules lower in the hierarchy. Can be overriden by less specific policy overrides.
+	// Rules to apply as overrides. Override all policy rules lower in the hierarchy. Can be overridden by less specific policy overrides.
 	// Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
 	// +optional
 	Overrides *MergeableRateLimitPolicySpec `json:"overrides,omitempty"`
@@ -136,44 +175,6 @@ type RateLimitPolicySpec struct {
 	// Bare set of policy rules (implicit defaults).
 	// Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
 	RateLimitPolicySpecProper `json:""`
-}
-
-// UnmarshalJSON unmarshals the RateLimitPolicySpec from JSON byte array.
-// This should not be needed, but runtime.DefaultUnstructuredConverter.FromUnstructured does not work well with embedded structs.
-func (s *RateLimitPolicySpec) UnmarshalJSON(j []byte) error {
-	targetRef := struct {
-		gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
-	}{}
-	if err := json.Unmarshal(j, &targetRef); err != nil {
-		return err
-	}
-	s.TargetRef = targetRef.LocalPolicyTargetReferenceWithSectionName
-
-	defaults := &struct {
-		*MergeableRateLimitPolicySpec `json:"defaults,omitempty"`
-	}{}
-	if err := json.Unmarshal(j, defaults); err != nil {
-		return err
-	}
-	s.Defaults = defaults.MergeableRateLimitPolicySpec
-
-	overrides := &struct {
-		*MergeableRateLimitPolicySpec `json:"overrides,omitempty"`
-	}{}
-	if err := json.Unmarshal(j, overrides); err != nil {
-		return err
-	}
-	s.Overrides = overrides.MergeableRateLimitPolicySpec
-
-	proper := struct {
-		RateLimitPolicySpecProper `json:""`
-	}{}
-	if err := json.Unmarshal(j, &proper); err != nil {
-		return err
-	}
-	s.RateLimitPolicySpecProper = proper.RateLimitPolicySpecProper
-
-	return nil
 }
 
 func (s *RateLimitPolicySpec) Proper() *RateLimitPolicySpecProper {
@@ -199,71 +200,105 @@ type MergeableRateLimitPolicySpec struct {
 
 // RateLimitPolicySpecProper contains common shared fields for defaults and overrides
 type RateLimitPolicySpecProper struct {
+	// When holds a list of "top-level" `Predicate`s
+	// +optional
+	MergeableWhenPredicates `json:""`
+
 	// Limits holds the struct of limits indexed by a unique name
 	// +optional
-	// +kubebuilder:validation:MaxProperties=14
 	Limits map[string]Limit `json:"limits,omitempty"`
+}
+
+type Counter struct {
+	Expression Expression `json:"expression"`
 }
 
 // Limit represents a complete rate limit configuration
 type Limit struct {
-	// When holds the list of conditions for the policy to be enforced.
+	// When holds a list of "limit-level" `Predicate`s
 	// Called also "soft" conditions as route selectors must also match
 	// +optional
-	When []WhenCondition `json:"when,omitempty"`
+	When WhenPredicates `json:"when,omitempty"`
 
-	// Counters defines additional rate limit counters based on context qualifiers and well known selectors
+	// Counters defines additional rate limit counters based on CEL expressions which can reference well known selectors
 	// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
 	// +optional
-	Counters []ContextSelector `json:"counters,omitempty"`
+	Counters []Counter `json:"counters,omitempty"`
 
 	// Rates holds the list of limit rates
 	// +optional
 	Rates []Rate `json:"rates,omitempty"`
+
+	// Source stores the locator of the policy where the limit is orignaly defined (internal use)
+	Source string `json:"-"`
 }
 
-// +kubebuilder:validation:Enum:=second;minute;hour;day
-type TimeUnit string
+func (l Limit) CountersAsStringList() []string {
+	if len(l.Counters) == 0 {
+		return nil
+	}
+	return utils.Map(l.Counters, func(counter Counter) string { return string(counter.Expression) })
+}
+
+var _ MergeableRule = &Limit{}
+
+func (l *Limit) GetSpec() any {
+	return l
+}
+
+func (l *Limit) GetSource() string {
+	return l.Source
+}
+
+func (l *Limit) WithSource(source string) MergeableRule {
+	l.Source = source
+	return l
+}
+
+// Duration follows Gateway API Duration format: https://gateway-api.sigs.k8s.io/geps/gep-2257/?h=duration#gateway-api-duration-format
+// MUST match the regular expression ^([0-9]{1,5}(h|m|s|ms)){1,4}$
+// MUST be interpreted as specified by Golang's time.ParseDuration
+// +kubebuilder:validation:Pattern=`^([0-9]{1,5}(h|m|s|ms)){1,4}$`
+type Duration string
+
+func (d Duration) Seconds() int {
+	duration, err := time.ParseDuration(string(d))
+	if err != nil {
+		return 0
+	}
+
+	return int(duration.Seconds())
+}
 
 // Rate defines the actual rate limit that will be used when there is a match
 type Rate struct {
 	// Limit defines the max value allowed for a given period of time
 	Limit int `json:"limit"`
 
-	// Duration defines the time period for which the Limit specified above applies.
-	Duration int `json:"duration"`
-
-	// Duration defines the time uni
-	// Possible values are: "second", "minute", "hour", "day"
-	Unit TimeUnit `json:"unit"`
+	// Window defines the time period for which the Limit specified above applies.
+	Window Duration `json:"window"`
 }
 
-// WhenCondition defines semantics for matching an HTTP request based on conditions
-// https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec
-type WhenCondition struct {
-	// Selector defines one item from the well known selectors
-	// TODO Document properly "Well-known selector" https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
-	Selector ContextSelector `json:"selector"`
+// ToSeconds converts the rate to to Limitador's Limit format (maxValue, seconds)
+func (r Rate) ToSeconds() (maxValue, seconds int) {
+	maxValue = r.Limit
+	seconds = r.Window.Seconds()
 
-	// The binary operator to be applied to the content fetched from the selector
-	// Possible values are: "eq" (equal to), "neq" (not equal to)
-	Operator WhenConditionOperator `json:"operator"`
+	if r.Limit < 0 {
+		maxValue = 0
+	}
 
-	// The value of reference for the comparison.
-	Value string `json:"value"`
+	return
 }
 
-// ContextSelector defines one item from the well known attributes
+// Expression defines one CEL expression
+// Expression can use well known attributes
 // Attributes: https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/advanced/attributes
 // Well-known selectors: https://github.com/Kuadrant/architecture/blob/main/rfcs/0001-rlp-v2.md#well-known-selectors
 // They are named by a dot-separated path (e.g. request.path)
 // Example: "request.path" -> The path portion of the URL
 // +kubebuilder:validation:MinLength=1
-// +kubebuilder:validation:MaxLength=253
-type ContextSelector string
-
-// +kubebuilder:validation:Enum:=eq;neq;startswith;endswith;incl;excl;matches
-type WhenConditionOperator string
+type Expression string
 
 type RateLimitPolicyStatus struct {
 	// ObservedGeneration reflects the generation of the most recently observed spec.

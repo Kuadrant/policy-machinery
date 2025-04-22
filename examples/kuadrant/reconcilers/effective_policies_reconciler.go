@@ -13,8 +13,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 
 	kuadrantapis "github.com/kuadrant/policy-machinery/examples/kuadrant/apis"
-	kuadrantv1alpha2 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1alpha2"
-	kuadrantv1beta3 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1beta3"
+	kuadrantv1 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1"
 )
 
 const authPathsKey = "authPaths"
@@ -45,10 +44,10 @@ func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller
 		for _, listener := range listeners {
 			paths := targetables.Paths(gateway, listener)
 			for i := range paths {
-				if p := effectivePolicyForPath[*kuadrantv1alpha2.DNSPolicy](ctx, paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1.DNSPolicy](ctx, paths[i]); p != nil {
 					// TODO: reconcile dns effective policy (i.e. create the DNSRecords for it)
 				}
-				if p := effectivePolicyForPath[*kuadrantv1alpha2.TLSPolicy](ctx, paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1.TLSPolicy](ctx, paths[i]); p != nil {
 					// TODO: reconcile tls effective policy (i.e. create the certificate request for it)
 				}
 			}
@@ -58,11 +57,11 @@ func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller
 		for _, httpRouteRule := range httpRouteRules {
 			paths := targetables.Paths(gateway, httpRouteRule)
 			for i := range paths {
-				if p := effectivePolicyForPath[*kuadrantv1beta3.AuthPolicy](ctx, paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1.AuthPolicy](ctx, paths[i]); p != nil {
 					authPaths = append(authPaths, paths[i])
 					// TODO: reconcile auth effective policy (i.e. create the Authorino AuthConfig)
 				}
-				if p := effectivePolicyForPath[*kuadrantv1beta3.RateLimitPolicy](ctx, paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1.RateLimitPolicy](ctx, paths[i]); p != nil {
 					// TODO: reconcile rate-limit effective policy (i.e. create the Limitador limits config)
 				}
 			}
