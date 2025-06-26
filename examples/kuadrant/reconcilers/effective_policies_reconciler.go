@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
-	"sort"
 	"sync"
 
 	"github.com/samber/lo"
@@ -12,9 +11,7 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantapis "github.com/kuadrant/policy-machinery/examples/kuadrant/apis"
-	kuadrantv1alpha2 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1alpha2"
-	kuadrantv1beta3 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1beta3"
+	kuadrantv1 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1"
 )
 
 const authPathsKey = "authPaths"
@@ -45,10 +42,10 @@ func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller
 		for _, listener := range listeners {
 			paths := targetables.Paths(gateway, listener)
 			for i := range paths {
-				if p := effectivePolicyForPath[*kuadrantv1alpha2.DNSPolicy](ctx, paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1.DNSPolicy](ctx, paths[i]); p != nil {
 					// TODO: reconcile dns effective policy (i.e. create the DNSRecords for it)
 				}
-				if p := effectivePolicyForPath[*kuadrantv1alpha2.TLSPolicy](ctx, paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1.TLSPolicy](ctx, paths[i]); p != nil {
 					// TODO: reconcile tls effective policy (i.e. create the certificate request for it)
 				}
 			}
@@ -58,11 +55,11 @@ func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller
 		for _, httpRouteRule := range httpRouteRules {
 			paths := targetables.Paths(gateway, httpRouteRule)
 			for i := range paths {
-				if p := effectivePolicyForPath[*kuadrantv1beta3.AuthPolicy](ctx, paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1.AuthPolicy](ctx, paths[i]); p != nil {
 					authPaths = append(authPaths, paths[i])
 					// TODO: reconcile auth effective policy (i.e. create the Authorino AuthConfig)
 				}
-				if p := effectivePolicyForPath[*kuadrantv1beta3.RateLimitPolicy](ctx, paths[i]); p != nil {
+				if p := effectivePolicyForPath[*kuadrantv1.RateLimitPolicy](ctx, paths[i]); p != nil {
 					// TODO: reconcile rate-limit effective policy (i.e. create the Limitador limits config)
 				}
 			}
@@ -78,14 +75,9 @@ func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []mach
 	logger := controller.LoggerFromContext(ctx).WithName("effective policy")
 
 	// gather all policies in the path sorted from the least specific to the most specific
-	policies := lo.FlatMap(path, func(targetable machinery.Targetable, _ int) []machinery.Policy {
-		policies := lo.FilterMap(targetable.Policies(), func(p machinery.Policy, _ int) (kuadrantapis.MergeablePolicy, bool) {
-			_, ok := p.(T)
-			mergeablePolicy, mergeable := p.(kuadrantapis.MergeablePolicy)
-			return mergeablePolicy, mergeable && ok
-		})
-		sort.Sort(kuadrantapis.PolicyByCreationTimestamp(policies))
-		return lo.Map(policies, func(p kuadrantapis.MergeablePolicy, _ int) machinery.Policy { return p })
+	policies := kuadrantv1.PoliciesInPath(path, func(p machinery.Policy) bool {
+		_, ok := p.(T)
+		return ok
 	})
 
 	pathLocators := lo.Map(path, machinery.MapTargetableToLocatorFunc)
