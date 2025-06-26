@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"reflect"
-	"sort"
 	"sync"
 
 	"github.com/samber/lo"
@@ -12,7 +11,6 @@ import (
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
 
-	kuadrantapis "github.com/kuadrant/policy-machinery/examples/kuadrant/apis"
 	kuadrantv1 "github.com/kuadrant/policy-machinery/examples/kuadrant/apis/v1"
 )
 
@@ -77,14 +75,9 @@ func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []mach
 	logger := controller.LoggerFromContext(ctx).WithName("effective policy")
 
 	// gather all policies in the path sorted from the least specific to the most specific
-	policies := lo.FlatMap(path, func(targetable machinery.Targetable, _ int) []machinery.Policy {
-		policies := lo.FilterMap(targetable.Policies(), func(p machinery.Policy, _ int) (kuadrantapis.MergeablePolicy, bool) {
-			_, ok := p.(T)
-			mergeablePolicy, mergeable := p.(kuadrantapis.MergeablePolicy)
-			return mergeablePolicy, mergeable && ok
-		})
-		sort.Sort(kuadrantapis.PolicyByCreationTimestamp(policies))
-		return lo.Map(policies, func(p kuadrantapis.MergeablePolicy, _ int) machinery.Policy { return p })
+	policies := kuadrantv1.PoliciesInPath(path, func(p machinery.Policy) bool {
+		_, ok := p.(T)
+		return ok
 	})
 
 	pathLocators := lo.Map(path, machinery.MapTargetableToLocatorFunc)
