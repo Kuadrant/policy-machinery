@@ -110,7 +110,7 @@ EOF
 kubectl create secret generic aws-credentials \
   --type=kuadrant.io/aws \
   --from-literal=AWS_ACCESS_KEY_ID='AN_AWS_ACCESS_KEY_ID' \
-  --from-literal=AWS_SECRET_ACCESS_KEY='AN AN_AWS_SECRET_ACCESS_KEY'
+  --from-literal=AWS_SECRET_ACCESS_KEY='AN_AWS_SECRET_ACCESS_KEY'
 ```
 
 ```sh
