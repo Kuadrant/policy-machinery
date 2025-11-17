@@ -7,6 +7,9 @@ import (
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -32,6 +35,9 @@ type EnvoyGatewayProvider struct {
 func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("envoy gateway").WithName("securitypolicy")
 	ctx = controller.LoggerIntoContext(ctx, logger)
+	tracer := controller.TracerFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "envoyGatewayProvider.ReconcileSecurityPolicies")
+	defer span.End()
 
 	var authPaths [][]machinery.Targetable
 	if untypedAuthPaths, ok := state.Load(authPathsKey); ok {
@@ -54,19 +60,36 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ 
 			})
 		})
 		if len(paths) > 0 {
+			span.AddEvent("creating security policy", trace.WithAttributes(
+				attribute.String("gateway.name", gateway.GetName()),
+				attribute.String("gateway.namespace", gateway.GetNamespace())),
+			)
 			p.createSecurityPolicy(ctx, topology, gateway)
 			continue
 		}
+		span.AddEvent("deleting security policy", trace.WithAttributes(
+			attribute.String("gateway.name", gateway.GetName()),
+			attribute.String("gateway.namespace", gateway.GetNamespace())),
+		)
 		p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), gateway)
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, _ *sync.Map) error {
+	tracer := controller.TracerFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "envoyGatewayProvider.DeleteSecurityPolicy")
+	defer span.End()
 	for _, resourceEvent := range resourceEvents {
 		gateway := resourceEvent.OldObject
+		span.AddEvent("deleting security policy", trace.WithAttributes(
+			attribute.String("gateway.name", gateway.GetName()),
+			attribute.String("gateway.namespace", gateway.GetNamespace())),
+		)
 		p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 

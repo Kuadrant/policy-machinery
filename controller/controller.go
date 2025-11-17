@@ -10,6 +10,10 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/samber/lo"
 	"github.com/telepresenceio/watchable"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
@@ -28,6 +32,7 @@ const resourceStoreId = "resources"
 type ControllerOptions struct {
 	name               string
 	logger             logr.Logger
+	tracer             trace.Tracer
 	client             *dynamic.DynamicClient
 	manager            ctrlruntime.Manager
 	runnables          map[string]RunnableBuilder
@@ -55,6 +60,12 @@ func WithClient(client *dynamic.DynamicClient) ControllerOption {
 func WithLogger(logger logr.Logger) ControllerOption {
 	return func(o *ControllerOptions) {
 		o.logger = logger
+	}
+}
+
+func WithTracer(tracer trace.Tracer) ControllerOption {
+	return func(o *ControllerOptions) {
+		o.tracer = tracer
 	}
 }
 
@@ -113,6 +124,7 @@ func NewController(f ...ControllerOption) *Controller {
 	opts := &ControllerOptions{
 		name:      "controller",
 		logger:    logr.Discard(),
+		tracer:    noop.NewTracerProvider().Tracer(""),
 		runnables: map[string]RunnableBuilder{},
 		reconcile: func(context.Context, []ResourceEvent, *machinery.Topology, error, *sync.Map) error {
 			return nil
@@ -125,6 +137,7 @@ func NewController(f ...ControllerOption) *Controller {
 	controller := &Controller{
 		name:      opts.name,
 		logger:    opts.logger,
+		tracer:    opts.tracer,
 		client:    opts.client,
 		manager:   opts.manager,
 		cache:     &CacheStore{},
@@ -147,6 +160,7 @@ type Controller struct {
 	sync.Mutex
 	name       string
 	logger     logr.Logger
+	tracer     trace.Tracer
 	client     *dynamic.DynamicClient
 	manager    ctrlruntime.Manager
 	cache      *CacheStore
@@ -261,12 +275,39 @@ func (c *Controller) propagate(resourceEvents []ResourceEvent) {
 	c.logger.V(1).Info("propagating new state of the world events", "events", len(resourceEvents))
 	defer c.logger.V(1).Info("finished propagating new state of the world events")
 
+	// Create context with logger and tracer
+	ctx := context.Background()
+	ctx = LoggerIntoContext(ctx, c.logger)
+	ctx = TracerIntoContext(ctx, c.tracer)
+
+	// Start span for the entire propagation
+	ctx, span := c.tracer.Start(ctx, "controller.reconcile")
+	defer span.End()
+
+	span.SetAttributes(attribute.Int("events.count", len(resourceEvents)))
+
+	// Trace topology build
+	_, buildSpan := c.tracer.Start(ctx, "topology.build")
 	topology, err := c.topology.Build(c.cache.List(resourceStoreId))
 	if err != nil {
 		c.logger.Error(err, "error building topology")
+		buildSpan.RecordError(err)
+		buildSpan.SetStatus(codes.Error, err.Error())
+	} else {
+		// Add topology metrics as span attributes
+		buildSpan.SetAttributes(
+			attribute.Int("topology.policies", len(topology.Policies().Items())),
+			attribute.Int("topology.targetables", len(topology.Targetables().Items())),
+			attribute.Int("topology.objects", len(topology.Objects().Items())),
+		)
 	}
-	if err := c.reconcile(LoggerIntoContext(context.TODO(), c.logger), resourceEvents, topology, err, &sync.Map{}); err != nil {
-		c.logger.Error(err, "reconciliation error")
+	buildSpan.End()
+
+	// Reconcile with traced context
+	if reconcileErr := c.reconcile(ctx, resourceEvents, topology, err, &sync.Map{}); reconcileErr != nil {
+		c.logger.Error(reconcileErr, "reconciliation error")
+		span.RecordError(reconcileErr)
+		span.SetStatus(codes.Error, reconcileErr.Error())
 	}
 }
 

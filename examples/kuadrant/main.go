@@ -10,6 +10,11 @@ import (
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/google/go-cmp/cmp"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	istiov1 "istio.io/client-go/pkg/apis/security/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -168,6 +173,34 @@ func main() {
 		controller.WithReconcile(buildReconciler(gatewayProviders, client)),
 	}
 
+	// create tracer (optional, based on ENABLE_TRACING env var)
+	// This demonstrates how to use OpenTelemetry tracing with policy-machinery.
+	if os.Getenv("ENABLE_TRACING") == "true" {
+		// Configure OTLP HTTP exporter options
+		opts := []otlptracehttp.Option{
+			otlptracehttp.WithEndpoint("localhost:4318"),
+			otlptracehttp.WithInsecure(),
+		}
+
+		// Create OTLP HTTP exporter for traces
+		exporter, err := otlptracehttp.New(context.Background(), opts...)
+		if err != nil {
+			logger.Error(err, "error creating trace exporter")
+			os.Exit(1)
+		}
+		tp := trace.NewTracerProvider(
+			trace.WithBatcher(exporter),
+			trace.WithResource(resource.NewSchemaless(
+				semconv.ServiceName("kuadrant-example"),
+				semconv.ServiceVersion("dev")),
+			),
+		)
+		otel.SetTracerProvider(tp)
+		tracer := tp.Tracer("kuadrant-policy-machinery-example")
+		logger.Info("tracing enabled - spans will be exported to localhost:4318")
+		controllerOpts = append(controllerOpts, controller.WithTracer(tracer))
+	}
+
 	// gateway provider specific controller options
 	controllerOpts = append(controllerOpts, controllerOptionsFor(gatewayProviders)...)
 
@@ -309,8 +342,9 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 			return nil
 		},
 		Tasks: []controller.ReconcileFunc{
-			(&reconcilers.TopologyFileReconciler{}).Reconcile,
-			effectivePolicyReconciler.Run,
+			// Example: Wrap individual reconcilers with tracing
+			controller.TraceReconcileFunc("topology-file-writer", (&reconcilers.TopologyFileReconciler{}).Reconcile),
+			controller.TraceReconcileFunc("effective-policies", effectivePolicyReconciler.Run),
 		},
 	}
 

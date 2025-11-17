@@ -7,6 +7,9 @@ import (
 	"sync"
 
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	istioapiv1 "istio.io/api/security/v1"
 	istiov1beta1 "istio.io/api/type/v1beta1"
 	istiov1 "istio.io/client-go/pkg/apis/security/v1"
@@ -35,6 +38,9 @@ type IstioGatewayProvider struct {
 func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
 	logger := controller.LoggerFromContext(ctx).WithName("istio").WithName("authorizationpolicy")
 	ctx = controller.LoggerIntoContext(ctx, logger)
+	tracer := controller.TracerFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "istioGatewayProvider.ReconcileAuthorizationPolicies")
+	defer span.End()
 
 	var authPaths [][]machinery.Targetable
 	if untypedAuthPaths, ok := state.Load(authPathsKey); ok {
@@ -57,19 +63,37 @@ func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Contex
 			})
 		})
 		if len(paths) > 0 {
+			span.AddEvent("creating authorization policy", trace.WithAttributes(
+				attribute.String("gateway.name", gateway.GetName()),
+				attribute.String("gateway.namespace", gateway.GetNamespace())),
+			)
 			p.createAuthorizationPolicy(ctx, topology, gateway, paths)
 			continue
 		}
+		span.AddEvent("deleting authorization policy", trace.WithAttributes(
+			attribute.String("gateway.name", gateway.GetName()),
+			attribute.String("gateway.namespace", gateway.GetNamespace())),
+		)
 		p.deleteAuthorizationPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), gateway)
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 func (p *IstioGatewayProvider) DeleteAuthorizationPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, _ *sync.Map) error {
+	tracer := controller.TracerFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "istioGatewayProvider.DeleteAuthorizationPolicy")
+	defer span.End()
+
 	for _, resourceEvent := range resourceEvents {
 		gateway := resourceEvent.OldObject
+		span.AddEvent("deleting authorization policy", trace.WithAttributes(
+			attribute.String("gateway.name", gateway.GetName()),
+			attribute.String("gateway.namespace", gateway.GetNamespace())),
+		)
 		p.deleteAuthorizationPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
