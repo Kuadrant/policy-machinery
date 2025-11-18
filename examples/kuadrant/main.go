@@ -321,7 +321,7 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 
 	reconciler := &controller.Workflow{
 		Precondition: func(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, _ *sync.Map) error {
-			logger := controller.LoggerFromContext(ctx).WithName("event logger")
+			logger := controller.TraceLoggerFromContext(ctx).WithName("event logger")
 			for _, event := range resourceEvents {
 				// log the event
 				obj := event.OldObject

@@ -33,10 +33,12 @@ func TracerIntoContext(ctx context.Context, tracer trace.Tracer) context.Context
 // It extracts the tracer from the context, starts a span with the given name,
 // and automatically records errors and carryover error context.
 //
-// Example usage:
+// Note: This function does NOT automatically inject trace IDs into the logger.
+// If you want trace-log correlation, use TraceLoggerFromContext in your reconciler:
 //
 //	reconciler := controller.TraceReconcileFunc("my-reconciler", func(ctx context.Context, events []ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
-//	    // Your reconciliation logic here
+//	    logger := controller.TraceLoggerFromContext(ctx).WithName("my-reconciler")
+//	    logger.Info("processing") // Will have trace_id and span_id
 //	    return nil
 //	})
 func TraceReconcileFunc(spanName string, fn ReconcileFunc) ReconcileFunc {
