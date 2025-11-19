@@ -72,7 +72,7 @@ func ReconcileEffectivePolicies(ctx context.Context, resourceEvents []controller
 }
 
 func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []machinery.Targetable) *T {
-	logger := controller.LoggerFromContext(ctx).WithName("effective policy")
+	logger := controller.TraceLoggerFromContext(ctx).WithName("effective policy")
 
 	// gather all policies in the path sorted from the least specific to the most specific
 	policies := kuadrantv1.PoliciesInPath(path, func(p machinery.Policy) bool {
@@ -83,7 +83,10 @@ func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []mach
 	pathLocators := lo.Map(path, machinery.MapTargetableToLocatorFunc)
 
 	if len(policies) == 0 {
-		logger.Info("no policies for path", "kind", reflect.TypeOf(new(T)), "path", pathLocators)
+		logger.V(1).Info("no policies for path",
+			"policy.kind", reflect.TypeOf(new(T)).Elem().Name(),
+			"path", pathLocators,
+		)
 		return nil
 	}
 
@@ -93,7 +96,12 @@ func effectivePolicyForPath[T machinery.Policy](ctx context.Context, path []mach
 	}, policies[len(policies)-1])
 
 	jsonEffectivePolicy, _ := json.Marshal(effectivePolicy)
-	logger.Info("effective policy", "kind", reflect.TypeOf(new(T)), "path", pathLocators, "effectivePolicy", string(jsonEffectivePolicy))
+	logger.Info("effective policy computed",
+		"policy.kind", reflect.TypeOf(new(T)).Elem().Name(),
+		"path", pathLocators,
+		"policies.count", len(policies),
+		"effectivePolicy", string(jsonEffectivePolicy),
+	)
 
 	concreteEffectivePolicy, _ := effectivePolicy.(T)
 	return &concreteEffectivePolicy

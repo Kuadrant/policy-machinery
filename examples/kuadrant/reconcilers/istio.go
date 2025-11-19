@@ -7,6 +7,9 @@ import (
 	"sync"
 
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	istioapiv1 "istio.io/api/security/v1"
 	istiov1beta1 "istio.io/api/type/v1beta1"
 	istiov1 "istio.io/client-go/pkg/apis/security/v1"
@@ -33,7 +36,11 @@ type IstioGatewayProvider struct {
 }
 
 func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("istio").WithName("authorizationpolicy")
+	tracer := controller.TracerFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "istioGatewayProvider.ReconcileAuthorizationPolicies")
+	defer span.End()
+
+	logger := controller.TraceLoggerFromContext(ctx).WithName("istio").WithName("authorizationpolicy")
 	ctx = controller.LoggerIntoContext(ctx, logger)
 
 	var authPaths [][]machinery.Targetable
@@ -48,7 +55,13 @@ func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Contex
 	for _, gateway := range gateways {
 		paths := lo.Filter(authPaths, func(path []machinery.Targetable, _ int) bool {
 			if len(path) != 4 { // should never happen
-				logger.Error(fmt.Errorf("unexpected topology path length to build Istio AuthorizationPolicy"), "path", lo.Map(path, machinery.MapTargetableToLocatorFunc))
+				err := fmt.Errorf("unexpected topology path length to build Istio AuthorizationPolicy")
+				span.RecordError(err)
+				logger.Error(err, "invalid topology path",
+					"gateway.name", gateway.GetName(),
+					"gateway.namespace", gateway.GetNamespace(),
+					"path", lo.Map(path, machinery.MapTargetableToLocatorFunc),
+				)
 				return false
 			}
 			return path[0].GetLocator() == gateway.GetLocator() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
@@ -57,19 +70,54 @@ func (p *IstioGatewayProvider) ReconcileAuthorizationPolicies(ctx context.Contex
 			})
 		})
 		if len(paths) > 0 {
+			logger.V(1).Info("reconciling authorization policy",
+				"gateway.name", gateway.GetName(),
+				"gateway.namespace", gateway.GetNamespace(),
+				"paths.count", len(paths),
+			)
+			span.AddEvent("creating authorization policy", trace.WithAttributes(
+				attribute.String("gateway.name", gateway.GetName()),
+				attribute.String("gateway.namespace", gateway.GetNamespace()),
+				attribute.Int("paths.count", len(paths))),
+			)
 			p.createAuthorizationPolicy(ctx, topology, gateway, paths)
 			continue
 		}
+		logger.V(1).Info("deleting authorization policy",
+			"gateway.name", gateway.GetName(),
+			"gateway.namespace", gateway.GetNamespace(),
+		)
+		span.AddEvent("deleting authorization policy", trace.WithAttributes(
+			attribute.String("gateway.name", gateway.GetName()),
+			attribute.String("gateway.namespace", gateway.GetNamespace())),
+		)
 		p.deleteAuthorizationPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), gateway)
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 func (p *IstioGatewayProvider) DeleteAuthorizationPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, _ *sync.Map) error {
+	tracer := controller.TracerFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "istioGatewayProvider.DeleteAuthorizationPolicy")
+	defer span.End()
+
+	logger := controller.TraceLoggerFromContext(ctx).WithName("istio").WithName("authorizationpolicy")
+	ctx = controller.LoggerIntoContext(ctx, logger)
+
 	for _, resourceEvent := range resourceEvents {
 		gateway := resourceEvent.OldObject
+		logger.V(1).Info("processing gateway deletion event",
+			"gateway.name", gateway.GetName(),
+			"gateway.namespace", gateway.GetNamespace(),
+		)
+		span.AddEvent("deleting authorization policy", trace.WithAttributes(
+			attribute.String("gateway.name", gateway.GetName()),
+			attribute.String("gateway.namespace", gateway.GetNamespace())),
+		)
 		p.deleteAuthorizationPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -123,7 +171,18 @@ func (p *IstioGatewayProvider) createAuthorizationPolicy(ctx context.Context, to
 		o, _ := controller.Destruct(desiredAuthorizationPolicy)
 		_, err := resource.Create(ctx, o, metav1.CreateOptions{})
 		if err != nil {
-			logger.Error(err, "failed to create AuthorizationPolicy")
+			span := trace.SpanFromContext(ctx)
+			span.RecordError(err)
+			logger.Error(err, "failed to create AuthorizationPolicy",
+				"gateway.name", gateway.GetName(),
+				"gateway.namespace", gateway.GetNamespace(),
+			)
+		} else {
+			logger.Info("created AuthorizationPolicy",
+				"gateway.name", gateway.GetName(),
+				"gateway.namespace", gateway.GetNamespace(),
+				"rules.count", len(desiredAuthorizationPolicy.Spec.Rules),
+			)
 		}
 		return
 	}
@@ -144,11 +203,24 @@ func (p *IstioGatewayProvider) createAuthorizationPolicy(ctx context.Context, to
 	o, _ := controller.Destruct(authorizationPolicy)
 	_, err := resource.Update(ctx, o, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Error(err, "failed to update AuthorizationPolicy")
+		span := trace.SpanFromContext(ctx)
+		span.RecordError(err)
+		logger.Error(err, "failed to update AuthorizationPolicy",
+			"gateway.name", gateway.GetName(),
+			"gateway.namespace", gateway.GetNamespace(),
+		)
+	} else {
+		logger.Info("updated AuthorizationPolicy",
+			"gateway.name", gateway.GetName(),
+			"gateway.namespace", gateway.GetNamespace(),
+			"rules.count", len(desiredAuthorizationPolicy.Spec.Rules),
+		)
 	}
 }
 
 func (p *IstioGatewayProvider) deleteAuthorizationPolicy(ctx context.Context, topology *machinery.Topology, namespace, name string, parent machinery.Targetable) {
+	logger := controller.LoggerFromContext(ctx)
+
 	var objs []machinery.Object
 	if parent != nil {
 		objs = topology.Objects().Children(parent)
@@ -159,12 +231,26 @@ func (p *IstioGatewayProvider) deleteAuthorizationPolicy(ctx context.Context, to
 		return o.GroupVersionKind().GroupKind() == IstioAuthorizationPolicyKind && o.GetNamespace() == namespace && o.GetName() == name
 	})
 	if !found {
+		logger.V(1).Info("AuthorizationPolicy not found, skipping deletion",
+			"name", name,
+			"namespace", namespace,
+		)
 		return
 	}
 	resource := p.Client.Resource(IstioAuthorizationPoliciesResource).Namespace(namespace)
 	err := resource.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		controller.LoggerFromContext(ctx).Error(err, "failed to delete AuthorizationPolicy")
+		span := trace.SpanFromContext(ctx)
+		span.RecordError(err)
+		logger.Error(err, "failed to delete AuthorizationPolicy",
+			"name", name,
+			"namespace", namespace,
+		)
+	} else {
+		logger.Info("deleted AuthorizationPolicy",
+			"name", name,
+			"namespace", namespace,
+		)
 	}
 }
 

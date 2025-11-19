@@ -7,6 +7,9 @@ import (
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/samber/lo"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -30,7 +33,11 @@ type EnvoyGatewayProvider struct {
 }
 
 func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ []controller.ResourceEvent, topology *machinery.Topology, err error, state *sync.Map) error {
-	logger := controller.LoggerFromContext(ctx).WithName("envoy gateway").WithName("securitypolicy")
+	tracer := controller.TracerFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "envoyGatewayProvider.ReconcileSecurityPolicies")
+	defer span.End()
+
+	logger := controller.TraceLoggerFromContext(ctx).WithName("envoy gateway").WithName("securitypolicy")
 	ctx = controller.LoggerIntoContext(ctx, logger)
 
 	var authPaths [][]machinery.Targetable
@@ -45,7 +52,13 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ 
 	for _, gateway := range gateways {
 		paths := lo.Filter(authPaths, func(path []machinery.Targetable, _ int) bool {
 			if len(path) != 4 { // should never happen
-				logger.Error(fmt.Errorf("unexpected topology path length to build Envoy SecurityPolicy"), "path", lo.Map(path, machinery.MapTargetableToLocatorFunc))
+				err := fmt.Errorf("unexpected topology path length to build Envoy SecurityPolicy")
+				span.RecordError(err)
+				logger.Error(err, "invalid topology path",
+					"gateway.name", gateway.GetName(),
+					"gateway.namespace", gateway.GetNamespace(),
+					"path", lo.Map(path, machinery.MapTargetableToLocatorFunc),
+				)
 				return false
 			}
 			return path[0].GetLocator() == gateway.GetLocator() && lo.ContainsBy(targetables.Parents(path[0]), func(parent machinery.Targetable) bool {
@@ -54,19 +67,54 @@ func (p *EnvoyGatewayProvider) ReconcileSecurityPolicies(ctx context.Context, _ 
 			})
 		})
 		if len(paths) > 0 {
+			logger.V(1).Info("reconciling security policy",
+				"gateway.name", gateway.GetName(),
+				"gateway.namespace", gateway.GetNamespace(),
+				"paths.count", len(paths),
+			)
+			span.AddEvent("creating security policy", trace.WithAttributes(
+				attribute.String("gateway.name", gateway.GetName()),
+				attribute.String("gateway.namespace", gateway.GetNamespace()),
+				attribute.Int("paths.count", len(paths))),
+			)
 			p.createSecurityPolicy(ctx, topology, gateway)
 			continue
 		}
+		logger.V(1).Info("deleting security policy",
+			"gateway.name", gateway.GetName(),
+			"gateway.namespace", gateway.GetNamespace(),
+		)
+		span.AddEvent("deleting security policy", trace.WithAttributes(
+			attribute.String("gateway.name", gateway.GetName()),
+			attribute.String("gateway.namespace", gateway.GetNamespace())),
+		)
 		p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), gateway)
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
 func (p *EnvoyGatewayProvider) DeleteSecurityPolicy(ctx context.Context, resourceEvents []controller.ResourceEvent, topology *machinery.Topology, err error, _ *sync.Map) error {
+	tracer := controller.TracerFromContext(ctx)
+	ctx, span := tracer.Start(ctx, "envoyGatewayProvider.DeleteSecurityPolicy")
+	defer span.End()
+
+	logger := controller.TraceLoggerFromContext(ctx).WithName("envoy gateway").WithName("securitypolicy")
+	ctx = controller.LoggerIntoContext(ctx, logger)
+
 	for _, resourceEvent := range resourceEvents {
 		gateway := resourceEvent.OldObject
+		logger.V(1).Info("processing gateway deletion event",
+			"gateway.name", gateway.GetName(),
+			"gateway.namespace", gateway.GetNamespace(),
+		)
+		span.AddEvent("deleting security policy", trace.WithAttributes(
+			attribute.String("gateway.name", gateway.GetName()),
+			attribute.String("gateway.namespace", gateway.GetNamespace())),
+		)
 		p.deleteSecurityPolicy(ctx, topology, gateway.GetNamespace(), gateway.GetName(), nil)
 	}
+	span.SetStatus(codes.Ok, "")
 	return nil
 }
 
@@ -114,7 +162,17 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 		o, _ := controller.Destruct(desiredSecurityPolicy)
 		_, err := resource.Create(ctx, o, metav1.CreateOptions{})
 		if err != nil {
-			logger.Error(err, "failed to create SecurityPolicy")
+			span := trace.SpanFromContext(ctx)
+			span.RecordError(err)
+			logger.Error(err, "failed to create SecurityPolicy",
+				"gateway.name", gateway.GetName(),
+				"gateway.namespace", gateway.GetNamespace(),
+			)
+		} else {
+			logger.Info("created SecurityPolicy",
+				"gateway.name", gateway.GetName(),
+				"gateway.namespace", gateway.GetNamespace(),
+			)
 		}
 		return
 	}
@@ -136,11 +194,23 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 	o, _ := controller.Destruct(securityPolicy)
 	_, err := resource.Update(ctx, o, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Error(err, "failed to update SecurityPolicy")
+		span := trace.SpanFromContext(ctx)
+		span.RecordError(err)
+		logger.Error(err, "failed to update SecurityPolicy",
+			"gateway.name", gateway.GetName(),
+			"gateway.namespace", gateway.GetNamespace(),
+		)
+	} else {
+		logger.Info("updated SecurityPolicy",
+			"gateway.name", gateway.GetName(),
+			"gateway.namespace", gateway.GetNamespace(),
+		)
 	}
 }
 
 func (p *EnvoyGatewayProvider) deleteSecurityPolicy(ctx context.Context, topology *machinery.Topology, namespace, name string, parent machinery.Targetable) {
+	logger := controller.LoggerFromContext(ctx)
+
 	var objs []machinery.Object
 	if parent != nil {
 		objs = topology.Objects().Children(parent)
@@ -151,12 +221,26 @@ func (p *EnvoyGatewayProvider) deleteSecurityPolicy(ctx context.Context, topolog
 		return o.GroupVersionKind().GroupKind() == EnvoyGatewaySecurityPolicyKind && o.GetNamespace() == namespace && o.GetName() == name
 	})
 	if !found {
+		logger.V(1).Info("SecurityPolicy not found, skipping deletion",
+			"name", name,
+			"namespace", namespace,
+		)
 		return
 	}
 	resource := p.Client.Resource(EnvoyGatewaySecurityPoliciesResource).Namespace(namespace)
 	err := resource.Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		controller.LoggerFromContext(ctx).Error(err, "failed to delete SecurityPolicy")
+		span := trace.SpanFromContext(ctx)
+		span.RecordError(err)
+		logger.Error(err, "failed to delete SecurityPolicy",
+			"name", name,
+			"namespace", namespace,
+		)
+	} else {
+		logger.Info("deleted SecurityPolicy",
+			"name", name,
+			"namespace", namespace,
+		)
 	}
 }
 
