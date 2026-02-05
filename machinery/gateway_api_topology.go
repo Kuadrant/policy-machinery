@@ -385,10 +385,15 @@ func ListenersFromGatewayFunc(gateway *Gateway, _ int) []*Listener {
 // HTTPRouteRulesFromHTTPRouteFunc returns a list of targetable HTTPRouteRules from a targetable HTTPRoute.
 func HTTPRouteRulesFromHTTPRouteFunc(httpRoute *HTTPRoute, _ int) []*HTTPRouteRule {
 	return lo.Map(httpRoute.Spec.Rules, func(rule gwapiv1.HTTPRouteRule, i int) *HTTPRouteRule {
+		// Use the experimental name field if present (Gateway API v1.2+), otherwise generate a name
+		name := gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1))
+		if rule.Name != nil {
+			name = *rule.Name
+		}
 		return &HTTPRouteRule{
 			HTTPRouteRule: &rule,
 			HTTPRoute:     httpRoute,
-			Name:          gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
+			Name:          name,
 		}
 	})
 }
@@ -396,10 +401,15 @@ func HTTPRouteRulesFromHTTPRouteFunc(httpRoute *HTTPRoute, _ int) []*HTTPRouteRu
 // GRPCRouteRulesFromGRPCRouteRule returns a list of targetable GRPCRouteRules from a targetable GRPCRoute.
 func GRPCRouteRulesFromGRPCRouteRule(grpcRoute *GRPCRoute, _ int) []*GRPCRouteRule {
 	return lo.Map(grpcRoute.Spec.Rules, func(rule gwapiv1.GRPCRouteRule, i int) *GRPCRouteRule {
+		// Use the experimental name field if present (Gateway API v1.2+), otherwise generate a name
+		name := gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1))
+		if rule.Name != nil {
+			name = *rule.Name
+		}
 		return &GRPCRouteRule{
 			GRPCRouteRule: &rule,
 			GRPCRoute:     grpcRoute,
-			Name:          gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
+			Name:          name,
 		}
 	})
 }
@@ -407,10 +417,15 @@ func GRPCRouteRulesFromGRPCRouteRule(grpcRoute *GRPCRoute, _ int) []*GRPCRouteRu
 // TCPRouteRulesFromTCPRouteFunc returns a list of targetable TCPRouteRules from a targetable TCPRoute.
 func TCPRouteRulesFromTCPRouteFunc(tcpRoute *TCPRoute, _ int) []*TCPRouteRule {
 	return lo.Map(tcpRoute.Spec.Rules, func(rule gwapiv1alpha2.TCPRouteRule, i int) *TCPRouteRule {
+		// Use the name field if present (Gateway API v1.2+), otherwise generate a name
+		name := gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1))
+		if rule.Name != nil {
+			name = *rule.Name
+		}
 		return &TCPRouteRule{
 			TCPRouteRule: &rule,
 			TCPRoute:     tcpRoute,
-			Name:         gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
+			Name:         name,
 		}
 	})
 }
@@ -418,10 +433,15 @@ func TCPRouteRulesFromTCPRouteFunc(tcpRoute *TCPRoute, _ int) []*TCPRouteRule {
 // TLSRouteRulesFromTLSRouteFunc returns a list of targetable TCPRouteRules from a targetable TLSRoute.
 func TLSRouteRulesFromTLSRouteFunc(tlsRoute *TLSRoute, _ int) []*TLSRouteRule {
 	return lo.Map(tlsRoute.Spec.Rules, func(rule gwapiv1alpha2.TLSRouteRule, i int) *TLSRouteRule {
+		// Use the name field if present (Gateway API v1.2+), otherwise generate a name
+		name := gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1))
+		if rule.Name != nil {
+			name = *rule.Name
+		}
 		return &TLSRouteRule{
 			TLSRouteRule: &rule,
 			TLSRoute:     tlsRoute,
-			Name:         gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
+			Name:         name,
 		}
 	})
 }
@@ -429,10 +449,15 @@ func TLSRouteRulesFromTLSRouteFunc(tlsRoute *TLSRoute, _ int) []*TLSRouteRule {
 // UDPRouteRulesFromUDPRouteFunc returns a list of targetable UDPRouteRules from a targetable UDPRoute.
 func UDPRouteRulesFromUDPRouteFunc(udpRoute *UDPRoute, _ int) []*UDPRouteRule {
 	return lo.Map(udpRoute.Spec.Rules, func(rule gwapiv1alpha2.UDPRouteRule, i int) *UDPRouteRule {
+		// Use the name field if present (Gateway API v1.2+), otherwise generate a name
+		name := gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1))
+		if rule.Name != nil {
+			name = *rule.Name
+		}
 		return &UDPRouteRule{
 			UDPRouteRule: &rule,
 			UDPRoute:     udpRoute,
-			Name:         gwapiv1.SectionName(fmt.Sprintf("rule-%d", i+1)),
+			Name:         name,
 		}
 	})
 }
