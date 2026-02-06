@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -16,9 +18,6 @@ import (
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	"github.com/kuadrant/policy-machinery/controller"
-	"github.com/kuadrant/policy-machinery/machinery"
 )
 
 const EnvoyGatewayProviderName = "envoygateway"
@@ -142,10 +141,16 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 			},
 			ExtAuth: &egv1alpha1.ExtAuth{
 				GRPC: &egv1alpha1.GRPCExtAuthService{
-					BackendRef: &gwapiv1.BackendObjectReference{
-						Name:      gwapiv1.ObjectName("authorino-authorino-authorization"),
-						Namespace: ptr.To(gwapiv1.Namespace("kuadrant-system")),
-						Port:      ptr.To(gwapiv1.PortNumber(50051)),
+					BackendCluster: egv1alpha1.BackendCluster{
+						BackendRefs: []egv1alpha1.BackendRef{
+							{
+								BackendObjectReference: gwapiv1.BackendObjectReference{
+									Name:      gwapiv1.ObjectName("authorino-authorino-authorization"),
+									Namespace: ptr.To(gwapiv1.Namespace("kuadrant-system")),
+									Port:      ptr.To(gwapiv1.PortNumber(50051)),
+								},
+							},
+						},
 					},
 				},
 			},
