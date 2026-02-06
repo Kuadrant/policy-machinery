@@ -6,8 +6,6 @@ import (
 	"sync"
 
 	egv1alpha1 "github.com/envoyproxy/gateway/api/v1alpha1"
-	"github.com/kuadrant/policy-machinery/controller"
-	"github.com/kuadrant/policy-machinery/machinery"
 	"github.com/samber/lo"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -18,6 +16,9 @@ import (
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	"github.com/kuadrant/policy-machinery/controller"
+	"github.com/kuadrant/policy-machinery/machinery"
 )
 
 const EnvoyGatewayProviderName = "envoygateway"

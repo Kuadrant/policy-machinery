@@ -78,7 +78,7 @@ manifests: controller-gen ## Generate CustomResourceDefinition objects.
 
 .PHONY: install
 install: manifests ## Install CRDs into a cluster.
-	kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/standard-install.yaml
+	kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/experimental-install.yaml
 	kubectl apply -f config/crds
 
 .PHONY: run

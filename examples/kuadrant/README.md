@@ -163,7 +163,7 @@ spec:
 EOF
 ```
 
-6. Add another HTTPRouteRule:
+6. Add another HTTPRouteRule and add section name to the 1st HTTPRouteRule:
 
 ```sh
 kubectl apply -f -<<EOF
@@ -178,7 +178,7 @@ spec:
   - example.com
   rules:
   - name: post # rule-1 if undefined
-    matches: 
+    matches:
     - method: POST
     backendRefs:
     - name: my-app
