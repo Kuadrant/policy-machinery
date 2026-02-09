@@ -141,7 +141,7 @@ type HTTPRouteRule struct {
 	*gwapiv1.HTTPRouteRule
 
 	HTTPRoute        *HTTPRoute
-	Name             gwapiv1.SectionName // TODO(guicassolato): Use the `name` field of the HTTPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	Name             gwapiv1.SectionName
 	attachedPolicies []Policy
 }
 
@@ -200,7 +200,7 @@ type GRPCRouteRule struct {
 	*gwapiv1.GRPCRouteRule
 
 	GRPCRoute        *GRPCRoute
-	Name             gwapiv1.SectionName // TODO: Use the `name` field of the GRPCRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	Name             gwapiv1.SectionName
 	attachedPolicies []Policy
 }
 
@@ -260,7 +260,7 @@ type TCPRouteRule struct {
 	*gwapiv1alpha2.TCPRouteRule
 
 	TCPRoute         *TCPRoute
-	Name             gwapiv1.SectionName // TODO: Use the `name` field of the TCPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	Name             gwapiv1.SectionName
 	attachedPolicies []Policy
 }
 
@@ -320,7 +320,7 @@ type TLSRouteRule struct {
 	*gwapiv1alpha2.TLSRouteRule
 
 	TLSRoute         *TLSRoute
-	Name             gwapiv1.SectionName // TODO: Use the `name` field of the TLSRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	Name             gwapiv1.SectionName
 	attachedPolicies []Policy
 }
 
@@ -380,7 +380,7 @@ type UDPRouteRule struct {
 	*gwapiv1alpha2.UDPRouteRule
 
 	UDPRoute         *UDPRoute
-	Name             gwapiv1.SectionName // TODO: Use the `name` field of the UDPRouteRule once it's implemented - https://github.com/kubernetes-sigs/gateway-api/pull/2985
+	Name             gwapiv1.SectionName
 	attachedPolicies []Policy
 }
 

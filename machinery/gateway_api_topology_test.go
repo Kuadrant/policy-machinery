@@ -229,6 +229,85 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 			},
 		},
 		{
+			name: "routes with experimental name field",
+			targetables: GatewayAPIResources{
+				GatewayClasses: []*gwapiv1.GatewayClass{BuildGatewayClass()},
+				Gateways:       []*gwapiv1.Gateway{BuildGateway()},
+				HTTPRoutes: []*gwapiv1.HTTPRoute{
+					BuildHTTPRoute(func(route *gwapiv1.HTTPRoute) {
+						route.Spec.Rules = []gwapiv1.HTTPRouteRule{
+							{
+								Name:        ptr.To(gwapiv1.SectionName("auth-required")),
+								BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef()},
+							},
+							{
+								Name:        ptr.To(gwapiv1.SectionName("public-access")),
+								BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef()},
+							},
+						}
+					}),
+				},
+				GRPCRoutes: []*gwapiv1.GRPCRoute{
+					BuildGRPCRoute(func(route *gwapiv1.GRPCRoute) {
+						route.Spec.Rules = []gwapiv1.GRPCRouteRule{
+							{
+								Name:        ptr.To(gwapiv1.SectionName("streaming")),
+								BackendRefs: []gwapiv1.GRPCBackendRef{BuildGRPCBackendRef()},
+							},
+						}
+					}),
+				},
+				TCPRoutes: []*gwapiv1alpha2.TCPRoute{
+					BuildTCPRoute(func(route *gwapiv1alpha2.TCPRoute) {
+						route.Spec.Rules = []gwapiv1alpha2.TCPRouteRule{
+							{
+								Name:        ptr.To(gwapiv1alpha2.SectionName("tcp-primary")),
+								BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
+							},
+						}
+					}),
+				},
+				TLSRoutes: []*gwapiv1alpha2.TLSRoute{
+					BuildTLSRoute(func(route *gwapiv1alpha2.TLSRoute) {
+						route.Spec.Rules = []gwapiv1alpha2.TLSRouteRule{
+							{
+								Name:        ptr.To(gwapiv1alpha2.SectionName("tls-passthrough")),
+								BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
+							},
+						}
+					}),
+				},
+				UDPRoutes: []*gwapiv1alpha2.UDPRoute{
+					BuildUDPRoute(func(route *gwapiv1alpha2.UDPRoute) {
+						route.Spec.Rules = []gwapiv1alpha2.UDPRouteRule{
+							{
+								Name:        ptr.To(gwapiv1alpha2.SectionName("udp-main")),
+								BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
+							},
+						}
+					}),
+				},
+				Services: []*core.Service{BuildService()},
+			},
+			expectedLinks: map[string][]string{
+				"my-gateway-class":             {"my-gateway"},
+				"my-gateway":                   {"my-gateway#my-listener"},
+				"my-gateway#my-listener":       {"my-http-route", "my-grpc-route", "my-tcp-route", "my-tls-route", "my-udp-route"},
+				"my-http-route":                {"my-http-route#auth-required", "my-http-route#public-access"},
+				"my-http-route#auth-required":  {"my-service"},
+				"my-http-route#public-access":  {"my-service"},
+				"my-grpc-route":                {"my-grpc-route#streaming"},
+				"my-grpc-route#streaming":      {"my-service"},
+				"my-tcp-route":                 {"my-tcp-route#tcp-primary"},
+				"my-tcp-route#tcp-primary":     {"my-service"},
+				"my-tls-route":                 {"my-tls-route#tls-passthrough"},
+				"my-tls-route#tls-passthrough": {"my-service"},
+				"my-udp-route":                 {"my-udp-route#udp-main"},
+				"my-udp-route#udp-main":        {"my-service"},
+				"my-service":                   {"my-service#http"},
+			},
+		},
+		{
 			name:        "complex topology",
 			targetables: BuildComplexGatewayAPITopology(),
 			expectedLinks: map[string][]string{
@@ -316,4 +395,115 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 			SaveToOutputDir(t, topology.ToDot(), "../tests/out", ".dot")
 		})
 	}
+}
+
+// TestRouteRuleNameHandling tests that route rules use the experimental Name field when present,
+// and fall back to auto-generated names when absent.
+func TestRouteRuleNameHandling(t *testing.T) {
+	t.Run("HTTPRouteRule with explicit name", func(t *testing.T) {
+		httpRoute := &HTTPRoute{
+			HTTPRoute: BuildHTTPRoute(func(route *gwapiv1.HTTPRoute) {
+				route.Spec.Rules = []gwapiv1.HTTPRouteRule{
+					{
+						Name:        ptr.To(gwapiv1.SectionName("custom-name")),
+						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef()},
+					},
+				}
+			}),
+		}
+		rules := HTTPRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+		if len(rules) != 1 {
+			t.Fatalf("expected 1 rule, got %d", len(rules))
+		}
+		if rules[0].Name != "custom-name" {
+			t.Errorf("expected rule name to be 'custom-name', got '%s'", rules[0].Name)
+		}
+	})
+
+	t.Run("HTTPRouteRule without explicit name", func(t *testing.T) {
+		httpRoute := &HTTPRoute{
+			HTTPRoute: BuildHTTPRoute(),
+		}
+		rules := HTTPRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+		if len(rules) != 1 {
+			t.Fatalf("expected 1 rule, got %d", len(rules))
+		}
+		if rules[0].Name != "rule-1" {
+			t.Errorf("expected rule name to be 'rule-1', got '%s'", rules[0].Name)
+		}
+	})
+
+	t.Run("GRPCRouteRule with explicit name", func(t *testing.T) {
+		grpcRoute := &GRPCRoute{
+			GRPCRoute: BuildGRPCRoute(func(route *gwapiv1.GRPCRoute) {
+				route.Spec.Rules = []gwapiv1.GRPCRouteRule{
+					{
+						Name:        ptr.To(gwapiv1.SectionName("streaming-rule")),
+						BackendRefs: []gwapiv1.GRPCBackendRef{BuildGRPCBackendRef()},
+					},
+				}
+			}),
+		}
+		rules := GRPCRouteRulesFromGRPCRouteRule(grpcRoute, 0)
+		if len(rules) != 1 {
+			t.Fatalf("expected 1 rule, got %d", len(rules))
+		}
+		if rules[0].Name != "streaming-rule" {
+			t.Errorf("expected rule name to be 'streaming-rule', got '%s'", rules[0].Name)
+		}
+	})
+
+	t.Run("TCPRouteRule with explicit name", func(t *testing.T) {
+		tcpRoute := &TCPRoute{
+			TCPRoute: BuildTCPRoute(func(route *gwapiv1alpha2.TCPRoute) {
+				route.Spec.Rules = []gwapiv1alpha2.TCPRouteRule{
+					{
+						Name:        ptr.To(gwapiv1alpha2.SectionName("tcp-main")),
+						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
+					},
+				}
+			}),
+		}
+		rules := TCPRouteRulesFromTCPRouteFunc(tcpRoute, 0)
+		if len(rules) != 1 {
+			t.Fatalf("expected 1 rule, got %d", len(rules))
+		}
+		if rules[0].Name != "tcp-main" {
+			t.Errorf("expected rule name to be 'tcp-main', got '%s'", rules[0].Name)
+		}
+	})
+
+	t.Run("multiple rules with mixed naming", func(t *testing.T) {
+		httpRoute := &HTTPRoute{
+			HTTPRoute: BuildHTTPRoute(func(route *gwapiv1.HTTPRoute) {
+				route.Spec.Rules = []gwapiv1.HTTPRouteRule{
+					{
+						Name:        ptr.To(gwapiv1.SectionName("first")),
+						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef()},
+					},
+					{
+						// No name - should get auto-generated
+						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef()},
+					},
+					{
+						Name:        ptr.To(gwapiv1.SectionName("third")),
+						BackendRefs: []gwapiv1.HTTPBackendRef{BuildHTTPBackendRef()},
+					},
+				}
+			}),
+		}
+		rules := HTTPRouteRulesFromHTTPRouteFunc(httpRoute, 0)
+		if len(rules) != 3 {
+			t.Fatalf("expected 3 rules, got %d", len(rules))
+		}
+		if rules[0].Name != "first" {
+			t.Errorf("expected first rule name to be 'first', got '%s'", rules[0].Name)
+		}
+		if rules[1].Name != "rule-2" {
+			t.Errorf("expected second rule name to be 'rule-2', got '%s'", rules[1].Name)
+		}
+		if rules[2].Name != "third" {
+			t.Errorf("expected third rule name to be 'third', got '%s'", rules[2].Name)
+		}
+	})
 }

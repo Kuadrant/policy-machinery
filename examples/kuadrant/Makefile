@@ -44,7 +44,7 @@ endef
 
 CONTROLLER_GEN = $(PROJECT_PATH)/bin/controller-gen
 $(CONTROLLER_GEN):
-	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.16.0)
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.16.5)
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN)  ## Download controller-gen locally if necessary.
@@ -78,7 +78,7 @@ manifests: controller-gen ## Generate CustomResourceDefinition objects.
 
 .PHONY: install
 install: manifests ## Install CRDs into a cluster.
-	kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.1.0/standard-install.yaml
+	kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.2.1/experimental-install.yaml
 	kubectl apply -f config/crds
 
 .PHONY: run
@@ -93,7 +93,7 @@ endif
 
 .PHONY: install-envoy-gateway
 install-envoy-gateway: helm ## Install Envoy Gateway.
-	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version v1.0.2 -n envoy-gateway-system --create-namespace
+	$(HELM) install eg oci://docker.io/envoyproxy/gateway-helm --version v1.3.0 -n envoy-gateway-system --create-namespace
 	kubectl wait --timeout=5m -n envoy-gateway-system deployment/envoy-gateway --for=condition=Available
 
 .PHONY: install-istio

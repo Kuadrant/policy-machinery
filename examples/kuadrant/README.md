@@ -163,7 +163,7 @@ spec:
 EOF
 ```
 
-6. Add another HTTPRouteRule:
+6. Add another HTTPRouteRule and add section name to the 1st HTTPRouteRule:
 
 ```sh
 kubectl apply -f -<<EOF
@@ -177,7 +177,8 @@ spec:
   hostnames:
   - example.com
   rules:
-  - matches: # rule-1
+  - name: post # rule-1 if undefined
+    matches:
     - method: POST
     backendRefs:
     - name: my-app
@@ -203,7 +204,7 @@ spec:
     group: gateway.networking.k8s.io
     kind: HTTPRoute
     name: my-app
-    sectionName: rule-1 # relies on the order of the HTTPRouteRules (from 1)
+    sectionName: post # relies on the order of the HTTPRouteRules (from 1) if no sectionName is set on the rule
   rules:
     authentication:
       "api-key-authn":
