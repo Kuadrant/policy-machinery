@@ -142,10 +142,16 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 			},
 			ExtAuth: &egv1alpha1.ExtAuth{
 				GRPC: &egv1alpha1.GRPCExtAuthService{
-					BackendRef: &gwapiv1.BackendObjectReference{
-						Name:      gwapiv1.ObjectName("authorino-authorino-authorization"),
-						Namespace: ptr.To(gwapiv1.Namespace("kuadrant-system")),
-						Port:      ptr.To(gwapiv1.PortNumber(50051)),
+					BackendCluster: egv1alpha1.BackendCluster{
+						BackendRefs: []egv1alpha1.BackendRef{
+							{
+								BackendObjectReference: gwapiv1.BackendObjectReference{
+									Name:      gwapiv1.ObjectName("authorino-authorino-authorization"),
+									Namespace: ptr.To(gwapiv1.Namespace("kuadrant-system")),
+									Port:      ptr.To(gwapiv1.PortNumber(50051)),
+								},
+							},
+						},
 					},
 				},
 			},
