@@ -141,6 +141,12 @@ func main() {
 			metav1.NamespaceAll,
 			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*gwapiv1.HTTPRoute]{})),
 		),
+		controller.WithRunnable("grpcroute watcher", buildWatcher(
+			&gwapiv1.GRPCRoute{},
+			controller.GRPCRoutesResource,
+			metav1.NamespaceAll,
+			controller.WithPredicates(&ctrlruntimepredicate.TypedGenerationChangedPredicate[*gwapiv1.GRPCRoute]{})),
+		),
 		controller.WithRunnable("dnspolicy watcher", buildWatcher(
 			&kuadrantv1.DNSPolicy{},
 			kuadrantv1.DNSPoliciesResource,
@@ -287,6 +293,7 @@ func buildReconciler(gatewayProviders []string, client *dynamic.DynamicClient) c
 		{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.CreateEvent)},
 		{Kind: ptr.To(machinery.GatewayGroupKind), EventType: ptr.To(controller.UpdateEvent)},
 		{Kind: ptr.To(machinery.HTTPRouteGroupKind)},
+		{Kind: ptr.To(machinery.GRPCRouteGroupKind)},
 		{Kind: ptr.To(kuadrantv1.AuthPolicyGroupKind)},
 	}
 

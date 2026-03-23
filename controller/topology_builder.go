@@ -29,6 +29,7 @@ func (t *gatewayAPITopologyBuilder) Build(objs Store) (*machinery.Topology, erro
 	gatewayClasses := lo.Map(objs.FilterByGroupKind(machinery.GatewayClassGroupKind), ObjectAs[*gwapiv1.GatewayClass])
 	gateways := lo.Map(objs.FilterByGroupKind(machinery.GatewayGroupKind), ObjectAs[*gwapiv1.Gateway])
 	httpRoutes := lo.Map(objs.FilterByGroupKind(machinery.HTTPRouteGroupKind), ObjectAs[*gwapiv1.HTTPRoute])
+	grpcRoutes := lo.Map(objs.FilterByGroupKind(machinery.GRPCRouteGroupKind), ObjectAs[*gwapiv1.GRPCRoute])
 	services := lo.Map(objs.FilterByGroupKind(machinery.ServiceGroupKind), ObjectAs[*core.Service])
 
 	linkFuncs := lo.Map(t.objectLinks, func(f LinkFunc, _ int) machinery.LinkFunc {
@@ -39,9 +40,11 @@ func (t *gatewayAPITopologyBuilder) Build(objs Store) (*machinery.Topology, erro
 		machinery.WithGatewayClasses(gatewayClasses...),
 		machinery.WithGateways(gateways...),
 		machinery.WithHTTPRoutes(httpRoutes...),
+		machinery.WithGRPCRoutes(grpcRoutes...),
 		machinery.WithServices(services...),
 		machinery.ExpandGatewayListeners(),
 		machinery.ExpandHTTPRouteRules(),
+		machinery.ExpandGRPCRouteRules(),
 		machinery.ExpandServicePorts(),
 		machinery.WithGatewayAPITopologyLinks(linkFuncs...),
 	}

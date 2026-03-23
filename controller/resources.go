@@ -14,5 +14,6 @@ var (
 	// gateway api
 	GatewayClassesResource = gwapiv1.SchemeGroupVersion.WithResource("gatewayclasses")
 	GatewaysResource       = gwapiv1.SchemeGroupVersion.WithResource("gateways")
+	GRPCRoutesResource     = gwapiv1.SchemeGroupVersion.WithResource("grpcroutes")
 	HTTPRoutesResource     = gwapiv1.SchemeGroupVersion.WithResource("httproutes")
 )
