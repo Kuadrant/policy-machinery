@@ -2,3 +2,5 @@ bin/
 tests/out/*.dot
 .idea
 .DS_Store
+go.work
+go.work.sum
