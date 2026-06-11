@@ -272,6 +272,12 @@ func (c *Controller) delete(obj Object) {
 }
 
 func (c *Controller) Propagate(resourceEvents []ResourceEvent) {
+	c.Lock()
+	defer c.Unlock()
+	c.propagateLocked(resourceEvents)
+}
+
+func (c *Controller) propagateLocked(resourceEvents []ResourceEvent) {
 	c.logger.V(1).Info("propagating new state of the world events", "events", len(resourceEvents))
 	defer c.logger.V(1).Info("finished propagating new state of the world events")
 
@@ -375,7 +381,7 @@ func (c *Controller) handleCacheEvent(snapshot watchable.Snapshot[string, Store]
 	events = append(events, deleteEvents...)
 
 	if len(events) > 0 { // this condition is actually redundant; if the snapshot has updates, there must be events
-		c.Propagate(events)
+		c.propagateLocked(events)
 	} else {
 		c.logger.V(1).Info("state of the world has not changed")
 	}
