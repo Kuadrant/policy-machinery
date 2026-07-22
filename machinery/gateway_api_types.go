@@ -22,7 +22,6 @@ var (
 	GRPCRouteRuleGroupKind    = gwapiv1.SchemeGroupVersion.WithKind("GRPCRouteRule").GroupKind()
 	ReferenceGrantGroupKind   = gwapiv1beta1.SchemeGroupVersion.WithKind("ReferenceGrant").GroupKind()
 	BackendTLSPolicyGroupKind = gwapiv1alpha3.SchemeGroupVersion.WithKind("BackendTLSPolicy").GroupKind()
-	BackendLBPolicyGroupKind  = gwapiv1alpha2.SchemeGroupVersion.WithKind("BackendLBPolicy").GroupKind()
 	TCPRouteGroupKind         = gwapiv1alpha2.SchemeGroupVersion.WithKind("TCPRoute").GroupKind()
 	TCPRouteRuleGroupKind     = gwapiv1alpha2.SchemeGroupVersion.WithKind("TCPRouteRule").GroupKind()
 	TLSRouteGroupKind         = gwapiv1alpha2.SchemeGroupVersion.WithKind("TLSRoute").GroupKind()
@@ -485,7 +484,7 @@ func (t LocalPolicyTargetReference) GetName() string {
 }
 
 type LocalPolicyTargetReferenceWithSectionName struct {
-	gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName
+	gwapiv1.LocalPolicyTargetReferenceWithSectionName
 	PolicyNamespace string
 }
 
@@ -499,8 +498,8 @@ func (t LocalPolicyTargetReferenceWithSectionName) GroupVersionKind() schema.Gro
 }
 
 func (t LocalPolicyTargetReferenceWithSectionName) SetGroupVersionKind(gvk schema.GroupVersionKind) {
-	t.Group = gwapiv1alpha2.Group(gvk.Group)
-	t.Kind = gwapiv1alpha2.Kind(gvk.Kind)
+	t.Group = gwapiv1.Group(gvk.Group)
+	t.Kind = gwapiv1.Kind(gvk.Kind)
 }
 
 func (t LocalPolicyTargetReferenceWithSectionName) GetLocator() string {
@@ -543,7 +542,7 @@ func (p *BackendTLSPolicy) GetLocator() string {
 }
 
 func (p *BackendTLSPolicy) GetTargetRefs() []PolicyTargetReference {
-	return lo.Map(p.Spec.TargetRefs, func(item gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName, _ int) PolicyTargetReference {
+	return lo.Map(p.Spec.TargetRefs, func(item gwapiv1.LocalPolicyTargetReferenceWithSectionName, _ int) PolicyTargetReference {
 		return LocalPolicyTargetReferenceWithSectionName{
 			LocalPolicyTargetReferenceWithSectionName: item,
 			PolicyNamespace: p.Namespace,
@@ -557,37 +556,6 @@ func (p *BackendTLSPolicy) GetMergeStrategy() MergeStrategy {
 
 func (p *BackendTLSPolicy) Merge(other Policy) Policy {
 	source, ok := other.(*BackendTLSPolicy)
-	if !ok {
-		return p
-	}
-	return source.GetMergeStrategy()(source, p)
-}
-
-type BackendLBPolicy struct {
-	*gwapiv1alpha2.BackendLBPolicy
-}
-
-var _ Policy = &BackendLBPolicy{}
-
-func (p *BackendLBPolicy) GetLocator() string {
-	return LocatorFromObject(p)
-}
-
-func (p *BackendLBPolicy) GetTargetRefs() []PolicyTargetReference {
-	return lo.Map(p.Spec.TargetRefs, func(item gwapiv1alpha2.LocalPolicyTargetReference, _ int) PolicyTargetReference {
-		return LocalPolicyTargetReference{
-			LocalPolicyTargetReference: item,
-			PolicyNamespace:            p.Namespace,
-		}
-	})
-}
-
-func (p *BackendLBPolicy) GetMergeStrategy() MergeStrategy {
-	return DefaultMergeStrategy
-}
-
-func (p *BackendLBPolicy) Merge(other Policy) Policy {
-	source, ok := other.(*BackendLBPolicy)
 	if !ok {
 		return p
 	}

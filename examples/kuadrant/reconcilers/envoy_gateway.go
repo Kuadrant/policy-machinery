@@ -133,9 +133,9 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 		Spec: egv1alpha1.SecurityPolicySpec{
 			PolicyTargetReferences: egv1alpha1.PolicyTargetReferences{
 				TargetRef: &gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-					LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-						Group: gwapiv1alpha2.GroupName,
-						Kind:  gwapiv1alpha2.Kind("Gateway"),
+					LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
+						Group: gwapiv1.GroupName,
+						Kind:  gwapiv1.Kind("Gateway"),
 						Name:  gwapiv1.ObjectName(gateway.GetName()),
 					},
 				},

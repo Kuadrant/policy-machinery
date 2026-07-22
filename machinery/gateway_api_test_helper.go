@@ -534,7 +534,7 @@ type TestPolicy struct {
 }
 
 type TestPolicySpec struct {
-	TargetRef gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
+	TargetRef gwapiv1.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 }
 
 var _ Policy = &TestPolicy{}
@@ -573,8 +573,8 @@ func buildPolicy(f ...func(*TestPolicy)) *TestPolicy {
 			Namespace: "my-namespace",
 		},
 		Spec: TestPolicySpec{
-			TargetRef: gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-				LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+			TargetRef: gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 					Group: gwapiv1.Group(core.SchemeGroupVersion.Group),
 					Kind:  "Service",
 					Name:  "my-service",

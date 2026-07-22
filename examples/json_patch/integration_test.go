@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 )
@@ -224,10 +223,11 @@ func buildPolicy(f ...func(*ColorPolicy)) *ColorPolicy {
 			Namespace: "my-namespace",
 		},
 		Spec: ColorSpec{
-			TargetRef: gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-				LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
-					Kind: "Service",
-					Name: "my-service",
+			TargetRef: gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+				LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
+					Group: gwapiv1.Group(core.SchemeGroupVersion.Group),
+					Kind:  gwapiv1.Kind("Service"),
+					Name:  gwapiv1.ObjectName("my-service"),
 				},
 			},
 			ColorSpecProper: ColorSpecProper{

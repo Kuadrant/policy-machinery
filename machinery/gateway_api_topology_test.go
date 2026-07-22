@@ -203,8 +203,8 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 			policies: []Policy{
 				buildPolicy(func(policy *TestPolicy) {
 					policy.Name = "my-policy-1"
-					policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+					policy.Spec.TargetRef = gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 							Group: gwapiv1.GroupName,
 							Kind:  "Gateway",
 							Name:  "my-gateway",
@@ -214,8 +214,8 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 				}),
 				buildPolicy(func(policy *TestPolicy) {
 					policy.Name = "my-policy-2"
-					policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+					policy.Spec.TargetRef = gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 							Group: gwapiv1.GroupName,
 							Kind:  "Gateway",
 							Name:  "my-gateway",

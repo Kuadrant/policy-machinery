@@ -2,7 +2,7 @@ package color_policy
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gwapi "sigs.k8s.io/gateway-api/apis/v1alpha2"
+	gwapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kuadrant/policy-machinery/machinery"
 )
