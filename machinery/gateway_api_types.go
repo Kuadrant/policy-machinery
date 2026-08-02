@@ -7,7 +7,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	gwapiv1alpha3 "sigs.k8s.io/gateway-api/apis/v1alpha3"
 	gwapiv1beta1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 )
@@ -22,12 +21,12 @@ var (
 	GRPCRouteRuleGroupKind    = gwapiv1.SchemeGroupVersion.WithKind("GRPCRouteRule").GroupKind()
 	ReferenceGrantGroupKind   = gwapiv1beta1.SchemeGroupVersion.WithKind("ReferenceGrant").GroupKind()
 	BackendTLSPolicyGroupKind = gwapiv1alpha3.SchemeGroupVersion.WithKind("BackendTLSPolicy").GroupKind()
-	TCPRouteGroupKind         = gwapiv1alpha2.SchemeGroupVersion.WithKind("TCPRoute").GroupKind()
-	TCPRouteRuleGroupKind     = gwapiv1alpha2.SchemeGroupVersion.WithKind("TCPRouteRule").GroupKind()
-	TLSRouteGroupKind         = gwapiv1alpha2.SchemeGroupVersion.WithKind("TLSRoute").GroupKind()
-	TLSRouteRuleGroupKind     = gwapiv1alpha2.SchemeGroupVersion.WithKind("TLSRouteRule").GroupKind()
-	UDPRouteGroupKind         = gwapiv1alpha2.SchemeGroupVersion.WithKind("UDPRoute").GroupKind()
-	UDPRouteRuleGroupKind     = gwapiv1alpha2.SchemeGroupVersion.WithKind("UDPRouteRule").GroupKind()
+	TCPRouteGroupKind         = gwapiv1.SchemeGroupVersion.WithKind("TCPRoute").GroupKind()
+	TCPRouteRuleGroupKind     = gwapiv1.SchemeGroupVersion.WithKind("TCPRouteRule").GroupKind()
+	TLSRouteGroupKind         = gwapiv1.SchemeGroupVersion.WithKind("TLSRoute").GroupKind()
+	TLSRouteRuleGroupKind     = gwapiv1.SchemeGroupVersion.WithKind("TLSRouteRule").GroupKind()
+	UDPRouteGroupKind         = gwapiv1.SchemeGroupVersion.WithKind("UDPRoute").GroupKind()
+	UDPRouteRuleGroupKind     = gwapiv1.SchemeGroupVersion.WithKind("UDPRouteRule").GroupKind()
 )
 
 const nameSectionNameLocatorSeparator = '#'
@@ -236,7 +235,7 @@ func (r *GRPCRouteRule) Policies() []Policy {
 }
 
 type TCPRoute struct {
-	*gwapiv1alpha2.TCPRoute
+	*gwapiv1.TCPRoute
 
 	attachedPolicies []Policy
 }
@@ -256,7 +255,7 @@ func (r *TCPRoute) Policies() []Policy {
 }
 
 type TCPRouteRule struct {
-	*gwapiv1alpha2.TCPRouteRule
+	*gwapiv1.TCPRouteRule
 
 	TCPRoute         *TCPRoute
 	Name             gwapiv1.SectionName
@@ -267,8 +266,8 @@ var _ Targetable = &TCPRouteRule{}
 
 func (r *TCPRouteRule) GroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
-		Group:   gwapiv1alpha2.GroupName,
-		Version: gwapiv1alpha2.GroupVersion.Version,
+		Group:   gwapiv1.GroupName,
+		Version: gwapiv1.GroupVersion.Version,
 		Kind:    "TCPRouteRule",
 	}
 }
@@ -296,7 +295,7 @@ func (r *TCPRouteRule) Policies() []Policy {
 }
 
 type TLSRoute struct {
-	*gwapiv1alpha2.TLSRoute
+	*gwapiv1.TLSRoute
 
 	attachedPolicies []Policy
 }
@@ -316,7 +315,7 @@ func (r *TLSRoute) Policies() []Policy {
 }
 
 type TLSRouteRule struct {
-	*gwapiv1alpha2.TLSRouteRule
+	*gwapiv1.TLSRouteRule
 
 	TLSRoute         *TLSRoute
 	Name             gwapiv1.SectionName
@@ -327,8 +326,8 @@ var _ Targetable = &TLSRouteRule{}
 
 func (r *TLSRouteRule) GroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
-		Group:   gwapiv1alpha2.GroupName,
-		Version: gwapiv1alpha2.GroupVersion.Version,
+		Group:   gwapiv1.GroupName,
+		Version: gwapiv1.GroupVersion.Version,
 		Kind:    "TLSRouteRule",
 	}
 }
@@ -356,7 +355,7 @@ func (r *TLSRouteRule) Policies() []Policy {
 }
 
 type UDPRoute struct {
-	*gwapiv1alpha2.UDPRoute
+	*gwapiv1.UDPRoute
 
 	attachedPolicies []Policy
 }
@@ -376,7 +375,7 @@ func (r *UDPRoute) Policies() []Policy {
 }
 
 type UDPRouteRule struct {
-	*gwapiv1alpha2.UDPRouteRule
+	*gwapiv1.UDPRouteRule
 
 	UDPRoute         *UDPRoute
 	Name             gwapiv1.SectionName
@@ -387,8 +386,8 @@ var _ Targetable = &UDPRouteRule{}
 
 func (r *UDPRouteRule) GroupVersionKind() schema.GroupVersionKind {
 	return schema.GroupVersionKind{
-		Group:   gwapiv1alpha2.GroupName,
-		Version: gwapiv1alpha2.GroupVersion.Version,
+		Group:   gwapiv1.GroupName,
+		Version: gwapiv1.GroupVersion.Version,
 		Kind:    "UDPRouteRule",
 	}
 }
@@ -422,7 +421,7 @@ func (r *UDPRouteRule) Policies() []Policy {
 // obvious Kubernetes objects' GetUID() (k8s.io/apimachinery/pkg/apis/meta/v1).
 
 type NamespacedPolicyTargetReference struct {
-	gwapiv1alpha2.NamespacedPolicyTargetReference
+	gwapiv1.NamespacedPolicyTargetReference
 	PolicyNamespace string
 }
 
@@ -436,8 +435,8 @@ func (t NamespacedPolicyTargetReference) GroupVersionKind() schema.GroupVersionK
 }
 
 func (t NamespacedPolicyTargetReference) SetGroupVersionKind(gvk schema.GroupVersionKind) {
-	t.Group = gwapiv1alpha2.Group(gvk.Group)
-	t.Kind = gwapiv1alpha2.Kind(gvk.Kind)
+	t.Group = gwapiv1.Group(gvk.Group)
+	t.Kind = gwapiv1.Kind(gvk.Kind)
 }
 
 func (t NamespacedPolicyTargetReference) GetLocator() string {
@@ -445,7 +444,7 @@ func (t NamespacedPolicyTargetReference) GetLocator() string {
 }
 
 func (t NamespacedPolicyTargetReference) GetNamespace() string {
-	return string(ptr.Deref(t.Namespace, gwapiv1alpha2.Namespace(t.PolicyNamespace)))
+	return string(ptr.Deref(t.Namespace, gwapiv1.Namespace(t.PolicyNamespace)))
 }
 
 func (t NamespacedPolicyTargetReference) GetName() string {
@@ -453,7 +452,7 @@ func (t NamespacedPolicyTargetReference) GetName() string {
 }
 
 type LocalPolicyTargetReference struct {
-	gwapiv1alpha2.LocalPolicyTargetReference
+	gwapiv1.LocalPolicyTargetReference
 	PolicyNamespace string
 }
 
@@ -467,8 +466,8 @@ func (t LocalPolicyTargetReference) GroupVersionKind() schema.GroupVersionKind {
 }
 
 func (t LocalPolicyTargetReference) SetGroupVersionKind(gvk schema.GroupVersionKind) {
-	t.Group = gwapiv1alpha2.Group(gvk.Group)
-	t.Kind = gwapiv1alpha2.Kind(gvk.Kind)
+	t.Group = gwapiv1.Group(gvk.Group)
+	t.Kind = gwapiv1.Kind(gvk.Kind)
 }
 
 func (t LocalPolicyTargetReference) GetLocator() string {

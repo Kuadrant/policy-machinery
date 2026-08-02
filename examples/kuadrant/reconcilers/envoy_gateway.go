@@ -15,7 +15,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -25,7 +24,7 @@ const EnvoyGatewayProviderName = "envoygateway"
 
 var (
 	EnvoyGatewaySecurityPolicyKind       = schema.GroupKind{Group: egv1alpha1.GroupName, Kind: "SecurityPolicy"}
-	EnvoyGatewaySecurityPoliciesResource = egv1alpha1.SchemeBuilder.GroupVersion.WithResource("securitypolicies")
+	EnvoyGatewaySecurityPoliciesResource = egv1alpha1.GroupVersion.WithResource("securitypolicies")
 )
 
 type EnvoyGatewayProvider struct {
@@ -132,7 +131,7 @@ func (p *EnvoyGatewayProvider) createSecurityPolicy(ctx context.Context, topolog
 		},
 		Spec: egv1alpha1.SecurityPolicySpec{
 			PolicyTargetReferences: egv1alpha1.PolicyTargetReferences{
-				TargetRef: &gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
+				TargetRef: &gwapiv1.LocalPolicyTargetReferenceWithSectionName{
 					LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 						Group: gwapiv1.GroupName,
 						Kind:  gwapiv1.Kind("Gateway"),
@@ -263,7 +262,7 @@ func LinkGatewayToEnvoyGatewaySecurityPolicyFunc(objs controller.Store) machiner
 			if ref := sp.Spec.PolicyTargetReferences.TargetRef; ref != nil {
 				refs = append(refs, *ref)
 			}
-			refs = lo.Filter(refs, func(ref gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName, _ int) bool {
+			refs = lo.Filter(refs, func(ref gwapiv1.LocalPolicyTargetReferenceWithSectionName, _ int) bool {
 				return ref.Group == gwapiv1.GroupName && ref.Kind == gwapiv1.Kind(machinery.GatewayGroupKind.Kind)
 			})
 			if len(refs) == 0 {
@@ -273,7 +272,7 @@ func LinkGatewayToEnvoyGatewaySecurityPolicyFunc(objs controller.Store) machiner
 				if g.GetNamespace() != sp.GetNamespace() {
 					return false
 				}
-				return lo.ContainsBy(refs, func(ref gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName) bool {
+				return lo.ContainsBy(refs, func(ref gwapiv1.LocalPolicyTargetReferenceWithSectionName) bool {
 					return ref.Name == gwapiv1.ObjectName(g.GetName())
 				})
 			})

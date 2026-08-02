@@ -18,7 +18,6 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/kuadrant/policy-machinery/controller"
 	"github.com/kuadrant/policy-machinery/machinery"
@@ -135,7 +134,7 @@ func (p *IstioGatewayProvider) createAuthorizationPolicy(ctx context.Context, to
 		},
 		Spec: istioapiv1.AuthorizationPolicy{
 			TargetRef: &istiov1beta1.PolicyTargetReference{
-				Group: gwapiv1alpha2.GroupName,
+				Group: gwapiv1.GroupName,
 				Kind:  "Gateway",
 				Name:  gateway.GetName(),
 			},
