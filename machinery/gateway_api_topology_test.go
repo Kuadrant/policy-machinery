@@ -10,7 +10,6 @@ import (
 	core "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 // TestGatewayAPITopology tests for a simplified topology of Gateway API resources without section names,
@@ -47,9 +46,9 @@ func TestGatewayAPITopology(t *testing.T) {
 				Gateways:       []*gwapiv1.Gateway{BuildGateway()},
 				HTTPRoutes:     []*gwapiv1.HTTPRoute{BuildHTTPRoute()},
 				GRPCRoutes:     []*gwapiv1.GRPCRoute{BuildGRPCRoute()},
-				TCPRoutes:      []*gwapiv1alpha2.TCPRoute{BuildTCPRoute()},
-				TLSRoutes:      []*gwapiv1alpha2.TLSRoute{BuildTLSRoute()},
-				UDPRoutes:      []*gwapiv1alpha2.UDPRoute{BuildUDPRoute()},
+				TCPRoutes:      []*gwapiv1.TCPRoute{BuildTCPRoute()},
+				TLSRoutes:      []*gwapiv1.TLSRoute{BuildTLSRoute()},
+				UDPRoutes:      []*gwapiv1.UDPRoute{BuildUDPRoute()},
 				Services:       []*core.Service{BuildService()},
 			},
 			policies: []Policy{buildPolicy()},
@@ -92,9 +91,9 @@ func TestGatewayAPITopology(t *testing.T) {
 			gateways := lo.Map(tc.targetables.Gateways, func(gateway *gwapiv1.Gateway, _ int) *Gateway { return &Gateway{Gateway: gateway} })
 			httpRoutes := lo.Map(tc.targetables.HTTPRoutes, func(httpRoute *gwapiv1.HTTPRoute, _ int) *HTTPRoute { return &HTTPRoute{HTTPRoute: httpRoute} })
 			grpcRoutes := lo.Map(tc.targetables.GRPCRoutes, func(grpcRoute *gwapiv1.GRPCRoute, _ int) *GRPCRoute { return &GRPCRoute{GRPCRoute: grpcRoute} })
-			tcpRoutes := lo.Map(tc.targetables.TCPRoutes, func(tcpRoute *gwapiv1alpha2.TCPRoute, _ int) *TCPRoute { return &TCPRoute{TCPRoute: tcpRoute} })
-			tlsRoutes := lo.Map(tc.targetables.TLSRoutes, func(tlsRoute *gwapiv1alpha2.TLSRoute, _ int) *TLSRoute { return &TLSRoute{TLSRoute: tlsRoute} })
-			udpRoutes := lo.Map(tc.targetables.UDPRoutes, func(updRoute *gwapiv1alpha2.UDPRoute, _ int) *UDPRoute { return &UDPRoute{UDPRoute: updRoute} })
+			tcpRoutes := lo.Map(tc.targetables.TCPRoutes, func(tcpRoute *gwapiv1.TCPRoute, _ int) *TCPRoute { return &TCPRoute{TCPRoute: tcpRoute} })
+			tlsRoutes := lo.Map(tc.targetables.TLSRoutes, func(tlsRoute *gwapiv1.TLSRoute, _ int) *TLSRoute { return &TLSRoute{TLSRoute: tlsRoute} })
+			udpRoutes := lo.Map(tc.targetables.UDPRoutes, func(updRoute *gwapiv1.UDPRoute, _ int) *UDPRoute { return &UDPRoute{UDPRoute: updRoute} })
 			services := lo.Map(tc.targetables.Services, func(service *core.Service, _ int) *Service { return &Service{Service: service} })
 
 			topology, err := NewTopology(
@@ -165,9 +164,9 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 				Gateways:       []*gwapiv1.Gateway{BuildGateway()},
 				HTTPRoutes:     []*gwapiv1.HTTPRoute{BuildHTTPRoute()},
 				GRPCRoutes:     []*gwapiv1.GRPCRoute{BuildGRPCRoute()},
-				TCPRoutes:      []*gwapiv1alpha2.TCPRoute{BuildTCPRoute()},
-				TLSRoutes:      []*gwapiv1alpha2.TLSRoute{BuildTLSRoute()},
-				UDPRoutes:      []*gwapiv1alpha2.UDPRoute{BuildUDPRoute()},
+				TCPRoutes:      []*gwapiv1.TCPRoute{BuildTCPRoute()},
+				TLSRoutes:      []*gwapiv1.TLSRoute{BuildTLSRoute()},
+				UDPRoutes:      []*gwapiv1.UDPRoute{BuildUDPRoute()},
 				Services:       []*core.Service{BuildService()},
 			},
 			policies: []Policy{buildPolicy()},
@@ -203,8 +202,8 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 			policies: []Policy{
 				buildPolicy(func(policy *TestPolicy) {
 					policy.Name = "my-policy-1"
-					policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+					policy.Spec.TargetRef = gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 							Group: gwapiv1.GroupName,
 							Kind:  "Gateway",
 							Name:  "my-gateway",
@@ -214,8 +213,8 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 				}),
 				buildPolicy(func(policy *TestPolicy) {
 					policy.Name = "my-policy-2"
-					policy.Spec.TargetRef = gwapiv1alpha2.LocalPolicyTargetReferenceWithSectionName{
-						LocalPolicyTargetReference: gwapiv1alpha2.LocalPolicyTargetReference{
+					policy.Spec.TargetRef = gwapiv1.LocalPolicyTargetReferenceWithSectionName{
+						LocalPolicyTargetReference: gwapiv1.LocalPolicyTargetReference{
 							Group: gwapiv1.GroupName,
 							Kind:  "Gateway",
 							Name:  "my-gateway",
@@ -257,31 +256,31 @@ func TestGatewayAPITopologyWithSectionNames(t *testing.T) {
 						}
 					}),
 				},
-				TCPRoutes: []*gwapiv1alpha2.TCPRoute{
-					BuildTCPRoute(func(route *gwapiv1alpha2.TCPRoute) {
-						route.Spec.Rules = []gwapiv1alpha2.TCPRouteRule{
+				TCPRoutes: []*gwapiv1.TCPRoute{
+					BuildTCPRoute(func(route *gwapiv1.TCPRoute) {
+						route.Spec.Rules = []gwapiv1.TCPRouteRule{
 							{
-								Name:        ptr.To(gwapiv1alpha2.SectionName("tcp-primary")),
+								Name:        ptr.To(gwapiv1.SectionName("tcp-primary")),
 								BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
 							},
 						}
 					}),
 				},
-				TLSRoutes: []*gwapiv1alpha2.TLSRoute{
-					BuildTLSRoute(func(route *gwapiv1alpha2.TLSRoute) {
-						route.Spec.Rules = []gwapiv1alpha2.TLSRouteRule{
+				TLSRoutes: []*gwapiv1.TLSRoute{
+					BuildTLSRoute(func(route *gwapiv1.TLSRoute) {
+						route.Spec.Rules = []gwapiv1.TLSRouteRule{
 							{
-								Name:        ptr.To(gwapiv1alpha2.SectionName("tls-passthrough")),
+								Name:        ptr.To(gwapiv1.SectionName("tls-passthrough")),
 								BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
 							},
 						}
 					}),
 				},
-				UDPRoutes: []*gwapiv1alpha2.UDPRoute{
-					BuildUDPRoute(func(route *gwapiv1alpha2.UDPRoute) {
-						route.Spec.Rules = []gwapiv1alpha2.UDPRouteRule{
+				UDPRoutes: []*gwapiv1.UDPRoute{
+					BuildUDPRoute(func(route *gwapiv1.UDPRoute) {
+						route.Spec.Rules = []gwapiv1.UDPRouteRule{
 							{
-								Name:        ptr.To(gwapiv1alpha2.SectionName("udp-main")),
+								Name:        ptr.To(gwapiv1.SectionName("udp-main")),
 								BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
 							},
 						}
@@ -455,10 +454,10 @@ func TestRouteRuleNameHandling(t *testing.T) {
 
 	t.Run("TCPRouteRule with explicit name", func(t *testing.T) {
 		tcpRoute := &TCPRoute{
-			TCPRoute: BuildTCPRoute(func(route *gwapiv1alpha2.TCPRoute) {
-				route.Spec.Rules = []gwapiv1alpha2.TCPRouteRule{
+			TCPRoute: BuildTCPRoute(func(route *gwapiv1.TCPRoute) {
+				route.Spec.Rules = []gwapiv1.TCPRouteRule{
 					{
-						Name:        ptr.To(gwapiv1alpha2.SectionName("tcp-main")),
+						Name:        ptr.To(gwapiv1.SectionName("tcp-main")),
 						BackendRefs: []gwapiv1.BackendRef{BuildBackendRef()},
 					},
 				}

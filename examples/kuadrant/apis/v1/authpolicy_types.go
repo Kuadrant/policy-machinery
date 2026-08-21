@@ -26,10 +26,7 @@ import (
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/kuadrant"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 var (
@@ -71,7 +68,7 @@ func (p *AuthPolicy) GetLocator() string {
 }
 
 // Deprecated: Use GetTargetRefs instead
-func (p *AuthPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
+func (p *AuthPolicy) GetTargetRef() gatewayapiv1.LocalPolicyTargetReference {
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }
 
@@ -281,7 +278,7 @@ func (p *AuthPolicy) SetRules(rules map[string]MergeableRule) {
 	}
 }
 
-func (p *AuthPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
+func (p *AuthPolicy) GetStatus() PolicyStatus {
 	return &p.Status
 }
 
@@ -299,7 +296,7 @@ type AuthPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
-	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
+	TargetRef gatewayapiv1.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// Rules to apply as defaults. Can be overridden by more specific policiy rules lower in the hierarchy and by less specific policy overrides.
 	// Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
@@ -527,8 +524,12 @@ func (s *AuthPolicyStatus) Equals(other *AuthPolicyStatus, logger logr.Logger) b
 	}
 
 	// Marshalling sorts by condition type
-	currentMarshaledJSON, _ := kuadrant.ConditionMarshal(s.Conditions)
-	otherMarshaledJSON, _ := kuadrant.ConditionMarshal(other.Conditions)
+	currentMarshaledJSON, err1 := ConditionMarshal(s.Conditions)
+	otherMarshaledJSON, err2 := ConditionMarshal(other.Conditions)
+	if err1 != nil || err2 != nil {
+		logger.V(1).Info("Conditions marshal error", "err1", err1, "err2", err2)
+		return false
+	}
 	if string(currentMarshaledJSON) != string(otherMarshaledJSON) {
 		diff := cmp.Diff(string(currentMarshaledJSON), string(otherMarshaledJSON))
 		logger.V(1).Info("Conditions not equal", "difference", diff)

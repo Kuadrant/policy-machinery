@@ -19,13 +19,12 @@ package v1
 import (
 	"time"
 
+	"github.com/samber/lo"
+
 	"github.com/kuadrant/policy-machinery/machinery"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	gatewayapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
-
-	kuadrantgatewayapi "github.com/kuadrant/kuadrant-operator/pkg/gatewayapi"
-	"github.com/kuadrant/kuadrant-operator/pkg/utils"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 var (
@@ -70,7 +69,7 @@ func (p *RateLimitPolicy) GetLocator() string {
 }
 
 // Deprecated: Use GetTargetRefs instead
-func (p *RateLimitPolicy) GetTargetRef() gatewayapiv1alpha2.LocalPolicyTargetReference {
+func (p *RateLimitPolicy) GetTargetRef() gatewayapiv1.LocalPolicyTargetReference {
 	return p.Spec.TargetRef.LocalPolicyTargetReference
 }
 
@@ -142,7 +141,7 @@ func (p *RateLimitPolicy) SetRules(rules map[string]MergeableRule) {
 	}
 }
 
-func (p *RateLimitPolicy) GetStatus() kuadrantgatewayapi.PolicyStatus {
+func (p *RateLimitPolicy) GetStatus() PolicyStatus {
 	return &p.Status
 }
 
@@ -160,7 +159,7 @@ type RateLimitPolicySpec struct {
 	// Reference to the object to which this policy applies.
 	// +kubebuilder:validation:XValidation:rule="self.group == 'gateway.networking.k8s.io'",message="Invalid targetRef.group. The only supported value is 'gateway.networking.k8s.io'"
 	// +kubebuilder:validation:XValidation:rule="self.kind == 'HTTPRoute' || self.kind == 'Gateway'",message="Invalid targetRef.kind. The only supported values are 'HTTPRoute' and 'Gateway'"
-	TargetRef gatewayapiv1alpha2.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
+	TargetRef gatewayapiv1.LocalPolicyTargetReferenceWithSectionName `json:"targetRef"`
 
 	// Rules to apply as defaults. Can be overridden by more specific policiy rules lower in the hierarchy and by less specific policy overrides.
 	// Use one of: defaults, overrides, or bare set of policy rules (implicit defaults).
@@ -237,7 +236,7 @@ func (l Limit) CountersAsStringList() []string {
 	if len(l.Counters) == 0 {
 		return nil
 	}
-	return utils.Map(l.Counters, func(counter Counter) string { return string(counter.Expression) })
+	return lo.Map(l.Counters, func(counter Counter, _ int) string { return string(counter.Expression) })
 }
 
 var _ MergeableRule = &Limit{}

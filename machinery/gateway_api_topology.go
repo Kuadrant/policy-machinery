@@ -7,7 +7,6 @@ import (
 	core "k8s.io/api/core/v1"
 	"k8s.io/utils/ptr"
 	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gwapiv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
 
 type GatewayAPITopologyOptions struct {
@@ -73,27 +72,27 @@ func WithGRPCRoutes(grpcRoutes ...*gwapiv1.GRPCRoute) GatewayAPITopologyOptionsF
 }
 
 // WithTCPRoutes adds TCP routes to the options to initialize a new Gateway API topology.
-func WithTCPRoutes(tcpRoutes ...*gwapiv1alpha2.TCPRoute) GatewayAPITopologyOptionsFunc {
+func WithTCPRoutes(tcpRoutes ...*gwapiv1.TCPRoute) GatewayAPITopologyOptionsFunc {
 	return func(o *GatewayAPITopologyOptions) {
-		o.TCPRoutes = append(o.TCPRoutes, lo.Map(tcpRoutes, func(tcpRoute *gwapiv1alpha2.TCPRoute, _ int) *TCPRoute {
+		o.TCPRoutes = append(o.TCPRoutes, lo.Map(tcpRoutes, func(tcpRoute *gwapiv1.TCPRoute, _ int) *TCPRoute {
 			return &TCPRoute{TCPRoute: tcpRoute}
 		})...)
 	}
 }
 
 // WithTLSRoutes adds TLS routes to the options to initialize a new Gateway API topology.
-func WithTLSRoutes(tlsRoutes ...*gwapiv1alpha2.TLSRoute) GatewayAPITopologyOptionsFunc {
+func WithTLSRoutes(tlsRoutes ...*gwapiv1.TLSRoute) GatewayAPITopologyOptionsFunc {
 	return func(o *GatewayAPITopologyOptions) {
-		o.TLSRoutes = append(o.TLSRoutes, lo.Map(tlsRoutes, func(tlsRoute *gwapiv1alpha2.TLSRoute, _ int) *TLSRoute {
+		o.TLSRoutes = append(o.TLSRoutes, lo.Map(tlsRoutes, func(tlsRoute *gwapiv1.TLSRoute, _ int) *TLSRoute {
 			return &TLSRoute{TLSRoute: tlsRoute}
 		})...)
 	}
 }
 
 // WithUDPRoutes adds UDP routes to the options to initialize a new Gateway API topology.
-func WithUDPRoutes(udpRoutes ...*gwapiv1alpha2.UDPRoute) GatewayAPITopologyOptionsFunc {
+func WithUDPRoutes(udpRoutes ...*gwapiv1.UDPRoute) GatewayAPITopologyOptionsFunc {
 	return func(o *GatewayAPITopologyOptions) {
-		o.UDPRoutes = append(o.UDPRoutes, lo.Map(udpRoutes, func(udpRoute *gwapiv1alpha2.UDPRoute, _ int) *UDPRoute {
+		o.UDPRoutes = append(o.UDPRoutes, lo.Map(udpRoutes, func(udpRoute *gwapiv1.UDPRoute, _ int) *UDPRoute {
 			return &UDPRoute{UDPRoute: udpRoute}
 		})...)
 	}
@@ -420,7 +419,7 @@ func GRPCRouteRulesFromGRPCRouteRule(grpcRoute *GRPCRoute, _ int) []*GRPCRouteRu
 
 // TCPRouteRulesFromTCPRouteFunc returns a list of targetable TCPRouteRules from a targetable TCPRoute.
 func TCPRouteRulesFromTCPRouteFunc(tcpRoute *TCPRoute, _ int) []*TCPRouteRule {
-	return lo.Map(tcpRoute.Spec.Rules, func(rule gwapiv1alpha2.TCPRouteRule, i int) *TCPRouteRule {
+	return lo.Map(tcpRoute.Spec.Rules, func(rule gwapiv1.TCPRouteRule, i int) *TCPRouteRule {
 		// Use the name field if present (Gateway API v1.2+), otherwise generate a name
 		var name gwapiv1.SectionName
 		if rule.Name != nil {
@@ -438,7 +437,7 @@ func TCPRouteRulesFromTCPRouteFunc(tcpRoute *TCPRoute, _ int) []*TCPRouteRule {
 
 // TLSRouteRulesFromTLSRouteFunc returns a list of targetable TCPRouteRules from a targetable TLSRoute.
 func TLSRouteRulesFromTLSRouteFunc(tlsRoute *TLSRoute, _ int) []*TLSRouteRule {
-	return lo.Map(tlsRoute.Spec.Rules, func(rule gwapiv1alpha2.TLSRouteRule, i int) *TLSRouteRule {
+	return lo.Map(tlsRoute.Spec.Rules, func(rule gwapiv1.TLSRouteRule, i int) *TLSRouteRule {
 		// Use the name field if present (Gateway API v1.2+), otherwise generate a name
 		var name gwapiv1.SectionName
 		if rule.Name != nil {
@@ -456,7 +455,7 @@ func TLSRouteRulesFromTLSRouteFunc(tlsRoute *TLSRoute, _ int) []*TLSRouteRule {
 
 // UDPRouteRulesFromUDPRouteFunc returns a list of targetable UDPRouteRules from a targetable UDPRoute.
 func UDPRouteRulesFromUDPRouteFunc(udpRoute *UDPRoute, _ int) []*UDPRouteRule {
-	return lo.Map(udpRoute.Spec.Rules, func(rule gwapiv1alpha2.UDPRouteRule, i int) *UDPRouteRule {
+	return lo.Map(udpRoute.Spec.Rules, func(rule gwapiv1.UDPRouteRule, i int) *UDPRouteRule {
 		// Use the name field if present (Gateway API v1.2+), otherwise generate a name
 		var name gwapiv1.SectionName
 		if rule.Name != nil {
@@ -895,7 +894,7 @@ func LinkTCPRouteToServiceFunc(routes []*TCPRoute, strict bool) LinkFunc {
 		Func: func(child Object) []Object {
 			service := child.(*Service)
 			return lo.FilterMap(routes, func(route *TCPRoute, _ int) (Object, bool) {
-				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1alpha2.TCPRouteRule) bool {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1.TCPRouteRule) bool {
 					backendRefs := lo.Filter(rule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
 						return !strict || backendRef.Port == nil
 					})
@@ -916,7 +915,7 @@ func LinkTCPRouteToServicePortFunc(routes []*TCPRoute) LinkFunc {
 		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
 			return lo.FilterMap(routes, func(route *TCPRoute, _ int) (Object, bool) {
-				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1alpha2.TCPRouteRule) bool {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1.TCPRouteRule) bool {
 					backendRefs := lo.Filter(rule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
 						return backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
 					})
@@ -988,7 +987,7 @@ func LinkTLSRouteToServiceFunc(routes []*TLSRoute, strict bool) LinkFunc {
 		Func: func(child Object) []Object {
 			service := child.(*Service)
 			return lo.FilterMap(routes, func(route *TLSRoute, _ int) (Object, bool) {
-				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1alpha2.TLSRouteRule) bool {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1.TLSRouteRule) bool {
 					backendRefs := lo.Filter(rule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
 						return !strict || backendRef.Port == nil
 					})
@@ -1009,7 +1008,7 @@ func LinkTLSRouteToServicePortFunc(routes []*TLSRoute) LinkFunc {
 		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
 			return lo.FilterMap(routes, func(route *TLSRoute, _ int) (Object, bool) {
-				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1alpha2.TLSRouteRule) bool {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1.TLSRouteRule) bool {
 					backendRefs := lo.Filter(rule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
 						return backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
 					})
@@ -1081,7 +1080,7 @@ func LinkUDPRouteToServiceFunc(routes []*UDPRoute, strict bool) LinkFunc {
 		Func: func(child Object) []Object {
 			service := child.(*Service)
 			return lo.FilterMap(routes, func(route *UDPRoute, _ int) (Object, bool) {
-				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1alpha2.UDPRouteRule) bool {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1.UDPRouteRule) bool {
 					backendRefs := lo.Filter(rule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
 						return !strict || backendRef.Port == nil
 					})
@@ -1102,7 +1101,7 @@ func LinkUDPRouteToServicePortFunc(routes []*UDPRoute) LinkFunc {
 		Func: func(child Object) []Object {
 			servicePort := child.(*ServicePort)
 			return lo.FilterMap(routes, func(route *UDPRoute, _ int) (Object, bool) {
-				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1alpha2.UDPRouteRule) bool {
+				return route, lo.ContainsBy(route.Spec.Rules, func(rule gwapiv1.UDPRouteRule) bool {
 					backendRefs := lo.Filter(rule.BackendRefs, func(backendRef gwapiv1.BackendRef, _ int) bool {
 						return backendRef.Port != nil && int32(*backendRef.Port) == servicePort.Port
 					})
