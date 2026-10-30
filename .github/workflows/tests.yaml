@@ -20,7 +20,8 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
-        go-version-file: go.mod
+        go-version: '1.26'
+        check-latest: true
     - name: Test with the Go CLI
       run: make test-unit
     - name: Upload artifacts
@@ -39,7 +40,8 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
-        go-version-file: go.mod
+        go-version: '1.26'
+        check-latest: true
     - name: Test with the Go CLI
       run: make test-integration
     - name: Upload artifacts
@@ -58,7 +60,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: '1.26'
+          check-latest: true
       - name: Test with the Go CLI
         working-directory: ./examples
         run: go test -tags=unit -v ./...
@@ -78,7 +81,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version: '1.26'
+          check-latest: true
       - name: Test with the Go CLI
         working-directory: ./examples
         run: go test -tags=integration -v ./...
