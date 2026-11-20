@@ -1,6 +1,6 @@
 module github.com/kuadrant/policy-machinery
 
-go 1.26.0
+go 1.27.0
 
 require (
 	github.com/emicklei/dot v1.8.0
