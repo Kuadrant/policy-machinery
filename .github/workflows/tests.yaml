@@ -15,12 +15,14 @@ jobs:
   unit-tests:
     name: Unit tests
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3
     steps:
     - uses: actions/checkout@v4
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.27.0'
+        go-version: '1.27.3'
         check-latest: true
     - name: Test with the Go CLI
       run: make test-unit
@@ -35,12 +37,14 @@ jobs:
   intetration-tests:
     name: Integration tests
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3
     steps:
     - uses: actions/checkout@v4
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.27.0'
+        go-version: '1.27.3'
         check-latest: true
     - name: Test with the Go CLI
       run: make test-integration
@@ -55,12 +59,14 @@ jobs:
   examples-unit-tests:
     name: Examples Unit tests
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3
     steps:
       - uses: actions/checkout@v4
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.27.0'
+          go-version: '1.27.3'
           check-latest: true
       - name: Test with the Go CLI
         working-directory: ./examples
@@ -76,12 +82,14 @@ jobs:
   examples-intetration-tests:
     name: Examples integration tests
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.27.3
     steps:
       - uses: actions/checkout@v4
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.27.0'
+          go-version: '1.27.3'
           check-latest: true
       - name: Test with the Go CLI
         working-directory: ./examples
