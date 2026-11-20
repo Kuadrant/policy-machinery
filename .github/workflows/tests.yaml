@@ -20,7 +20,7 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.26'
+        go-version: '1.27.0'
         check-latest: true
     - name: Test with the Go CLI
       run: make test-unit
@@ -40,7 +40,7 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.26'
+        go-version: '1.27.0'
         check-latest: true
     - name: Test with the Go CLI
       run: make test-integration
@@ -60,7 +60,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.27.0'
           check-latest: true
       - name: Test with the Go CLI
         working-directory: ./examples
@@ -81,7 +81,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.26'
+          go-version: '1.27.0'
           check-latest: true
       - name: Test with the Go CLI
         working-directory: ./examples
